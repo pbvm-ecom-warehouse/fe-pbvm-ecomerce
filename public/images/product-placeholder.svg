@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="720" viewBox="0 0 960 720" role="img" aria-label="Product placeholder">
+  <rect width="960" height="720" fill="#f4f7f5"/>
+  <rect x="260" y="160" width="440" height="400" rx="36" fill="#ffffff" stroke="#cbd5d1" stroke-width="8"/>
+  <path d="M336 240h288l-28 248c-4 34-32 60-66 60H430c-34 0-62-26-66-60l-28-248z" fill="#d9f2ec" stroke="#0f766e" stroke-width="8"/>
+  <path d="M320 240h320" stroke="#0f766e" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="432" cy="358" r="20" fill="#2563eb" opacity=".85"/>
+  <circle cx="496" cy="388" r="16" fill="#0f766e" opacity=".85"/>
+  <circle cx="534" cy="330" r="12" fill="#f59e0b" opacity=".85"/>
+  <text x="480" y="620" text-anchor="middle" fill="#475569" font-family="Arial, sans-serif" font-size="32">PBVM Product</text>
+</svg>

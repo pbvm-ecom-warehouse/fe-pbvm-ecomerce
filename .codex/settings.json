@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "beforeFinalize": [
+      {
+        "name": "ecom-verify",
+        "command": "pnpm lint && pnpm typecheck"
+      }
+    ]
+  }
+}
