@@ -12,6 +12,18 @@ export type CatalogProduct = {
   stockSnapshot: number;
   imageUrl: string;
   updatedAt: string;
+  customConfig?: {
+    isCustom: boolean;
+    size: "S" | "M" | "L" | "XL";
+    style: "straight" | "u_shape" | "heart" | "mug";
+    materialType: string;
+    cupColor: string;
+    logoUrl: string | null;
+    decalY: number;
+    decalScale: number;
+    decalRotation: number;
+    promptUsed?: string;
+  };
 };
 
 export type CartItem = {
@@ -22,6 +34,18 @@ export type CartItem = {
   quantity: number;
   unit: string;
   imageUrl: string;
+  customConfig?: {
+    isCustom: boolean;
+    size: "S" | "M" | "L" | "XL";
+    style: "straight" | "u_shape" | "heart" | "mug";
+    materialType: string;
+    cupColor: string;
+    logoUrl: string | null;
+    decalY: number;
+    decalScale: number;
+    decalRotation: number;
+    promptUsed?: string;
+  };
 };
 
 export type OrderStatus =

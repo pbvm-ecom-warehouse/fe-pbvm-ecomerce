@@ -35,6 +35,7 @@ export const useCartStore = create<CartState>()(
             quantity,
             unit: product.unit,
             imageUrl: product.imageUrl,
+            customConfig: product.customConfig,
           });
         }),
       updateQuantity: (productId, quantity) =>
