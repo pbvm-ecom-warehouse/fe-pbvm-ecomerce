@@ -14,7 +14,6 @@ export function CatalogGrid({
         <div>
           <h2 className="text-xl font-semibold">{title}</h2>
           <p className="text-sm text-muted-foreground">
-            Giá B2B/B2C và stock_snapshot được đọc từ ecommerce-api.
           </p>
         </div>
       </div>

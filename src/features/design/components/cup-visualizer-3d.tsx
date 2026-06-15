@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Decal } from "@react-three/drei";
-import { TextureLoader, Texture, DoubleSide, Shape, ExtrudeGeometry } from "three";
+import { OrbitControls, Decal, Environment, ContactShadows } from "@react-three/drei";
+import { TextureLoader, Texture, DoubleSide, Shape, Vector2, Mesh } from "three";
 import { Loader2 } from "lucide-react";
 
 // Định nghĩa kiểu dữ liệu cho CupVisualizer3D
@@ -24,14 +24,88 @@ const CUP_SIZES = {
   XL: { radiusTop: 1.65, radiusBottom: 1.15, height: 6.2 },
 };
 
+// Hàm tạo mặt cắt 2D (Profile) của ly để xoay bằng LatheGeometry (Tạo độ dày thành ly thực tế)
+const getCupPoints = (
+  style: string,
+  radiusTop: number,
+  radiusBottom: number,
+  height: number,
+  isGlass: boolean
+) => {
+  const points: Vector2[] = [];
+  const thickness = 0.05; // Độ dày thành ly
+  const bottomThickness = isGlass ? 0.22 : 0.08; // Đáy ly thủy tinh dày hơn tạo cảm giác cao cấp
+  const halfHeight = height / 2;
+
+  if (style === "u_shape") {
+    // Dáng bầu chữ U có phần đáy bo tròn bán cầu
+    const segments = 16;
+    const rb = radiusBottom;
+    const rt = radiusTop;
+    const yOffset = -halfHeight + rb; // Tâm của bán cầu đáy ngoài
+
+    // 1. Biên dạng ngoài đáy bầu (từ tâm đáy đi lên góc bo)
+    points.push(new Vector2(0, -halfHeight));
+    for (let i = 1; i <= segments; i++) {
+      const theta = (i / segments) * (Math.PI / 2);
+      const x = rb * Math.sin(theta);
+      const y = yOffset - rb * Math.cos(theta);
+      points.push(new Vector2(x, y));
+    }
+
+    // 2. Thành ngoài thân ly lên tới miệng ly
+    points.push(new Vector2(rt, halfHeight));
+
+    // 3. Vành miệng bo tròn nhẹ sang lòng trong
+    points.push(new Vector2(rt - thickness / 2, halfHeight + thickness / 2));
+    points.push(new Vector2(rt - thickness, halfHeight));
+
+    // 4. Thành trong thân ly (đi xuống)
+    points.push(new Vector2(rt - thickness, halfHeight - 0.02));
+
+    const innerRb = rb - thickness;
+    const innerYOffset = yOffset + bottomThickness - thickness;
+
+    // Thành trong ngay trước khi bo đáy
+    points.push(new Vector2(innerRb, innerYOffset));
+
+    // 5. Biên dạng trong đáy bầu (từ góc bo vào tâm đáy trong)
+    for (let i = segments; i >= 0; i--) {
+      const theta = (i / segments) * (Math.PI / 2);
+      const x = innerRb * Math.sin(theta);
+      const y = innerYOffset - innerRb * Math.cos(theta);
+      points.push(new Vector2(x, y));
+    }
+  } else {
+    // Dáng ly thẳng (tapered cylinder), ly tim, ly quai
+    // 1. Tâm đáy ngoài
+    points.push(new Vector2(0, -halfHeight));
+    // 2. Góc đáy ngoài
+    points.push(new Vector2(radiusBottom, -halfHeight));
+    // 3. Góc miệng ngoài
+    points.push(new Vector2(radiusTop, halfHeight));
+    // 4. Vành miệng bo tròn
+    points.push(new Vector2(radiusTop - thickness / 2, halfHeight + thickness / 2));
+    points.push(new Vector2(radiusTop - thickness, halfHeight));
+    // 5. Góc miệng trong
+    points.push(new Vector2(radiusTop - thickness, halfHeight - 0.02));
+    // 6. Góc đáy trong (có độ dày đáy)
+    points.push(new Vector2(radiusBottom - thickness, -halfHeight + bottomThickness));
+    // 7. Tâm đáy trong
+    points.push(new Vector2(0, -halfHeight + bottomThickness));
+  }
+
+  return points;
+};
+
 // Hàm định nghĩa chất liệu 3D cho thân cốc nền
 const renderBaseCupMaterial = (type: string, color: string) => {
   if (type === "paper") {
     return (
       <meshStandardMaterial
         color={color}
-        roughness={0.95}
-        metalness={0.05}
+        roughness={0.9}
+        metalness={0.0}
         side={DoubleSide}
       />
     );
@@ -40,7 +114,7 @@ const renderBaseCupMaterial = (type: string, color: string) => {
     return (
       <meshStandardMaterial
         color={color}
-        roughness={0.25}
+        roughness={0.18}
         metalness={0.95}
         side={DoubleSide}
       />
@@ -54,16 +128,16 @@ const renderBaseCupMaterial = (type: string, color: string) => {
   return (
     <meshPhysicalMaterial
       color={color}
-      roughness={isFrosted ? 0.45 : isGlass ? 0.03 : 0.08}
-      metalness={isGlass ? 0.02 : 0.1}
-      transmission={isFrosted ? 0.72 : isGlass ? 0.96 : 0.88}
-      thickness={isGlass ? 1.6 : 0.8}
-      ior={isGlass ? 1.52 : 1.46}
+      roughness={isFrosted ? 0.35 : isGlass ? 0.01 : 0.08}
+      metalness={isGlass ? 0.01 : 0.05}
+      transmission={isFrosted ? 0.75 : isGlass ? 0.98 : 0.92}
+      thickness={isGlass ? 1.5 : 0.8}
+      ior={isGlass ? 1.52 : 1.47}
       clearcoat={isGlass || type === "clear" ? 1.0 : 0.0}
-      clearcoatRoughness={isGlass ? 0.05 : 0.1}
+      clearcoatRoughness={isGlass ? 0.02 : 0.08}
       side={DoubleSide}
       transparent
-      opacity={1}
+      opacity={1.0}
     />
   );
 };
@@ -89,22 +163,25 @@ function CupMesh({
   logoUrl,
   isScanning,
 }: CupVisualizer3DProps) {
-  const meshRef = useRef<any>(null);
-  const scannerRef = useRef<any>(null);
+  const meshRef = useRef<Mesh>(null);
+  const scannerRef = useRef<Mesh>(null);
   const [texture, setTexture] = useState<Texture | null>(null);
 
   const { radiusTop, radiusBottom, height } = CUP_SIZES[size];
   const halfHeight = height / 2;
 
+  // Tính toán các điểm 2D để tạo LatheGeometry xoay 3D có độ dày
+  const points = getCupPoints(style, radiusTop, radiusBottom, height, materialType === "glass");
+
   // Tính toán vùng in Decal phẳng cố định mặt trước cốc
   const avgRadius = (radiusTop + radiusBottom) / 2;
-  const decalWidth = radiusTop * 1.55; // Chiều rộng bằng đúng mặt trước
-  const decalHeight = height * 0.72; // Chiều cao chiếm 72% thân ly
+  const decalHeight = height * 0.95; // Chiều cao chiếm 95% thân ly
+  const decalWidth = decalHeight * 0.7; // Tỷ lệ chính xác 7/10 tương ứng với bảng thiết kế 2D
 
   // Tải texture vẽ tay 2D Canvas
   useEffect(() => {
     if (!logoUrl) {
-      setTexture(null);
+      Promise.resolve().then(() => setTexture(null));
       return;
     }
     const loader = new TextureLoader();
@@ -134,17 +211,17 @@ function CupMesh({
 
   return (
     <group>
-      {/* 1. THÂN LY NỀN (Hiển thị chất liệu và màu ly) */}
+      {/* 1. THÂN LY NỀN (Hiển thị chất liệu và màu ly bằng LatheGeometry có độ dày thành thực tế) */}
       <mesh ref={meshRef} castShadow receiveShadow>
-        <cylinderGeometry args={[radiusTop, radiusBottom, height, 32, 1, true]} />
+        <latheGeometry args={[points, 64]} />
         {renderBaseCupMaterial(materialType, cupColor)}
 
-        {/* 2. KHUÔN CHIẾU DECAL MẶT TRƯỚC CỐ ĐỊNH (Không bị quấn chu vi hay nhiễm màu cốc) */}
+        {/* 2. KHUÔN CHIẾU DECAL MẶT TRƯỚC CỐ ĐỊNH (Bám sát thành ngoài cong, độ dày nhỏ để tránh xuyên vào thành trong) */}
         {texture && (
           <Decal
             position={[0, 0, avgRadius]}
             rotation={[0, 0, 0]}
-            scale={[decalWidth, decalHeight, 2.0]} // Độ dày projector đủ sâu để chiếu lên bề mặt cong
+            scale={[decalWidth, decalHeight, 2.0]} // Tăng độ sâu z lên 2.0 để ôm trọn bề mặt cong mà không bị cắt rìa ngoài
           >
             {/* Sử dụng vật liệu màu trắng tuyệt đối để giữ nguyên màu gốc Sticker */}
             <meshStandardMaterial
@@ -152,7 +229,7 @@ function CupMesh({
               transparent
               polygonOffset
               polygonOffsetFactor={-10}
-              roughness={materialType === "paper" ? 0.95 : 0.25}
+              roughness={materialType === "paper" ? 0.9 : 0.15}
               metalness={0.0}
               side={DoubleSide}
               depthWrite={true}
@@ -161,26 +238,7 @@ function CupMesh({
         )}
       </mesh>
 
-      {/* 3. Đáy cốc */}
-      {style === "u_shape" ? (
-        <mesh position={[0, -halfHeight, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <sphereGeometry args={[radiusBottom, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-          {renderBaseCupMaterial(materialType, cupColor)}
-        </mesh>
-      ) : (
-        <mesh position={[0, -halfHeight, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[radiusBottom, 32]} />
-          {renderBaseCupMaterial(materialType, cupColor)}
-        </mesh>
-      )}
-
-      {/* 4. Vành miệng cốc */}
-      <mesh position={[0, halfHeight, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[radiusTop - 0.05, radiusTop + 0.05, 32]} />
-        {renderBaseCupMaterial(materialType, cupColor)}
-      </mesh>
-
-      {/* 5. Quai cầm (Mug) */}
+      {/* 3. Quai cầm (Mug) */}
       {style === "mug" && (
         <mesh
           position={[-radiusBottom - 0.28, 0, 0]}
@@ -192,7 +250,7 @@ function CupMesh({
         </mesh>
       )}
 
-      {/* 6. Nắp tim đỏ (Heart) */}
+      {/* 4. Nắp tim đỏ (Heart) */}
       {style === "heart" && (
         <group position={[0, halfHeight + 0.02, 0]}>
           <mesh rotation={[-Math.PI / 2, 0, 0]}>
@@ -223,7 +281,7 @@ function CupMesh({
         </group>
       )}
 
-      {/* 7. Vòng laser AI quét */}
+      {/* 5. Vòng laser AI quét */}
       <mesh ref={scannerRef} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[radiusTop + 0.1, radiusTop + 0.16, 32]} />
         <meshBasicMaterial
@@ -241,7 +299,7 @@ export function CupVisualizer3D(props: CupVisualizer3DProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    Promise.resolve().then(() => setMounted(true));
   }, []);
 
   if (!mounted) {
@@ -278,24 +336,48 @@ export function CupVisualizer3D(props: CupVisualizer3DProps) {
       >
         <color attach="background" args={["#E5E2DD"]} />
         
-        <ambientLight intensity={0.75} />
+        {/* Ánh sáng dịu nhẹ để tạo khối tốt hơn */}
+        <ambientLight intensity={0.35} />
+        
+        {/* Đèn chính tạo bóng đổ */}
         <directionalLight
           position={[6, 9, 6]}
-          intensity={1.2}
+          intensity={1.5}
           castShadow
           shadow-mapSize={1024}
         />
+        
+        {/* Đèn phụ làm sáng vùng khuất */}
         <directionalLight
           position={[-6, 6, -6]}
-          intensity={1.7}
+          intensity={0.8}
+          color="#ffffff"
+        />
+
+        {/* Đèn chiếu viền (Rim light) tôn dáng cốc */}
+        <directionalLight
+          position={[0, 4, -8]}
+          intensity={0.4}
           color="#ffffff"
         />
         
         <pointLight position={[0, -5, 6]} intensity={0.4} />
 
+        {/* Môi trường phản chiếu giúp chất liệu bóng bẩy */}
+        <Environment preset="city" />
+
         <Suspense fallback={null}>
           <CupMesh {...props} />
         </Suspense>
+
+        {/* Bóng đổ mềm mại dưới đáy cốc */}
+        <ContactShadows
+          position={[0, -CUP_SIZES[props.size].height / 2 - 0.01, 0]}
+          opacity={0.55}
+          scale={8}
+          blur={2.4}
+          far={2}
+        />
 
         <OrbitControls
           enablePan={false}

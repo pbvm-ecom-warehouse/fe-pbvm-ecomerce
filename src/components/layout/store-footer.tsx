@@ -4,6 +4,14 @@ import { ShieldCheck, Truck, Percent, Gift, Undo2, Phone, Mail, MapPin, Clock } 
 import { Logo } from "@/components/ui/logo";
 
 export function StoreFooter() {
+  const partners = [
+    { name: "Starbucks", slug: "starbucks" },
+    { name: "Nestlé", slug: "nestle" },
+    { name: "Unilever", slug: "unilever" },
+    { name: "McDonald's", slug: "mcdonalds" },
+    { name: "Coca-Cola", slug: "cocacola" },
+  ];
+
   const valueProps = [
     {
       icon: Percent,
@@ -33,9 +41,9 @@ export function StoreFooter() {
   ];
 
   return (
-    <footer className="w-full bg-[#FAF8F6] border-t border-[#E6DFD9] mt-16 text-[#1C1917]">
+    <footer className="w-full bg-[#FAF8F6] mt-16 text-[#1C1917]">
       {/* Value Propositions Row */}
-      <div className="mx-auto max-w-7xl px-4 py-8 border-b border-[#E6DFD9]/60">
+      <div className="mx-auto max-w-7xl px-4 py-8">
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
           {valueProps.map((prop, idx) => {
             const Icon = prop.icon;
@@ -53,6 +61,7 @@ export function StoreFooter() {
           })}
         </div>
       </div>
+
 
       {/* Main Footer Links */}
       <div className="mx-auto max-w-7xl px-4 py-12">
@@ -154,16 +163,26 @@ export function StoreFooter() {
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Copyright Bar */}
-      <div className="border-t border-[#E6DFD9]/60 bg-[#F4EFEA] py-6 text-center text-xs text-[#7A6F68]">
-        <div className="mx-auto max-w-7xl px-4 flex flex-col md:flex-row items-center justify-between gap-4">
-          <p>&copy; {new Date().getFullYear()} PBVM Shop. Toàn bộ thiết kế theo chuẩn Figma Landing Page.</p>
-          <p className="flex gap-4">
-            <Link href="#" className="hover:underline">Điều khoản bảo mật</Link>
-            <Link href="#" className="hover:underline">Quy chế hoạt động</Link>
+        {/* Partners/Brands Wall */}
+        <div className="border-t border-[#E6DFD9]/60 pt-8 mt-12 text-center">
+          <p className="text-[10px] font-mono tracking-widest text-[#7A6F68] uppercase mb-4">
+            ĐỐI TÁC CUNG ỨNG VÀ THƯƠNG HIỆU TIN DÙNG
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-6 md:gap-12">
+            {partners.map((partner) => (
+              <div key={partner.name} className="flex items-center gap-1.5 group cursor-pointer">
+                <img
+                  src={`https://cdn.simpleicons.org/${partner.slug}/A59890`}
+                  alt={partner.name}
+                  className="h-5 object-contain opacity-55 dark:opacity-40 group-hover:opacity-100 group-hover:brightness-75 dark:group-hover:brightness-125 transition-all duration-300"
+                />
+                <span className="text-xs font-bold text-[#7A6F68]/70 dark:text-[#A59890]/60 group-hover:text-primary dark:group-hover:text-[#D7C4B7] transition-colors uppercase tracking-wider">
+                  {partner.name}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </footer>

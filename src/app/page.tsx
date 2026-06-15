@@ -1,53 +1,40 @@
 import Link from "next/link";
-import { ArrowRight, ShoppingCart, Star, Sparkles, Paintbrush, Flame, Layers, Milk, Shirt, Bone, Cookie, Citrus, CupSoda, Leaf } from "lucide-react";
+import Image from "next/image";
+import { ArrowRight, Star, Clock, ShieldCheck, BadgePercent, ChevronRight, Paintbrush } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { CatalogGrid } from "@/features/catalog/components/catalog-grid";
 import { listCatalogProducts } from "@/features/catalog/services/catalog.service";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/ui/logo";
-import { Badge } from "@/components/ui/badge";
-import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
-import type { CatalogProduct } from "@/types/api";
+import { formatCurrency } from "@/utils/format-currency";
+
+function getProductThumbnail(name: string): string {
+  const lowercase = name.toLowerCase();
+  if (lowercase.includes("bột kem") || lowercase.includes("bột sữa") || lowercase.includes("kievit")) {
+    return "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=120&h=120&q=80";
+  }
+  if (lowercase.includes("trà") || lowercase.includes("hồng trà") || lowercase.includes("ô long") || lowercase.includes("xanh")) {
+    return "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?auto=format&fit=crop&w=120&h=120&q=80";
+  }
+  if (lowercase.includes("ly") || lowercase.includes("pet") || lowercase.includes("pp") || lowercase.includes("cốc")) {
+    return "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=120&h=120&q=80";
+  }
+  if (lowercase.includes("trân châu") || lowercase.includes("topping")) {
+    return "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=120&h=120&q=80";
+  }
+  if (lowercase.includes("siro") || lowercase.includes("đường") || lowercase.includes("nước đường") || lowercase.includes("fructose")) {
+    return "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=120&h=120&q=80";
+  }
+  if (lowercase.includes("màng dập")) {
+    return "https://images.unsplash.com/photo-1582284540020-8acae03f41e4?auto=format&fit=crop&w=120&h=120&q=80";
+  }
+  return "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=120&h=120&q=80";
+}
 
 export default async function HomePage() {
   const products = await listCatalogProducts();
   const featuredProducts = products.data.slice(0, 8);
 
-  const categories = [
-    { name: "Nguyên liệu trà sữa", count: "12 sản phẩm", bg: "bg-[#F5EFEB]" },
-    { name: "Ly nhựa chưa in", count: "8 sản phẩm", bg: "bg-[#EADEC9]/40" },
-    { name: "Ly nhựa đã in ấn", count: "6 sản phẩm", bg: "bg-[#EFEAE4]" },
-    { name: "Bột sữa & Kem béo", count: "9 sản phẩm", bg: "bg-[#F5EFEB]" },
-    { name: "Trà lá & Topping", count: "15 sản phẩm", bg: "bg-[#EFEAE4]" },
-  ];
-
-  const promoBanners = [
-    {
-      title: "Thiết kế ly miễn phí",
-      desc: "Hỗ trợ thiết kế Logo phong cách riêng cho thương hiệu trà sữa của bạn.",
-      btnText: "Đăng ký ngay",
-      bg: "bg-gradient-to-br from-[#EFEAE4] to-[#FAF8F6]",
-      textColor: "text-[#3C2F2F]",
-      icon: Paintbrush,
-    },
-    {
-      title: "Trà & Bột sữa B2B sỉ",
-      desc: "Nguyên liệu cao cấp nhập khẩu sạch 100%, chiết khấu sỉ lên tới 15%.",
-      btnText: "Xem bảng giá",
-      bg: "bg-gradient-to-br from-primary to-[#4A2E22]",
-      textColor: "text-white",
-      icon: Sparkles,
-    },
-    {
-      title: "In ấn ly nhựa hỏa tốc",
-      desc: "In ly logo số lượng ít từ 1000 cái. Giao hàng hỏa tốc trong 2-3 ngày.",
-      btnText: "Liên hệ in",
-      bg: "bg-gradient-to-br from-[#D2B48C]/30 to-[#FAF8F6]",
-      textColor: "text-[#3C2F2F]",
-      icon: Layers,
-    },
-  ];
 
   const deals = [
     {
@@ -60,8 +47,9 @@ export default async function HomePage() {
       hours: "14",
       mins: "20",
       secs: "45",
-      image: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&q=80",
+      image: "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=400&q=80",
       category: "Bột sữa",
+      slug: "bot-sua-indo-kievit-vana-blanca-25kg",
     },
     {
       title: "Thùng 1000 Ly nhựa PP 500ml dày dặn chuyên trà sữa",
@@ -75,6 +63,7 @@ export default async function HomePage() {
       secs: "10",
       image: "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=400&q=80",
       category: "Ly chưa in",
+      slug: "ly-nhua-pp-500ml-thung-1000",
     },
     {
       title: "Hồng trà đặc biệt Phúc Long (Bao 1kg)",
@@ -86,47 +75,9 @@ export default async function HomePage() {
       hours: "18",
       mins: "45",
       secs: "00",
-      image: "https://images.unsplash.com/photo-1574316071802-0d684efa7bf5?auto=format&fit=crop&w=400&q=80",
+      image: "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?auto=format&fit=crop&w=400&q=80",
       category: "Trà lá",
-    },
-    {
-      title: "Trân châu đen Gia Uy túi 3kg dai giòn sần sật",
-      price: 65000,
-      oldPrice: 75000,
-      rating: 4.5,
-      vendor: "Gia Uy",
-      days: "04",
-      hours: "02",
-      mins: "10",
-      secs: "55",
-      image: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=400&q=80",
-      category: "Topping",
-    },
-    {
-      title: "Siro Đường Đen Đài Loan Maulin 2.5kg",
-      price: 195000,
-      oldPrice: 230000,
-      rating: 4.9,
-      vendor: "Maulin",
-      days: "02",
-      hours: "06",
-      mins: "30",
-      secs: "15",
-      image: "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=400&q=80",
-      category: "Siro",
-    },
-    {
-      title: "Sữa đặc Larosee Malaysia lon 1kg",
-      price: 48000,
-      oldPrice: 58000,
-      rating: 4.4,
-      vendor: "Larosee",
-      days: "01",
-      hours: "04",
-      mins: "15",
-      secs: "30",
-      image: "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=400&q=80",
-      category: "Sữa đặc",
+      slug: "tra-den-co-thu-bao-1kg",
     },
   ];
 
@@ -166,352 +117,318 @@ export default async function HomePage() {
   ];
 
   return (
-    <main className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-4 py-8">
-      <div className="flex flex-col lg:flex-row gap-8 items-start">
-        {/* Left Sidebar Column - Visible on desktop, stacks on mobile */}
-        <aside className="w-full lg:w-[280px] shrink-0 flex flex-col gap-6 lg:sticky lg:top-24">
-          {/* Category block */}
-          <div className="rounded-3xl border border-[#E6DFD9] bg-white p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-[#1C1917] border-b border-[#E6DFD9]/60 pb-2.5">Danh mục</h3>
-            <div className="space-y-2.5">
-              {[
-                { name: "Nguyên liệu trà sữa", count: 12, icon: Milk, bg: "bg-[#F5EFEB]" },
-                { name: "Ly nhựa chưa in", count: 8, icon: CupSoda, bg: "bg-[#EADEC9]/30" },
-                { name: "Ly nhựa đã in ấn", count: 6, icon: Paintbrush, bg: "bg-[#EFEAE4]" },
-                { name: "Bột sữa & Kem béo", count: 9, icon: Cookie, bg: "bg-[#F5EFEB]" },
-                { name: "Trà lá & Topping", count: 15, icon: Leaf, bg: "bg-[#EFEAE4]" },
-              ].map((item, idx) => {
-                const Icon = item.icon;
-                return (
-                  <div key={idx} className="flex items-center justify-between p-2 rounded-xl border border-[#E6DFD9]/30 hover:border-primary/20 hover:bg-[#FAF8F6] transition-all cursor-pointer group">
-                    <div className="flex items-center gap-3">
-                      <div className={`size-10 rounded-xl ${item.bg} flex items-center justify-center shrink-0`}>
-                        <Icon className="size-5 text-primary stroke-[1.8]" />
-                      </div>
-                      <span className="text-xs font-semibold text-[#1C1917] group-hover:text-primary transition-colors">{item.name}</span>
-                    </div>
-                    <span className="flex size-5 items-center justify-center rounded-full bg-primary/10 text-[9px] font-bold text-primary">
-                      {item.count}
-                    </span>
-                  </div>
-                );
-              })}
+    <div className="flex flex-col min-h-screen bg-[#FAF8F6] dark:bg-[#1C1816]">
+      {/* Section 1: Premium Hero Banner (Full-width image background with overlay) */}
+      <section className="relative overflow-hidden min-h-[500px] flex items-center py-12 md:py-16">
+        {/* Background Image with Overlay */}
+        <div className="absolute inset-0 z-0">
+          <Image
+            src="/images/hero-bg.png"
+            alt="Premium printed cups packaging background"
+            fill
+            className="object-cover"
+            priority
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/60 to-transparent dark:from-black/95 dark:via-black/75 dark:to-transparent" />
+        </div>
+
+        <div className="container mx-auto px-4 lg:px-8 max-w-7xl relative z-10">
+          <div className="max-w-3xl space-y-6 text-white">
+            <div className="inline-block text-[11px] font-mono tracking-[0.25em] uppercase text-[#D7C4B7] font-bold">
+              Bao bì & Nguyên liệu B2B
+            </div>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.1] text-white">
+              Nâng tầm thương hiệu <br />
+              <span className="text-[#D7C4B7] italic">trà sữa của bạn</span>
+            </h1>
+            <p className="text-base text-zinc-300 leading-relaxed max-w-[55ch]">
+              PBVM cung cấp ly nhựa in logo cao cấp và nguyên liệu trà sữa sỉ trực tiếp cho chuỗi cửa hàng.
+              Bạn cũng có thể tự thiết kế logo lên ly nhựa trực quan với mô hình 3D tương tác.
+            </p>
+
+            <div className="pt-2 flex flex-col md:flex-row flex-wrap gap-4 items-stretch md:items-center">
+
+              <Link href="/design" className="md:w-auto">
+                <Button className="w-full border border-white/20 bg-white/10 hover:bg-white/20 hover:border-white/40 text-white font-bold px-6 py-3 rounded-xl transition-all active:scale-[0.98] h-full flex items-center justify-center gap-2 cursor-pointer backdrop-blur-md">
+                  <Paintbrush className="size-4 text-[#D7C4B7]" /> Tự thiết kế ly 3D
+                </Button>
+              </Link>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-6 pt-2 text-xs text-zinc-300 font-medium">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="size-4 text-[#D7C4B7]" /> Cam kết chất lượng
+              </span>
+              <span className="flex items-center gap-1.5">
+                <BadgePercent className="size-4 text-[#D7C4B7]" /> Chiết khấu sỉ tới 15%
+              </span>
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Fill by price filter block */}
-          <div className="rounded-3xl border border-[#E6DFD9] bg-white p-5 shadow-sm space-y-4 relative overflow-hidden">
-            <h3 className="text-sm font-bold text-[#1C1917] border-b border-[#E6DFD9]/60 pb-2.5">Lọc theo giá</h3>
-            <div className="space-y-4">
-              {/* Mock Range Slider */}
-              <div className="space-y-2 pt-2">
-                <div className="relative h-1.5 w-full rounded-full bg-[#EFEAE4]">
-                  <div className="absolute left-[20%] right-[30%] h-full bg-primary rounded-full" />
-                  <div className="absolute left-[20%] top-1/2 -translate-y-1/2 size-3.5 rounded-full bg-primary border-2 border-white shadow cursor-pointer" />
-                  <div className="absolute right-[30%] top-1/2 -translate-y-1/2 size-3.5 rounded-full bg-primary border-2 border-white shadow cursor-pointer" />
-                </div>
-                <div className="flex justify-between text-[10px] text-[#7A6F68] font-semibold pt-1">
-                  <span>Từ: <strong className="text-primary">100k đ</strong></span>
-                  <span>Đến: <strong className="text-primary">2.000k đ</strong></span>
-                </div>
-              </div>
-
-              {/* Brand filter */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-bold text-[#1C1917]">Thương hiệu sỉ</span>
-                <div className="space-y-1">
-                  {[
-                    { label: "Phúc Long (45)", checked: true },
-                    { label: "Kievit Indo (24)", checked: false },
-                    { label: "Gia Uy (32)", checked: false },
-                  ].map((brand, idx) => (
-                    <label key={idx} className="flex items-center gap-2 text-xs text-[#7A6F68] font-medium cursor-pointer">
-                      <input type="checkbox" defaultChecked={brand.checked} className="rounded border-[#E6DFD9] text-primary focus:ring-primary size-3.5" />
-                      <span>{brand.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Packaging Condition */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-bold text-[#1C1917]">Quy cách đóng gói</span>
-                <div className="space-y-1">
-                  {[
-                    { label: "Bao 25kg (12)", checked: true },
-                    { label: "Túi 1kg (68)", checked: false },
-                    { label: "Thùng/Hộp (15)", checked: false },
-                  ].map((pkg, idx) => (
-                    <label key={idx} className="flex items-center gap-2 text-xs text-[#7A6F68] font-medium cursor-pointer">
-                      <input type="checkbox" defaultChecked={pkg.checked} className="rounded border-[#E6DFD9] text-primary focus:ring-primary size-3.5" />
-                      <span>{pkg.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <Button className="w-full text-xs font-bold h-9 bg-primary text-primary-foreground hover:bg-[#4A2E22] flex gap-1.5 justify-center">
-                Lọc kết quả
-              </Button>
+      {/* Section 3: Categories Bento Grid */}
+      <section className="py-6 md:py-8 bg-[#FAF8F6] dark:bg-[#1C1816]">
+        <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
+          <div className="mb-4">
+            <div className="inline-block text-[11px] font-mono tracking-[0.2em] uppercase text-primary dark:text-[#D7C4B7] font-bold mb-2">
+              Danh mục B2B
             </div>
+            <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-[#1C1917] dark:text-[#FAF8F6]">
+              Sản phẩm tuyển chọn
+            </h2>
           </div>
 
-          {/* New products block */}
-          <div className="rounded-3xl border border-[#E6DFD9] bg-white p-5 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-[#1C1917] border-b border-[#E6DFD9]/60 pb-2.5">Sản phẩm mới</h3>
-            <div className="space-y-4">
-              {[
-                { name: "Bột sữa Kievit Indo 25kg", price: "1.450.000 đ", rating: 5, img: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=100&q=80" },
-                { name: "Trà Đen Phúc Long 1kg", price: "120.000 đ", rating: 5, img: "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=100&q=80" },
-                { name: "Trân châu Gia Uy 3kg", price: "65.000 đ", rating: 4, img: "https://images.unsplash.com/photo-1574316071802-0d684efa7bf5?auto=format&fit=crop&w=100&q=80" },
-              ].map((item, idx) => (
-                <div key={idx} className="flex gap-3 items-center cursor-pointer hover:scale-[1.02] transition-transform">
-                  <div className="size-16 rounded-xl bg-[#FAF8F6] border border-[#E6DFD9]/50 overflow-hidden shrink-0">
-                    <img src={item.img} alt={item.name} className="w-full h-full object-cover" />
-                  </div>
-                  <div className="space-y-0.5">
-                    <h4 className="text-xs font-bold text-[#1C1917] leading-snug line-clamp-1">{item.name}</h4>
-                    <div className="text-xs font-bold text-primary">{item.price}</div>
-                    <div className="flex items-center">
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <Star key={s} className={`size-2.5 ${s <= item.rating ? "fill-[#D2B48C] text-[#D2B48C]" : "text-gray-200"}`} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 auto-rows-[240px] md:auto-rows-[220px]">
+            {/* Tile 1: Ly nhựa đã in ấn (md:col-span-2 md:row-span-2) */}
+            <div className="md:col-span-2 md:row-span-2 relative group overflow-hidden rounded-2xl border border-[#E6DFD9]/60 dark:border-[#3D3531]/60 flex flex-col justify-between p-8 shadow-sm hover:shadow-lg transition-all duration-300">
+              <Image
+                src="https://images.unsplash.com/photo-1517256064527-09c53b2d0bc6?auto=format&fit=crop&w=800&q=80"
+                alt="Ly nhựa đã in ấn"
+                fill
+                className="object-cover absolute inset-0 group-hover:scale-102 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10" />
 
-        </aside>
-
-        {/* Right Main Column */}
-        <div className="flex-1 min-w-0 flex flex-col gap-12">
-          {/* 1. Hero Banner Section (Figma style) */}
-          <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#FAF3E0] to-[#FAF8F6] border border-[#E6DFD9] px-8 py-16 md:px-12 md:py-20 shadow-sm">
-            <div className="absolute -right-40 -top-40 size-96 rounded-full bg-[#D2B48C]/15 blur-3xl pointer-events-none" />
-            <div className="absolute right-10 bottom-0 size-80 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
-
-            <div className="relative z-10 grid gap-8 lg:grid-cols-12 items-center">
-              <div className="lg:col-span-7 space-y-6 max-w-2xl">
-                <h1 className="text-4xl font-extrabold tracking-tight text-[#1C1917] sm:text-5xl leading-tight">
-                  Giải pháp Ly nhựa & Nguyên liệu Trà sữa trọn gói
-                </h1>
-                <p className="text-sm text-[#7A6F68] leading-relaxed">
-                  Hỗ trợ thiết kế thương hiệu miễn phí. Cam kết sản phẩm chất lượng cao, giao hàng hỏa tốc và chiết khấu tốt nhất cho quán F&B của bạn.
-                </p>
-                <div className="flex flex-wrap gap-3 pt-2">
-                  <div className="flex items-center gap-0.5 rounded-full border border-[#E6DFD9] bg-white p-1 shadow-sm w-full max-w-md focus-within:ring-2 focus-within:ring-primary focus-within:border-primary">
-                    <input
-                      type="email"
-                      placeholder="Nhập email của bạn..."
-                      className="flex-1 bg-transparent border-0 px-3 text-xs focus:ring-0 focus:outline-none placeholder-[#7A6F68]/70"
-                    />
-                    <Button className="bg-primary text-primary-foreground hover:bg-[#4A2E22] text-xs font-bold rounded-full h-9 px-6 shrink-0">
-                      Đăng ký nhận báo giá
-                    </Button>
-                  </div>
-                </div>
+              <div className="z-20 self-end text-white/90">
+                <span className="inline-block px-2.5 py-0.5 text-[9px] font-bold tracking-widest uppercase bg-primary dark:bg-[#D7C4B7] dark:text-[#1C1816] rounded-full text-white mb-2">Bán chạy nhất</span>
               </div>
-
-              {/* Logo visual block */}
-              <div className="hidden lg:col-span-5 lg:flex justify-center select-none">
-                <div className="relative rounded-full bg-white p-8 shadow-xl border border-[#E6DFD9]/60 hover:scale-[1.03] transition-transform duration-500">
-                  <Logo size={140} />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 2. Popular Products Header & Tabs Grid */}
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E6DFD9] pb-3">
-              <h2 className="text-2xl font-extrabold text-[#1C1917]">Sản phẩm phổ biến</h2>
-              <div className="flex flex-wrap gap-1 text-xs font-semibold text-[#7A6F68]">
-                {["Tất cả", "Nguyên liệu", "Ly chưa in", "Ly đã in"].map((tab, idx) => (
-                  <span
-                    key={idx}
-                    className={cn(
-                      "cursor-pointer hover:text-primary transition-colors px-3 py-1.5 rounded-md",
-                      idx === 0 ? "text-primary font-bold bg-[#FAF8F6] border border-[#E6DFD9]" : ""
-                    )}
-                  >
-                    {tab}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <CatalogGrid products={featuredProducts} title="" />
-          </div>
-
-          {/* 3. Promo Banners Section (Figma style) */}
-          <section className="grid gap-4 md:grid-cols-3">
-            {promoBanners.map((banner, idx) => {
-              const Icon = banner.icon;
-              return (
-                <div
-                  key={idx}
-                  className={`${banner.bg} ${banner.textColor} rounded-2xl p-6 flex flex-col justify-between gap-6 border border-[#E6DFD9]/40 shadow-sm relative overflow-hidden group hover:shadow-md transition-all`}
-                >
-                  <div className="absolute -right-6 -bottom-6 size-24 opacity-10 group-hover:scale-125 transition-transform duration-300">
-                    <Icon className="size-full" />
-                  </div>
-                  <div className="space-y-2 relative z-10">
-                    <div className="inline-flex rounded-lg bg-white/20 p-2 backdrop-blur-md mb-2">
-                      <Icon className="size-5 text-current" />
-                    </div>
-                    <h3 className="text-lg font-bold leading-tight">{banner.title}</h3>
-                    <p className="text-xs opacity-80 leading-relaxed">{banner.desc}</p>
-                  </div>
-                  <Button
-                    variant={idx === 1 ? "secondary" : "default"}
-                    className="w-fit text-xs font-bold h-9 px-4 relative z-10 self-start"
-                  >
-                    {banner.btnText}
+              <div className="z-20 mt-auto text-white">
+                <h3 className="text-xl md:text-2xl font-extrabold mb-1">Ly nhựa đã in ấn</h3>
+                <p className="text-xs text-white/80 max-w-[40ch] mb-4">Mẫu mã đa dạng, in logo sắc nét với công nghệ hiện đại.</p>
+                <Link href="/products?category=printed_cup">
+                  <Button className="bg-white hover:bg-[#FDFBF7] text-primary dark:bg-[#352E2A] dark:text-[#EFEAE4] dark:hover:bg-[#3D3531] font-bold text-xs px-4 h-9 rounded-lg flex items-center gap-1 active:scale-[0.98] transition-all cursor-pointer">
+                    Xem bảng giá in <ArrowRight className="size-3" />
                   </Button>
-                </div>
-              );
-            })}
-          </section>
-        </div>
-      </div>
-
-      {/* 5. Daily Deals of the Day (Figma layout) */}
-      <section className="space-y-4 pt-4 border-t border-[#E6DFD9]/50">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs text-primary font-bold">
-              <Flame className="size-3.5 text-primary animate-pulse" />
-              Hot Deals cực khủng
+                </Link>
+              </div>
             </div>
-            <h2 className="text-xl font-bold text-[#1C1917] mt-0.5">Khuyến mãi trong ngày</h2>
+
+            {/* Tile 2: Nguyên liệu trà sữa (md:col-span-1 md:row-span-1) */}
+            <div className="md:col-span-1 md:row-span-1 bg-[#F5EFEB] dark:bg-[#2D2622] relative group overflow-hidden rounded-2xl border border-[#E6DFD9]/60 dark:border-[#3D3531]/60 flex flex-col justify-between p-6 shadow-sm hover:shadow-lg transition-all duration-300">
+              <div className="absolute right-0 bottom-0 w-1/2 h-full opacity-80 group-hover:scale-105 transition-transform duration-300">
+                <Image
+                  src="https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=300&q=80"
+                  alt="Nguyên liệu trà sữa"
+                  fill
+                  className="object-contain object-right-bottom p-2"
+                />
+              </div>
+              <div className="z-10 max-w-[60%] flex flex-col h-full justify-between">
+                <div>
+                  <h3 className="text-sm md:text-base font-extrabold text-[#3C2F2F] dark:text-[#EFEAE4]">Nguyên liệu trà sữa</h3>
+                  <p className="text-[10px] text-[#7A6F68] dark:text-[#A59890] mt-1">Trân châu, thạch boba, siro chất lượng.</p>
+                </div>
+                <Link href="/products?category=ingredient" className="text-xs font-bold text-primary dark:text-[#D7C4B7] hover:underline flex items-center gap-0.5 mt-2">
+                  Khám phá sỉ <ChevronRight className="size-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Tile 3: Ly nhựa chưa in (md:col-span-1 md:row-span-1) */}
+            <div className="md:col-span-1 md:row-span-1 bg-[#EADEC9]/30 dark:bg-[#3D3531]/30 relative group overflow-hidden rounded-2xl border border-[#E6DFD9]/60 dark:border-[#3D3531]/60 flex flex-col justify-between p-6 shadow-sm hover:shadow-lg transition-all duration-300">
+              <div className="absolute right-0 bottom-0 w-1/2 h-full opacity-80 group-hover:scale-105 transition-transform duration-300">
+                <Image
+                  src="https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=300&q=80"
+                  alt="Ly nhựa chưa in"
+                  fill
+                  className="object-contain object-right-bottom p-2"
+                />
+              </div>
+              <div className="z-10 max-w-[60%] flex flex-col h-full justify-between">
+                <div>
+                  <h3 className="text-sm md:text-base font-extrabold text-[#2F2525] dark:text-[#EFEAE4]">Ly nhựa chưa in</h3>
+                  <p className="text-[10px] text-[#7A6F68] dark:text-[#A59890] mt-1">Thùng ly trơn PP, PET đủ kích cỡ.</p>
+                </div>
+                <Link href="/products?category=plain_cup" className="text-xs font-bold text-primary dark:text-[#D7C4B7] hover:underline flex items-center gap-0.5 mt-2">
+                  Xem sản phẩm <ChevronRight className="size-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Tile 4: Bột sữa & Kem béo (md:col-span-1 md:row-span-1) */}
+            <div className="md:col-span-1 md:row-span-1 bg-[#EFEAE4] dark:bg-[#25201D] relative group overflow-hidden rounded-2xl border border-[#E6DFD9]/60 dark:border-[#3D3531]/60 flex flex-col justify-between p-6 shadow-sm hover:shadow-lg transition-all duration-300">
+              <div className="absolute right-0 bottom-0 w-1/2 h-full opacity-80 group-hover:scale-105 transition-transform duration-300">
+                <Image
+                  src="https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=300&q=80"
+                  alt="Bột sữa & Kem béo"
+                  fill
+                  className="object-contain object-right-bottom p-2"
+                />
+              </div>
+              <div className="z-10 max-w-[60%] flex flex-col h-full justify-between">
+                <div>
+                  <h3 className="text-sm md:text-base font-extrabold text-[#3C2F2F] dark:text-[#EFEAE4]">Bột sữa & Kem béo</h3>
+                  <p className="text-[10px] text-[#7A6F68] dark:text-[#A59890] mt-1">Bao 25kg, độ béo ngậy chuẩn vị.</p>
+                </div>
+                <Link href="/products?category=ingredient" className="text-xs font-bold text-primary dark:text-[#D7C4B7] hover:underline flex items-center gap-0.5 mt-2">
+                  Bảng giá sỉ <ChevronRight className="size-3.5" />
+                </Link>
+              </div>
+            </div>
+
+            {/* Tile 5: Trà lá & Topping (md:col-span-2 md:row-span-1) */}
+            <div className="md:col-span-2 md:row-span-1 relative group overflow-hidden rounded-2xl border border-[#E6DFD9]/60 dark:border-[#3D3531]/60 flex flex-col justify-between p-6 shadow-sm hover:shadow-lg transition-all duration-300">
+              <Image
+                src="https://images.unsplash.com/photo-1574316071802-0d684efa7bf5?auto=format&fit=crop&w=800&q=80"
+                alt="Trà lá & Topping"
+                fill
+                className="object-cover absolute inset-0 group-hover:scale-102 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-transparent z-10" />
+
+              <div className="z-20 mt-auto text-white">
+                <h3 className="text-base md:text-lg font-extrabold">Trà lá & Topping đặc sản</h3>
+                <p className="text-xs text-white/80 max-w-[50ch] mt-1">Hồng trà, Trà xanh Thái Nguyên, Ô Long tuyển lựa kỹ càng.</p>
+                <Link href="/products?category=ingredient" className="inline-block text-xs font-bold text-white hover:underline mt-2 flex items-center gap-0.5">
+                  Đặt hàng sỉ ngay <ChevronRight className="size-3.5" />
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex gap-6 overflow-x-auto snap-x snap-mandatory pb-6 scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
-          {deals.map((deal, idx) => {
-            const mappedProduct: CatalogProduct = {
-              id: `deal-${idx}`,
-              productRefId: `DEAL-${idx}`,
-              slug: `deal-${idx}-${deal.category.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-              name: deal.title,
-              category: deal.category === "Ly chưa in" ? "plain_cup" : "ingredient",
-              price: deal.oldPrice,
-              b2bPrice: deal.price,
-              unit: deal.category === "Ly chưa in" ? "thùng" : "bao",
-              stockSnapshot: 100,
-              imageUrl: deal.image,
-              updatedAt: new Date().toISOString(),
-            };
+      </section>
 
-            return (
-              <div
-                key={idx}
-                className="w-[85vw] sm:w-[45vw] md:w-[30vw] lg:w-[calc(25%-18px)] shrink-0 snap-start flex flex-col relative"
-              >
-                {/* Aspect-ratio rounded image with overlay countdown */}
-                <div className="relative w-full aspect-[4/3.5] rounded-3xl overflow-hidden shadow-sm">
-                  <img
+      {/* Section 4: Daily Deals Spotlight */}
+      <section className="py-6 md:py-8 bg-[#FAF8F6]/30 dark:bg-[#1C1816]/30">
+        <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-4 gap-4">
+            <div>
+              <div className="inline-block text-[11px] font-mono tracking-[0.2em] uppercase text-primary dark:text-[#D7C4B7] font-bold mb-2">
+                Ưu đãi có hạn
+              </div>
+              <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-[#1C1917] dark:text-[#FAF8F6]">
+                Daily Deals Spotlight
+              </h2>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-[#7A6F68] dark:text-[#A59890] font-semibold">
+              <Clock className="size-4 text-primary dark:text-[#D7C4B7] animate-pulse" /> Đang diễn ra hôm nay
+            </div>
+          </div>
+
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {deals.slice(0, 3).map((deal, idx) => (
+              <div key={idx} className="bg-white dark:bg-[#25201D] border border-[#E6DFD9]/60 dark:border-[#3D3531]/60 rounded-3xl p-5 flex flex-col justify-between shadow-sm hover:shadow-md transition-all duration-300 group">
+                {/* Image Container */}
+                <div className="relative aspect-[4/3] w-full rounded-2xl overflow-hidden bg-transparent mb-5 border border-[#E6DFD9]/20 dark:border-[#3D3531]/20">
+                  <Image
                     src={deal.image}
                     alt={deal.title}
-                    className="object-cover w-full h-full"
+                    fill
+                    className="object-cover group-hover:scale-103 transition-transform duration-500"
                   />
-                  <div className="absolute inset-0 bg-black/5" />
 
-                  {/* Countdown boxes centered absolute overlay */}
-                  <div className="absolute bottom-16 left-1/2 -translate-x-1/2 flex gap-1.5 z-10 w-[90%] justify-center">
-                    <div className="bg-white rounded-lg px-1 py-1.5 text-center min-w-[42px] sm:min-w-[45px] shadow-md flex flex-col justify-center">
-                      <span className="text-[11px] sm:text-xs font-extrabold text-primary leading-none">{deal.days}</span>
-                      <span className="text-[7px] text-[#7A6F68] mt-0.5 uppercase tracking-wider font-semibold">Ngày</span>
-                    </div>
-                    <div className="bg-white rounded-lg px-1 py-1.5 text-center min-w-[42px] sm:min-w-[45px] shadow-md flex flex-col justify-center">
-                      <span className="text-[11px] sm:text-xs font-extrabold text-primary leading-none">{deal.hours}</span>
-                      <span className="text-[7px] text-[#7A6F68] mt-0.5 uppercase tracking-wider font-semibold">Giờ</span>
-                    </div>
-                    <div className="bg-white rounded-lg px-1 py-1.5 text-center min-w-[42px] sm:min-w-[45px] shadow-md flex flex-col justify-center">
-                      <span className="text-[11px] sm:text-xs font-extrabold text-primary leading-none">{deal.mins}</span>
-                      <span className="text-[7px] text-[#7A6F68] mt-0.5 uppercase tracking-wider font-semibold">Phút</span>
-                    </div>
-                    <div className="bg-white rounded-lg px-1 py-1.5 text-center min-w-[42px] sm:min-w-[45px] shadow-md flex flex-col justify-center">
-                      <span className="text-[11px] sm:text-xs font-extrabold text-primary leading-none">{deal.secs}</span>
-                      <span className="text-[7px] text-[#7A6F68] mt-0.5 uppercase tracking-wider font-semibold">Giây</span>
+                  {/* Glassmorphism Countdown Overlay */}
+                  <div className="absolute bottom-3 left-3 right-3 bg-white/20 dark:bg-[#1C1816]/40 backdrop-blur-md border border-white/20 dark:border-white/10 text-white py-2 px-3 rounded-xl flex items-center justify-between text-[11px] font-bold shadow-md">
+                    <span className="text-white/80 font-mono tracking-wider uppercase text-[9px]">Kết thúc sau</span>
+                    <div className="flex items-center gap-1.5 font-mono">
+                      <span>{deal.days}d</span>
+                      <span className="opacity-50">:</span>
+                      <span>{deal.hours}h</span>
+                      <span className="opacity-50">:</span>
+                      <span>{deal.mins}m</span>
+                      <span className="opacity-50">:</span>
+                      <span className="text-accent dark:text-[#D7C4B7]">{deal.secs}s</span>
                     </div>
                   </div>
                 </div>
 
-                {/* White card overlapping bottom of the image */}
-                <div className="bg-white rounded-2xl p-5 shadow-lg border border-[#E6DFD9]/60 relative z-20 mx-4 -mt-12 flex flex-col justify-between flex-1">
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-bold text-[#1C1917] leading-snug line-clamp-2 min-h-[2.5rem] hover:text-primary transition-colors cursor-pointer">
-                      {deal.title}
-                    </h3>
-                    <div className="flex items-center gap-1 text-[9px] text-[#7A6F68] font-semibold">
-                      <div className="flex items-center">
-                        {[1, 2, 3, 4, 5].map((s) => (
-                          <Star
-                            key={s}
-                            className={cn(
-                              "size-3",
-                              s <= Math.floor(deal.rating)
-                                ? "fill-[#D2B48C] text-[#D2B48C]"
-                                : "text-gray-200"
-                            )}
-                          />
-                        ))}
-                      </div>
-                      <span>({deal.rating.toFixed(1)})</span>
+                {/* Product Details */}
+                <div className="flex-1 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] text-[#7A6F68] dark:text-[#A59890] font-bold tracking-wider uppercase mb-1.5">
+                      <span>{deal.category}</span>
+                      <span className="text-primary dark:text-[#D7C4B7] font-bold">{deal.vendor}</span>
                     </div>
-                    <div className="text-[10px] text-[#7A6F68] font-semibold">
-                      By <span className="text-primary font-bold">{deal.vendor}</span>
+                    <h3 className="text-sm font-extrabold text-[#1C1917] dark:text-white leading-snug line-clamp-2 min-h-[2.5rem] group-hover:text-primary dark:group-hover:text-[#D7C4B7] transition-colors">
+                      <Link href={`/products/${deal.slug}`}>{deal.title}</Link>
+                    </h3>
+                    <div className="flex items-center gap-1 mt-2 text-[11px] text-[#7A6F68] dark:text-[#A59890]">
+                      <Star className="size-3.5 fill-[#D2B48C] text-[#D2B48C]" />
+                      <span className="font-semibold">{deal.rating}</span>
+                      <span className="opacity-50">|</span>
+                      <span className="text-primary dark:text-[#D7C4B7] font-semibold">Đã bán {(deal.title.length * 3) % 100}+</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-4 mt-2 border-t border-[#E6DFD9]/40">
+                  {/* Pricing & Add to Cart */}
+                  <div className="flex items-center justify-between mt-5 pt-4 border-t border-[#E6DFD9]/40 dark:border-[#3D3531]/40">
                     <div>
-                      <div className="text-[13px] font-extrabold text-primary">{(deal.price).toLocaleString("vi-VN")} đ</div>
-                      <div className="text-[10px] text-[#7A6F68] line-through -mt-0.5">{(deal.oldPrice).toLocaleString("vi-VN")} đ</div>
+                      <div className="text-lg font-extrabold text-primary dark:text-[#D7C4B7]">
+                        {formatCurrency(deal.price)}
+                      </div>
+                      <div className="text-xs text-[#7A6F68] dark:text-[#A59890] line-through">
+                        {formatCurrency(deal.oldPrice)}
+                      </div>
                     </div>
-                    <AddToCartButton
-                      product={mappedProduct}
-                      variant="secondary"
-                      className="bg-[#EADEC9]/30 text-primary hover:bg-primary hover:text-[#FAF8F6] border-0 transition-colors font-bold text-xs h-8 px-3 rounded-md cursor-pointer"
-                    />
+                    <Link href={`/products/${deal.slug}`}>
+                      <Button className="bg-[#EADEC9]/30 hover:bg-primary text-primary hover:text-white dark:bg-[#3D3531]/50 dark:text-[#EFEAE4] dark:hover:bg-primary dark:hover:text-[#1C1816] font-bold text-xs h-9 px-4 rounded-xl transition-all active:scale-[0.98] cursor-pointer">
+                        Mua ngay
+                      </Button>
+                    </Link>
                   </div>
                 </div>
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* 6. Product Lists 4 Columns (Figma layout) */}
-      <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 pt-4 border-t border-[#E6DFD9]/50">
-        {listCols.map((col, idx) => (
-          <div key={idx} className="space-y-4">
-            <h3 className="text-sm font-bold border-b border-[#E6DFD9] pb-2 text-[#1C1917] flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              {col.title}
-            </h3>
-            <div className="space-y-3.5">
-              {col.items.map((item, itemIdx) => (
-                <div key={itemIdx} className="flex gap-3.5 items-center hover:scale-[1.02] transition-transform duration-200 cursor-pointer">
-                  <div className="size-14 rounded-lg bg-[#FAF8F6] border border-[#E6DFD9]/50 shrink-0 flex items-center justify-center text-[10px] font-bold text-[#7A6F68]">
-                    Logo
-                  </div>
-                  <div className="space-y-1">
-                    <h4 className="text-xs font-bold text-[#1C1917] leading-snug line-clamp-1">{item.name}</h4>
-                    <div className="flex gap-2 items-center">
-                      <span className="text-xs font-bold text-primary">{item.price}</span>
-                      {item.oldPrice ? (
-                        <span className="text-[10px] text-[#7A6F68] line-through">{item.oldPrice}</span>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+      {/* Section 6: Standard Catalog Products Grid */}
+      <section className="py-6 md:py-8 bg-[#FAF8F6]/30 dark:bg-[#1C1816]/30">
+        <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
+          <CatalogGrid
+            products={featuredProducts}
+            title="Sản phẩm B2B bán chạy nhất"
+          />
+        </div>
       </section>
-    </main>
+
+      {/* Section 7: Curated Lists (4-column footer lists with product images) */}
+      <section className="py-6 md:py-8 bg-[#FAF8F6] dark:bg-[#1C1816]">
+        <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {listCols.map((col, colIdx) => (
+              <div key={colIdx} className="space-y-3">
+                <h3 className="text-xs font-extrabold text-[#1C1917] dark:text-white uppercase tracking-wider pb-1">
+                  {col.title}
+                </h3>
+                <div className="flex flex-col gap-1">
+                  {col.items.map((item, itemIdx) => (
+                    <div key={itemIdx} className="flex items-center gap-3 py-2 group cursor-pointer">
+                      {/* Image Thumbnail */}
+                      <div className="relative size-12 rounded-lg overflow-hidden shrink-0 bg-[#EFEAE4] dark:bg-[#25201D] border border-[#E6DFD9]/40 dark:border-[#3D3531]/40">
+                        <img
+                          src={getProductThumbnail(item.name)}
+                          alt={item.name}
+                          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                      {/* Text details */}
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-bold text-[#1C1917] dark:text-white truncate group-hover:text-primary dark:group-hover:text-[#D7C4B7] transition-colors">
+                          {item.name}
+                        </h4>
+                        <div className="flex items-baseline gap-1.5 mt-0.5">
+                          <span className="text-xs font-extrabold text-primary dark:text-[#D7C4B7]">
+                            {item.price}
+                          </span>
+                          {item.oldPrice && (
+                            <span className="text-[10px] text-[#7A6F68] dark:text-[#A59890] line-through">
+                              {item.oldPrice}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+    </div>
   );
 }

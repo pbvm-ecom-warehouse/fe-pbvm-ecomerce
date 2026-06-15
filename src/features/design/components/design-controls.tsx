@@ -283,7 +283,7 @@ const generateAICanvasTexture = (prompt: string): string => {
 
     ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
     ctx.lineWidth = 4;
-    for (let xOffset of [-35, 0, 35]) {
+    for (const xOffset of [-35, 0, 35]) {
       ctx.beginPath();
       ctx.moveTo(256 + xOffset, 200);
       ctx.bezierCurveTo(246 + xOffset, 175, 266 + xOffset, 165, 256 + xOffset, 140);
@@ -315,7 +315,7 @@ const generateAICanvasTexture = (prompt: string): string => {
       let rot = (Math.PI / 2) * 3;
       let x = cx;
       let y = cy;
-      let step = Math.PI / spikes;
+      const step = Math.PI / spikes;
 
       ctx.beginPath();
       ctx.moveTo(cx, cy - outer);

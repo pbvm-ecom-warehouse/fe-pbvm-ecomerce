@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState } from "react";
-import { Sparkles, Info, HelpCircle, ShieldCheck, Truck } from "lucide-react";
+import { Sparkles, Info, HelpCircle, ShieldCheck, Truck, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+
 import { CupVisualizer3D } from "@/features/design/components/cup-visualizer-3d";
 import { DesignControls } from "@/features/design/components/design-controls";
 
@@ -18,19 +20,26 @@ export default function DesignPage() {
   const [triggerDrawImg, setTriggerDrawImg] = useState<string | null>(null);
 
   return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-8">
+    <main className="mx-auto w-full max-w-7xl px-4 py-8 flex flex-col gap-6 bg-[#FAF8F6] dark:bg-[#1C1816] min-h-screen">
+      {/* Back button */}
+      <div>
+        <Link href="/" className="inline-flex items-center gap-1 text-xs font-bold text-[#7A6F68] hover:text-primary transition-colors">
+          <ArrowLeft className="size-3.5" /> Quay lại Trang chủ
+        </Link>
+      </div>
+
       {/* Banner Tiêu đề & Giới thiệu */}
-      <div className="mb-8 rounded-2xl bg-gradient-to-r from-[#5C3D2E] to-[#4A2E22] p-6 text-white md:p-8 shadow-md relative overflow-hidden">
+      <div className="rounded-3xl bg-gradient-to-br from-[#5C3D2E] to-[#4A2E22] p-8 text-white shadow-lg relative overflow-hidden">
         <div className="absolute right-0 top-0 h-full w-1/3 opacity-10 bg-[radial-gradient(circle_at_center,white_0%,transparent_70%)] pointer-events-none" />
-        <div className="relative z-10 max-w-3xl">
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-[#D2B48C]/20 px-3 py-1 text-xs font-semibold text-[#D2B48C] backdrop-blur-sm mb-3">
+        <div className="relative z-10 max-w-4xl space-y-3">
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/20 px-3.5 py-1 text-xs font-bold text-[#D7C4B7] backdrop-blur-md">
             <Sparkles className="h-3.5 w-3.5" />
-            Tính năng mới: Thiết kế 3D tương tác & Trợ lý AI
+            3D Studio & AI Generator
           </div>
-          <h1 className="text-2xl font-bold md:text-3xl tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight leading-tight">
             XƯỞNG TỰ THIẾT KẾ LY THƯƠNG HIỆU
           </h1>
-          <p className="mt-2 text-sm text-[#EFEAE4]/90 font-medium">
+          <p className="text-xs sm:text-sm text-[#EFEAE4]/80 leading-relaxed max-w-3xl">
             Tự do thiết kế logo của riêng bạn hoặc sử dụng Trợ lý AI thông minh để kiến tạo các mẫu in độc quyền chỉ trong vài giây. Quan sát trực quan toàn diện 360 độ góc nhìn thực tế của cốc trước khi đặt sản xuất hàng loạt.
           </p>
         </div>
@@ -39,12 +48,15 @@ export default function DesignPage() {
       {/* Grid Layout chính */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12 items-start">
         {/* Cột trái: Trình diễn 3D */}
-        <div className="lg:col-span-7 flex flex-col gap-4 sticky top-24">
-          <div className="rounded-2xl border border-[#E6DFD9] bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3 px-1">
-              <span className="text-sm font-bold text-[#5C3D2E] uppercase tracking-wider">Mô hình ly 3D trực quan</span>
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary bg-primary/10 px-2.5 py-0.5 rounded-full">
-                Live Preview
+        <div className="lg:col-span-7 flex flex-col gap-6 sticky top-24">
+          <div className="rounded-3xl border border-[#E6DFD9] bg-white p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4 px-1">
+              <span className="text-xs font-bold text-[#5C3D2E] uppercase tracking-wider flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
+                Mô hình ly 3D trực quan
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2.5 py-0.5 rounded-full">
+                Live 3D Render
               </span>
             </div>
             
@@ -59,28 +71,28 @@ export default function DesignPage() {
           </div>
 
           {/* Các thông tin hướng dẫn thiết kế */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-[#E6DFD9] bg-white p-3.5 flex items-start gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="rounded-2xl border border-[#E6DFD9] bg-white p-4 flex items-start gap-3 shadow-xs">
               <ShieldCheck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-xs font-bold text-[#5C3D2E]">Cam kết chất lượng</h4>
-                <p className="text-[10px] text-[#7A6F68] mt-0.5 leading-relaxed">Mực in sinh học an toàn vệ sinh thực phẩm, không phai màu.</p>
+                <h4 className="text-xs font-bold text-[#5C3D2E]">Cam kết in sắc nét</h4>
+                <p className="text-[10px] text-[#7A6F68] mt-1 leading-relaxed">Sử dụng mực in chất lượng tốt nhất, cam kết không bong tróc, không phai màu.</p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-[#E6DFD9] bg-white p-3.5 flex items-start gap-2.5">
+            <div className="rounded-2xl border border-[#E6DFD9] bg-white p-4 flex items-start gap-3 shadow-xs">
               <Truck className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <div>
                 <h4 className="text-xs font-bold text-[#5C3D2E]">Sản xuất nhanh chóng</h4>
-                <p className="text-[10px] text-[#7A6F68] mt-0.5 leading-relaxed">Đơn hàng in tùy chỉnh hoàn thiện và giao hàng từ 3-5 ngày làm việc.</p>
+                <p className="text-[10px] text-[#7A6F68] mt-1 leading-relaxed">Đơn hàng in tùy chỉnh hoàn thiện và bàn giao chành xe từ 3-5 ngày.</p>
               </div>
             </div>
 
-            <div className="rounded-xl border border-[#E6DFD9] bg-white p-3.5 flex items-start gap-2.5">
+            <div className="rounded-2xl border border-[#E6DFD9] bg-white p-4 flex items-start gap-3 shadow-xs">
               <HelpCircle className="h-5 w-5 text-primary shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-xs font-bold text-[#5C3D2E]">Hỗ trợ kỹ thuật in</h4>
-                <p className="text-[10px] text-[#7A6F68] mt-0.5 leading-relaxed">Kỹ thuật viên sẽ kiểm tra lại độ phân giải trước khi tiến hành in hàng loạt.</p>
+                <h4 className="text-xs font-bold text-[#5C3D2E]">Hỗ trợ chế bản miễn phí</h4>
+                <p className="text-[10px] text-[#7A6F68] mt-1 leading-relaxed">Kỹ thuật viên sẽ đồ lại logo vector độ nét cao cho bạn trước khi in hàng loạt.</p>
               </div>
             </div>
           </div>
@@ -108,42 +120,42 @@ export default function DesignPage() {
       </div>
 
       {/* Thông tin mở rộng về quy trình và báo giá */}
-      <section className="mt-12 rounded-2xl border border-[#E6DFD9] bg-[#FAF8F6] p-6 md:p-8">
-        <h3 className="text-base font-bold text-[#5C3D2E] mb-4 flex items-center gap-2">
+      <section className="rounded-3xl border border-[#E6DFD9] bg-[#FAF8F6] p-8 mt-4">
+        <h3 className="text-sm font-bold text-[#5C3D2E] mb-6 flex items-center gap-2 uppercase tracking-wider">
           <Info className="h-5 w-5 text-primary" />
-          Hướng dẫn & Quy trình in cốc nhựa theo yêu cầu
+          Quy trình in cốc nhựa theo yêu cầu tại PBVM
         </h3>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="flex flex-col gap-1.5">
-            <div className="text-2xl font-bold text-primary/50">01.</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white border border-[#E6DFD9]/40">
+            <div className="text-3xl font-black text-primary/30 font-mono">01.</div>
             <h4 className="text-xs font-bold text-[#5C3D2E]">Thiết kế & Xem trước</h4>
-            <p className="text-xs text-[#7A6F68] leading-relaxed">
-              Sử dụng bảng điều khiển phía trên để lựa chọn size cốc (S, M, L, XL), chất liệu nhựa trong suốt, nhựa mờ hoặc cốc giấy. Định vị logo hoặc tạo ảnh in bằng AI.
+            <p className="text-[11px] text-[#7A6F68] leading-relaxed">
+              Sử dụng Studio 3D phía trên để chọn size cốc, chất liệu nhựa trong/nhựa mờ hoặc cốc giấy. Định vị logo hoặc sử dụng AI vẽ ý tưởng.
             </p>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <div className="text-2xl font-bold text-primary/50">02.</div>
-            <h4 className="text-xs font-bold text-[#5C3D2E]">Đặt hàng & Thống nhất</h4>
-            <p className="text-xs text-[#7A6F68] leading-relaxed">
-              Sau khi chọn "Thêm vào giỏ hàng", kiểm tra cấu hình trong giỏ hàng. PBVM Shop sẽ liên hệ với bạn để xác nhận đơn hàng và thống nhất số lượng đặt (từ 1,000 ly).
+          <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white border border-[#E6DFD9]/40">
+            <div className="text-3xl font-black text-primary/30 font-mono">02.</div>
+            <h4 className="text-xs font-bold text-[#5C3D2E]">Đặt hàng & Xác nhận</h4>
+            <p className="text-[11px] text-[#7A6F68] leading-relaxed">
+              Thêm vào giỏ hàng và tiến hành checkout. Nhân viên xưởng in PBVM sẽ liên hệ với bạn qua điện thoại để thống nhất số lượng in và chốt maket.
             </p>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <div className="text-2xl font-bold text-primary/50">03.</div>
+          <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white border border-[#E6DFD9]/40">
+            <div className="text-3xl font-black text-primary/30 font-mono">03.</div>
             <h4 className="text-xs font-bold text-[#5C3D2E]">Chế bản & In thử</h4>
-            <p className="text-xs text-[#7A6F68] leading-relaxed">
-              Chúng tôi sẽ xuất file in vector sắc nét từ logo của bạn, dựng bản in chính xác lên khuôn và tiến hành in thử mẫu thực tế gửi hình ảnh phê duyệt cho bạn.
+            <p className="text-[11px] text-[#7A6F68] leading-relaxed">
+              Chúng tôi sẽ xuất file in vector chất lượng cực cao từ logo của bạn, chế bản và tiến hành in thử mẫu thực tế gửi hình ảnh xác nhận.
             </p>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <div className="text-2xl font-bold text-primary/50">04.</div>
-            <h4 className="text-xs font-bold text-[#5C3D2E]">Sản xuất & Giao hàng</h4>
-            <p className="text-xs text-[#7A6F68] leading-relaxed">
-              Tiến hành in hàng loạt trên dây chuyền in tự động hiện đại. Sản phẩm được sấy khô tia cực tím khử trùng tuyệt đối, đóng thùng carton chống bóp méo và giao tận nơi.
+          <div className="flex flex-col gap-2 p-4 rounded-2xl bg-white border border-[#E6DFD9]/40">
+            <div className="text-3xl font-black text-primary/30 font-mono">04.</div>
+            <h4 className="text-xs font-bold text-[#5C3D2E]">Sản xuất & Bàn giao</h4>
+            <p className="text-[11px] text-[#7A6F68] leading-relaxed">
+              Hệ thống in tự động chạy hàng loạt, khử trùng bằng UV tuyệt đối. Cốc được đóng thùng các-tông dày dặn và giao tới tay khách hàng chành xe.
             </p>
           </div>
         </div>

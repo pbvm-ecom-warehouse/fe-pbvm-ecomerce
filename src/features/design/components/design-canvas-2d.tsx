@@ -13,18 +13,30 @@ interface PlacedObject {
   h: number;
 }
 
+interface StrokePoint {
+  x: number;
+  y: number;
+}
+
+interface Stroke {
+  tool: "brush" | "eraser";
+  points: StrokePoint[];
+  color: string;
+  size: number;
+}
+
 interface DesignCanvas2DProps {
   onCanvasChange: (dataUrl: string | null) => void;
   triggerDrawImg: string | null;
   setTriggerDrawImg: (url: string | null) => void;
 }
 
-// Kích thước logic của canvas
-const CANVAS_W = 512;
-const CANVAS_H = 512;
+// Kích thước logic của canvas (Tỷ lệ 7:10 ôm trọn dọc theo ly)
+const CANVAS_W = 350;
+const CANVAS_H = 500;
 
 // Kích thước mặc định khi thả sticker (% canvas)
-const DEFAULT_OBJ_SIZE = CANVAS_W * 0.45;
+const DEFAULT_OBJ_SIZE = CANVAS_W * 0.48;
 
 export function DesignCanvas2D({
   onCanvasChange,
@@ -38,6 +50,8 @@ export function DesignCanvas2D({
   const [brushColor, setBrushColor] = useState("#000000");
   const [brushSize, setBrushSize] = useState(6);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [strokes, setStrokes] = useState<Stroke[]>([]);
+  const [currentStroke, setCurrentStroke] = useState<StrokePoint[] | null>(null);
 
   // ----- Trạng thái các object đã đặt -----
   const [placedObjects, setPlacedObjects] = useState<PlacedObject[]>([]);
@@ -47,10 +61,10 @@ export function DesignCanvas2D({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ----- Canvas có nội dung không? -----
-  const hasContent = placedObjects.length > 0;
+  const hasContent = placedObjects.length > 0 || strokes.length > 0;
 
   // --------------------------------------------------------------------------
-  // Vẽ lại toàn bộ canvas mỗi khi objects thay đổi
+  // Vẽ lại toàn bộ canvas mỗi khi objects hoặc nét vẽ thay đổi
   // --------------------------------------------------------------------------
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -61,7 +75,31 @@ export function DesignCanvas2D({
     // Xóa vùng trong suốt
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
 
-    // Vẽ tất cả placed objects
+    // 1. Vẽ tất cả các nét vẽ tự do đã lưu (Strokes) trước
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    strokes.forEach((stroke) => {
+      if (stroke.points.length === 0) return;
+      ctx.beginPath();
+      ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+      }
+
+      if (stroke.tool === "eraser") {
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.lineWidth = stroke.size * 3;
+      } else {
+        ctx.globalCompositeOperation = "source-over";
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.size;
+      }
+      ctx.stroke();
+    });
+    ctx.restore();
+
+    // 2. Vẽ tất cả placed objects (Stickers) đè lên các nét vẽ tự do
     placedObjects.forEach((obj) => {
       const img = new Image();
       img.src = obj.imageUrl;
@@ -97,7 +135,7 @@ export function DesignCanvas2D({
         }
       }
     });
-  }, [placedObjects, selectedId]);
+  }, [placedObjects, selectedId, strokes]);
 
   // Gọi redraw mỗi khi state thay đổi và thông báo cho component cha
   useEffect(() => {
@@ -106,14 +144,14 @@ export function DesignCanvas2D({
     const timeout = setTimeout(() => {
       const canvas = canvasRef.current;
       if (!canvas) return;
-      if (placedObjects.length === 0) {
+      if (placedObjects.length === 0 && strokes.length === 0) {
         onCanvasChange(null);
       } else {
         onCanvasChange(canvas.toDataURL());
       }
     }, 80);
     return () => clearTimeout(timeout);
-  }, [placedObjects, selectedId, redraw, onCanvasChange]);
+  }, [placedObjects, selectedId, strokes, redraw, onCanvasChange]);
 
   // --------------------------------------------------------------------------
   // Nhận sticker từ triggerDrawImg (khi chọn từ modal hoặc AI generate)
@@ -129,9 +167,11 @@ export function DesignCanvas2D({
       w: DEFAULT_OBJ_SIZE,
       h: DEFAULT_OBJ_SIZE,
     };
-    setPlacedObjects((prev) => [...prev, newObj]);
-    setSelectedId(newObj.id);
-    setTriggerDrawImg(null);
+    Promise.resolve().then(() => {
+      setPlacedObjects((prev) => [...prev, newObj]);
+      setSelectedId(newObj.id);
+      setTriggerDrawImg(null);
+    });
   }, [triggerDrawImg, setTriggerDrawImg]);
 
   // --------------------------------------------------------------------------
@@ -189,6 +229,7 @@ export function DesignCanvas2D({
       ctx.beginPath();
       ctx.moveTo(x, y);
       setIsDrawing(true);
+      setCurrentStroke([{ x, y }]);
 
       if (tool === "eraser") {
         ctx.globalCompositeOperation = "destination-out";
@@ -224,11 +265,22 @@ export function DesignCanvas2D({
       if (!ctx) return;
       ctx.lineTo(x, y);
       ctx.stroke();
+      setCurrentStroke((prev) => (prev ? [...prev, { x, y }] : [{ x, y }]));
     }
   };
 
   const handleMouseUp = () => {
     setDraggingId(null);
+    if (isDrawing && currentStroke && currentStroke.length > 0) {
+      const newStroke: Stroke = {
+        tool: tool === "eraser" ? "eraser" : "brush",
+        points: currentStroke,
+        color: brushColor,
+        size: brushSize,
+      };
+      setStrokes((prev) => [...prev, newStroke]);
+    }
+    setCurrentStroke(null);
     setIsDrawing(false);
   };
 
@@ -346,6 +398,7 @@ export function DesignCanvas2D({
   // --------------------------------------------------------------------------
   const clearCanvas = () => {
     setPlacedObjects([]);
+    setStrokes([]);
     setSelectedId(null);
     setDraggingId(null);
     const canvas = canvasRef.current;
@@ -391,7 +444,7 @@ export function DesignCanvas2D({
         className="flex justify-center"
       >
         <div
-          className="relative border-4 border-[#E6DFD9] rounded-2xl bg-white shadow-inner w-full max-w-[300px] sm:max-w-[320px] aspect-square overflow-hidden"
+          className="relative border-4 border-[#E6DFD9] rounded-2xl bg-white shadow-inner w-full max-w-[280px] sm:max-w-[300px] aspect-[7/10] overflow-hidden"
           style={{ borderStyle: hasContent ? "solid" : "dashed" }}
         >
           <canvas
