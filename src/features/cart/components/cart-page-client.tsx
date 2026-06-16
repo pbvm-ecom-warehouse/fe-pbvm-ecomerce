@@ -30,7 +30,7 @@ export function CartPageClient() {
           ) : (
             items.map((item) => (
               <div
-                key={item.productId}
+                key={item.cartItemId ?? item.productId}
                 className="grid gap-3 rounded-lg border p-3 sm:grid-cols-[88px_1fr_auto]"
               >
                 <div className="relative aspect-square overflow-hidden rounded-md bg-muted">
@@ -48,12 +48,20 @@ export function CartPageClient() {
                   <div className="text-sm text-muted-foreground">
                     {formatCurrency(item.price)} / {item.unit}
                   </div>
+                  {item.isPrintItem ? (
+                    <div className="mt-1 text-xs font-medium text-primary">
+                      Ly-in: {item.designFile?.name ?? item.designId}
+                    </div>
+                  ) : null}
                   <div className="mt-3 flex items-center gap-2">
                     <Button
                       size="icon-sm"
                       variant="outline"
                       onClick={() =>
-                        updateQuantity(item.productId, item.quantity - 1)
+                        updateQuantity(
+                          item.cartItemId ?? item.productId,
+                          item.quantity - 1,
+                        )
                       }
                     >
                       <Minus />
@@ -65,7 +73,10 @@ export function CartPageClient() {
                       size="icon-sm"
                       variant="outline"
                       onClick={() =>
-                        updateQuantity(item.productId, item.quantity + 1)
+                        updateQuantity(
+                          item.cartItemId ?? item.productId,
+                          item.quantity + 1,
+                        )
                       }
                     >
                       <Plus />
@@ -80,7 +91,7 @@ export function CartPageClient() {
                     className="mt-2"
                     size="icon-sm"
                     variant="ghost"
-                    onClick={() => removeItem(item.productId)}
+                    onClick={() => removeItem(item.cartItemId ?? item.productId)}
                   >
                     <Trash2 />
                   </Button>

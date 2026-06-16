@@ -7,7 +7,7 @@ export const env = createEnv({
     NEXT_PUBLIC_ECOMMERCE_API_URL: z
       .string()
       .url()
-      .default("http://localhost:3002"),
+      .default("http://localhost:3002/api/shop"),
     NEXT_PUBLIC_DEFAULT_TENANT_ID: z.string().default("demo-tenant"),
   },
   runtimeEnv: {
