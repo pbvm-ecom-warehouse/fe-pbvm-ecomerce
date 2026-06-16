@@ -41,10 +41,6 @@ export function CartPageClient() {
   );
   const hasCustomPrint = items.some(isCustomPrintCartItem);
 
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const freeShippingThreshold = 5_000_000;
-  const progressPercent = Math.min((totals.subtotal / freeShippingThreshold) * 100, 100);
-  const remainingForFreeShipping = freeShippingThreshold - totals.subtotal;
 
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[1fr_370px]">

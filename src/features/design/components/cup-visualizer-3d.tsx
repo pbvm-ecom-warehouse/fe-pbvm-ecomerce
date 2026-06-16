@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Decal, Environment, ContactShadows } from "@react-three/drei";
+// @ts-ignore
 import { TextureLoader, Texture, DoubleSide, Shape, Vector2, Mesh } from "three";
 import { Loader2 } from "lucide-react";
 
@@ -187,12 +188,12 @@ function CupMesh({
     const loader = new TextureLoader();
     loader.load(
       logoUrl,
-      (loadedTexture) => {
+      (loadedTexture: any) => {
         loadedTexture.flipY = true;
         setTexture(loadedTexture);
       },
       undefined,
-      (err) => {
+      (err: any) => {
         console.error("Error loading texture:", err);
       }
     );

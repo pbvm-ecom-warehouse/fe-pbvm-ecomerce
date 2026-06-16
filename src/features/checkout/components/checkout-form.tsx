@@ -15,9 +15,7 @@ import {
 import { useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import Link from "next/link";
-import Image from "next/image";
-import { CheckCircle2, CreditCard, Truck, Receipt, ArrowRight, ShoppingBag, Landmark } from "lucide-react";
+
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -33,12 +31,9 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useCartStore } from "@/stores/cart-store";
-import { calculateCartTotals } from "@/features/cart/utils/cart";
+import { calculateCartTotals, isCustomPrintCartItem } from "@/features/cart/utils/cart";
 import { formatCurrency } from "@/utils/format-currency";
-import {
-  calculateCartTotals,
-  isCustomPrintCartItem,
-} from "@/features/cart/utils/cart";
+
 import {
   checkoutSchema,
   type CheckoutInput,
@@ -48,8 +43,7 @@ import {
   getAvailablePaymentOptions,
   isPaymentProviderAllowed,
 } from "@/features/payment/payment-options";
-import { useCartStore } from "@/stores/cart-store";
-import { formatCurrency } from "@/utils/format-currency";
+
 
 type SubmittedOrder = {
   orderId: string;
