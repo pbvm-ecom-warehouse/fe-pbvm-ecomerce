@@ -1,188 +1,166 @@
 import Link from "next/link";
-import { ShieldCheck, Truck, Percent, Gift, Undo2, Phone, Mail, MapPin, Clock } from "lucide-react";
+import {
+  Clock,
+  CreditCard,
+  Mail,
+  MapPin,
+  PackageCheck,
+  Phone,
+  ShieldCheck,
+  Truck,
+  Undo2,
+} from "lucide-react";
 
 import { Logo } from "@/components/ui/logo";
 
+const valueProps = [
+  {
+    icon: PackageCheck,
+    title: "Catalog đồng bộ WMS",
+    desc: "Giá, SKU và tồn kho bám theo dữ liệu vận hành hiện tại.",
+  },
+  {
+    icon: Truck,
+    title: "Giao sỉ linh hoạt",
+    desc: "Hỗ trợ chành xe, nội thành và các đơn hàng định kỳ.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Ly in có kiểm soát",
+    desc: "Ly custom luôn kèm mẫu thiết kế trước khi mở lệnh in.",
+  },
+  {
+    icon: Undo2,
+    title: "Hỗ trợ sau bán",
+    desc: "Đổi trả theo chính sách cho hàng lỗi hoặc sai quy cách.",
+  },
+];
+
+const footerColumns = [
+  {
+    title: "Mua hàng",
+    links: [
+      { href: "/products", label: "Danh mục sản phẩm" },
+      { href: "/design-cup", label: "Thiết kế ly custom" },
+      { href: "/cart", label: "Giỏ hàng" },
+      { href: "/checkout", label: "Checkout" },
+    ],
+  },
+  {
+    title: "Tài khoản",
+    links: [
+      { href: "/account", label: "Tài khoản của tôi" },
+      { href: "/orders", label: "Đơn hàng" },
+      { href: "/login", label: "Đăng nhập" },
+      { href: "/register", label: "Đăng ký B2B" },
+    ],
+  },
+  {
+    title: "Thanh toán",
+    links: [
+      { href: "/checkout", label: "VNPay / MoMo / ZaloPay" },
+      { href: "/checkout", label: "COD cho hàng sẵn" },
+      { href: "/design-cup", label: "Online cho ly custom" },
+    ],
+  },
+];
+
 export function StoreFooter() {
-  const partners = [
-    { name: "Starbucks", slug: "starbucks" },
-    { name: "Nestlé", slug: "nestle" },
-    { name: "Unilever", slug: "unilever" },
-    { name: "McDonald's", slug: "mcdonalds" },
-    { name: "Coca-Cola", slug: "cocacola" },
-  ];
-
-  const valueProps = [
-    {
-      icon: Percent,
-      title: "Giá tốt nhất & Ưu đãi sỉ",
-      desc: "Chiết khấu cực tốt cho đại lý & quán trà sữa",
-    },
-    {
-      icon: Truck,
-      title: "Vận chuyển nhanh chóng",
-      desc: "Giao hàng từ 2-3 ngày, hỗ trợ freeship",
-    },
-    {
-      icon: Gift,
-      title: "Khuyến mãi hàng ngày",
-      desc: "Ưu đãi đặc biệt khi đặt hàng qua app",
-    },
-    {
-      icon: ShieldCheck,
-      title: "Đa dạng & Chính hãng",
-      desc: "Nguồn nguyên liệu sạch 100% kiểm định",
-    },
-    {
-      icon: Undo2,
-      title: "Hỗ trợ đổi trả dễ dàng",
-      desc: "Bảo hành in lỗi, đổi trả trong 7 ngày",
-    },
-  ];
-
   return (
-    <footer className="w-full bg-[#FAF8F6] mt-16 text-[#1C1917]">
-      {/* Value Propositions Row */}
-      <div className="mx-auto max-w-7xl px-4 py-8">
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
-          {valueProps.map((prop, idx) => {
+    <footer className="border-t border-[#E6DFD9] bg-[#FAF8F6] text-[#1C1917]">
+      <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {valueProps.map((prop) => {
             const Icon = prop.icon;
+
             return (
-              <div key={idx} className="flex items-center gap-4 rounded-2xl bg-white p-4 shadow-sm border border-[#E6DFD9]/40 hover:-translate-y-1 hover:shadow-md transition-all duration-300">
-                <div className="rounded-full bg-primary/10 p-3 text-primary shrink-0">
-                  <Icon className="size-6" />
+              <div
+                key={prop.title}
+                className="flex items-start gap-3 rounded-2xl border border-[#E6DFD9] bg-white p-4 shadow-sm"
+              >
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <Icon className="size-5" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold leading-tight">{prop.title}</h4>
-                  <p className="text-[10px] text-[#7A6F68] mt-1">{prop.desc}</p>
+                  <h3 className="text-sm font-black">{prop.title}</h3>
+                  <p className="mt-1 text-xs leading-5 text-[#7A6F68]">
+                    {prop.desc}
+                  </p>
                 </div>
               </div>
             );
           })}
         </div>
-      </div>
 
-
-      {/* Main Footer Links */}
-      <div className="mx-auto max-w-7xl px-4 py-12">
-        <div className="grid gap-8 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
-          {/* Logo & Contact */}
-          <div className="lg:col-span-2 space-y-4">
-            <Link href="/" className="flex items-center gap-3 group">
-              <div className="rounded-xl bg-white p-1.5 shadow-sm border border-[#E6DFD9]/80">
+        <div className="mt-10 grid gap-8 border-t border-[#E6DFD9] pt-10 md:grid-cols-[1.3fr_2fr]">
+          <div className="space-y-4">
+            <Link href="/" className="flex w-fit items-center gap-3">
+              <div className="rounded-xl border border-[#E6DFD9] bg-white p-1.5 shadow-sm">
                 <Logo size={42} />
               </div>
               <div>
-                <div className="text-lg font-bold tracking-tight text-[#1C1917]">PBVM SHOP</div>
-                <div className="text-[10px] font-semibold text-primary uppercase tracking-wider">Logistics & Ecom</div>
+                <div className="text-lg font-black leading-none">
+                  PBVM SHOP
+                </div>
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-primary">
+                  Logistics & Ecom
+                </div>
               </div>
             </Link>
-            <p className="text-xs text-[#7A6F68] leading-relaxed">
-              Nhà phân phối nguyên liệu trà sữa, bột kem sữa béo và in ly nhựa PP/PET hàng đầu miền Nam.
+            <p className="max-w-md text-xs leading-6 text-[#7A6F68]">
+              Nền tảng đặt hàng nguyên liệu trà sữa, ly nhựa và ly in riêng cho
+              shop F&B. Từ chọn sản phẩm, thiết kế ly đến thanh toán đều nằm
+              trong một luồng mua hàng gọn.
             </p>
-            <div className="space-y-2.5 text-xs text-[#7A6F68]">
+            <div className="grid gap-2 text-xs text-[#7A6F68]">
               <div className="flex items-start gap-2">
-                <MapPin className="size-4 text-primary shrink-0 mt-0.5" />
-                <span>Số 97, Đường số 7, KDC Trung Sơn, Bình Hưng, Bình Chánh, TP.HCM</span>
+                <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span>97 Đường số 7, KDC Trung Sơn, Bình Chánh, TP.HCM</span>
               </div>
               <div className="flex items-center gap-2">
-                <Phone className="size-4 text-primary shrink-0" />
-                <span>Hotline: 1900-8888 (08:00 - 21:00)</span>
+                <Phone className="size-4 shrink-0 text-primary" />
+                <span>Hotline: 1900-8888</span>
               </div>
               <div className="flex items-center gap-2">
-                <Mail className="size-4 text-primary shrink-0" />
-                <span>Email: support@pbvm.example</span>
+                <Mail className="size-4 shrink-0 text-primary" />
+                <span>support@pbvm.example</span>
               </div>
               <div className="flex items-center gap-2">
-                <Clock className="size-4 text-primary shrink-0" />
-                <span>Giờ làm việc: Thứ 2 - Thứ Bảy / 08:00 - 17:30</span>
+                <Clock className="size-4 shrink-0 text-primary" />
+                <span>Thứ 2 - Thứ 7, 08:00 - 17:30</span>
               </div>
             </div>
           </div>
 
-          {/* Column 2: Company */}
-          <div className="space-y-3">
-            <h4 className="text-sm font-bold tracking-wide uppercase text-primary">Về PBVM</h4>
-            <ul className="space-y-2 text-xs text-[#7A6F68]">
-              <li><Link href="#" className="hover:text-primary hover:underline">Giới thiệu công ty</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Thông tin giao nhận</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Chính sách bảo mật</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Điều khoản dịch vụ</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Liên hệ</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Hệ thống kho hàng</Link></li>
-            </ul>
-          </div>
-
-          {/* Column 3: Account */}
-          <div className="space-y-3">
-            <h4 className="text-sm font-bold tracking-wide uppercase text-primary">Tài khoản</h4>
-            <ul className="space-y-2 text-xs text-[#7A6F68]">
-              <li><Link href="/account" className="hover:text-primary hover:underline">Đăng nhập</Link></li>
-              <li><Link href="/cart" className="hover:text-primary hover:underline">Xem giỏ hàng</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Danh sách yêu thích</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Theo dõi đơn hàng</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Bảng giá B2B của bạn</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Đánh giá sản phẩm</Link></li>
-            </ul>
-          </div>
-
-          {/* Column 4: Corporate */}
-          <div className="space-y-3">
-            <h4 className="text-sm font-bold tracking-wide uppercase text-primary">Hợp tác</h4>
-            <ul className="space-y-2 text-xs text-[#7A6F68]">
-              <li><Link href="#" className="hover:text-primary hover:underline">Trở thành nhà cung cấp</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Đăng ký đại lý sỉ</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Hệ thống nhượng quyền</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Chương trình liên kết</Link></li>
-              <li><Link href="#" className="hover:text-primary hover:underline">Tuyển dụng</Link></li>
-            </ul>
-          </div>
-
-          {/* Column 5: App & Pay */}
-          <div className="space-y-4">
-            <h4 className="text-sm font-bold tracking-wide uppercase text-primary">Cài đặt ứng dụng</h4>
-            <p className="text-[11px] text-[#7A6F68]">Tải app của chúng tôi trên App Store hoặc Google Play</p>
-            <div className="flex flex-col gap-2">
-              <div className="rounded-lg bg-[#1C1917] p-2 flex items-center gap-2 text-white border border-white/5 cursor-pointer hover:bg-neutral-800 transition-colors">
-                <div className="text-[8px] uppercase tracking-wider text-gray-400">Download on the</div>
-                <div className="text-[11px] font-semibold font-sans -mt-1 leading-tight">App Store</div>
-              </div>
-              <div className="rounded-lg bg-[#1C1917] p-2 flex items-center gap-2 text-white border border-white/5 cursor-pointer hover:bg-neutral-800 transition-colors">
-                <div className="text-[8px] uppercase tracking-wider text-gray-400">Get it on</div>
-                <div className="text-[11px] font-semibold font-sans -mt-1 leading-tight">Google Play</div>
-              </div>
-            </div>
-            <div className="pt-2">
-              <p className="text-[10px] text-[#7A6F68] font-semibold">Cổng thanh toán bảo mật</p>
-              <div className="flex gap-2 mt-1.5 flex-wrap">
-                <span className="rounded bg-white border border-[#E6DFD9] px-1.5 py-0.5 text-[9px] font-bold text-[#1C1917] shadow-sm">Visa</span>
-                <span className="rounded bg-white border border-[#E6DFD9] px-1.5 py-0.5 text-[9px] font-bold text-[#1C1917] shadow-sm">MasterCard</span>
-                <span className="rounded bg-white border border-[#E6DFD9] px-1.5 py-0.5 text-[9px] font-bold text-[#1C1917] shadow-sm">Momo</span>
-                <span className="rounded bg-white border border-[#E6DFD9] px-1.5 py-0.5 text-[9px] font-bold text-[#1C1917] shadow-sm">Chuyển khoản</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Partners/Brands Wall */}
-        <div className="border-t border-[#E6DFD9]/60 pt-8 mt-12 text-center">
-          <p className="text-[10px] font-mono tracking-widest text-[#7A6F68] uppercase mb-4">
-            ĐỐI TÁC CUNG ỨNG VÀ THƯƠNG HIỆU TIN DÙNG
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-6 md:gap-12">
-            {partners.map((partner) => (
-              <div key={partner.name} className="flex items-center gap-1.5 group cursor-pointer">
-                <img
-                  src={`https://cdn.simpleicons.org/${partner.slug}/A59890`}
-                  alt={partner.name}
-                  className="h-5 object-contain opacity-55 dark:opacity-40 group-hover:opacity-100 group-hover:brightness-75 dark:group-hover:brightness-125 transition-all duration-300"
-                />
-                <span className="text-xs font-bold text-[#7A6F68]/70 dark:text-[#A59890]/60 group-hover:text-primary dark:group-hover:text-[#D7C4B7] transition-colors uppercase tracking-wider">
-                  {partner.name}
-                </span>
+          <div className="grid gap-6 sm:grid-cols-3">
+            {footerColumns.map((column) => (
+              <div key={column.title}>
+                <h3 className="text-xs font-black uppercase tracking-[0.16em] text-primary">
+                  {column.title}
+                </h3>
+                <ul className="mt-3 space-y-2 text-xs text-[#7A6F68]">
+                  {column.links.map((link) => (
+                    <li key={`${column.title}-${link.label}`}>
+                      <Link
+                        href={link.href}
+                        className="transition-colors hover:text-primary"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="mt-8 flex flex-col gap-3 border-t border-[#E6DFD9] pt-5 text-xs text-[#7A6F68] sm:flex-row sm:items-center sm:justify-between">
+          <span>© 2026 PBVM Shop. All rights reserved.</span>
+          <span className="inline-flex items-center gap-2">
+            <CreditCard className="size-4 text-primary" />
+            Ly custom thanh toán online
+          </span>
         </div>
       </div>
     </footer>

@@ -1,8 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Star } from "lucide-react";
+import { Box, Paintbrush, Sparkles } from "lucide-react";
 
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
 import type { CatalogProduct } from "@/types/api";
 import { formatCurrency } from "@/utils/format-currency";
@@ -30,6 +31,7 @@ export function ProductCard({
   priority?: boolean;
 }) {
   const imageSrc = product.imageUrl || "/images/product-placeholder.svg";
+  const isCustomPrint = product.fulfillmentType === "CUSTOM_PRINT";
 
   // Determine badge text and styles
   let badgeText = "";
@@ -48,73 +50,75 @@ export function ProductCard({
   }
 
   return (
-    <div className="relative bg-white border border-[#E6DFD9] rounded-2xl p-5 flex flex-col justify-between hover:shadow-lg hover:border-primary/20 transition-all duration-300 group h-full">
-      {/* Top Badge */}
-      {badgeText && (
-        <div className="absolute top-0 left-0 z-10">
-          <span className={cn("inline-block px-3 py-1 text-[10px] font-bold rounded-tl-2xl rounded-br-2xl shadow-sm tracking-wide uppercase", badgeBgClass)}>
-            {badgeText}
-          </span>
-        </div>
-      )}
-
-      {/* Product Image */}
-      <Link href={`/products/${product.slug}`} className="block relative aspect-square w-full mb-4 overflow-hidden rounded-xl bg-transparent flex items-center justify-center">
-        <Image
-          src={imageSrc}
-          alt={product.name}
-          fill
-          priority={priority}
-          sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-          className="object-contain p-2 group-hover:scale-105 transition-transform duration-300"
-        />
-      </Link>
-
-      {/* Product Metadata & Info */}
-      <div className="flex-1 flex flex-col justify-between">
-        <div>
-          {/* Category */}
-          <div className="text-[10px] text-[#7A6F68] font-bold tracking-wider uppercase mb-1">
-            {categoryCopy[product.category] || "Sản phẩm"}
+    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[#E6DFD9] bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg">
+      <Link href={`/products/${product.slug}`} className="block">
+        <div className="relative aspect-[4/3] overflow-hidden bg-[#FAF8F6]">
+          <Image
+            src={imageSrc}
+            alt={product.name}
+            fill
+            priority={priority}
+            sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+          <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+            <Badge className="border-0 bg-white/90 text-[#5C3D2E] shadow-sm">
+              {categoryCopy[product.category]}
+            </Badge>
+            {isCustomPrint ? (
+              <Badge className="border-0 bg-primary text-white shadow-sm">
+                <Sparkles className="mr-1 size-3" />
+                Custom
+              </Badge>
+            ) : null}
           </div>
-
-          {/* Title */}
-          <h3 className="text-xs sm:text-sm font-extrabold text-[#1C1917] leading-snug line-clamp-2 min-h-[2.5rem] hover:text-primary transition-colors">
+        </div>
+      </Link>
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <div className="min-h-[92px]">
+          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-[#7A6F68]">
+            <Box className="size-3.5 text-primary" />
+            {product.productRefId}
+          </div>
+          <h3 className="line-clamp-2 text-base font-black leading-snug text-[#1C1917]">
             <Link href={`/products/${product.slug}`}>{product.name}</Link>
           </h3>
+          <p className="mt-2 text-xs font-medium text-[#7A6F68]">
+            Tồn kho:{" "}
+            <span className="font-bold text-[#1C1917]">
+              {product.stockSnapshot.toLocaleString("vi-VN")} {product.unit}
+            </span>
+          </p>
+        </div>
 
-          {/* Rating */}
-          <div className="flex items-center gap-1 mt-1.5 text-[11px] text-[#7A6F68] font-medium">
-            <Star className="size-3 fill-[#D2B48C] text-[#D2B48C]" />
-            <span>({(4.0 + (product.name.length % 10) / 10).toFixed(1)})</span>
+        <div className="rounded-xl border border-[#E6DFD9] bg-[#FAF8F6] p-3">
+          <div className="text-xl font-black text-primary">
+            {formatCurrency(product.b2bPrice)}
           </div>
-
-          {/* Vendor */}
-          <div className="text-[11px] text-[#7A6F68] font-medium mt-1">
-            By <span className="text-primary font-bold hover:underline cursor-pointer">{getVendorName(product)}</span>
+          <div className="mt-0.5 text-[11px] font-semibold text-[#7A6F68]">
+            Giá lẻ tham chiếu: {formatCurrency(product.price)} / {product.unit}
           </div>
         </div>
 
-        {/* Pricing & Cart Action */}
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-[#E6DFD9]/40">
-          <div>
-            <div className="text-sm sm:text-base font-extrabold text-primary">
-              {formatCurrency(product.b2bPrice)}
-            </div>
-            {product.price > product.b2bPrice && (
-              <div className="text-[10px] sm:text-xs text-[#7A6F68] line-through -mt-0.5">
-                {formatCurrency(product.price)}
-              </div>
-            )}
-          </div>
-
-          <AddToCartButton
-            product={product}
-            variant="secondary"
-            className="bg-[#EADEC9]/30 text-primary hover:bg-primary hover:text-[#FAF8F6] border-0 transition-colors font-bold text-xs h-8 px-3 rounded-md cursor-pointer"
-          />
+        <div className="mt-auto">
+          {isCustomPrint ? (
+            <Button
+              asChild
+              className="h-10 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#4A2E22]"
+            >
+            <Link href={`/design-cup?productId=${product.id}`}>
+              <Paintbrush data-icon="inline-start" />
+              Thiết kế ly
+            </Link>
+            </Button>
+          ) : (
+            <AddToCartButton
+              className="h-10 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#4A2E22]"
+              product={product}
+            />
+          )}
         </div>
       </div>
-    </div>
+    </article>
   );
 }

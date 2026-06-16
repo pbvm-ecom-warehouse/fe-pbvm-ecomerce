@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { ScrollToTop } from "@/components/layout/scroll-to-top";
+import { StoreFooter } from "@/components/layout/store-footer";
 import { StoreHeader } from "@/components/layout/store-header";
 import { StoreFooter } from "@/components/layout/store-footer";
 import { AppProviders } from "@/providers/app-providers";
@@ -8,8 +10,9 @@ import { ScrollToTop } from "@/components/layout/scroll-to-top";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PBVM E-commerce - Nguyên Liệu & In Ly Trà Sữa",
-  description: "Hệ thống đặt hàng nguyên liệu trà sữa, bột kem béo, trân châu và dịch vụ in ly nhựa, ly giấy chất lượng cao cho các thương hiệu F&B.",
+  title: "PBVM Shop | Bao bì và nguyên liệu B2B",
+  description:
+    "Đặt nguyên liệu trà sữa, ly nhựa và ly in custom với catalog đồng bộ WMS.",
 };
 
 export default function RootLayout({
@@ -22,11 +25,11 @@ export default function RootLayout({
       <body className="min-h-screen bg-background text-foreground antialiased flex flex-col justify-between">
         <AppProviders>
           <ScrollToTop />
-          <div>
+          <div className="flex min-h-screen flex-col">
             <StoreHeader />
-            {children}
+            <div className="flex-1">{children}</div>
+            <StoreFooter />
           </div>
-          <StoreFooter />
         </AppProviders>
       </body>
     </html>

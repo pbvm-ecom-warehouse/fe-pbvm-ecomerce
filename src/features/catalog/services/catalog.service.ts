@@ -109,10 +109,15 @@ const fallbackCatalogProducts: CatalogProduct[] = [
 ];
 
 const emptyCatalogResponse: ApiListResponse<CatalogProduct> = {
-  data: fallbackCatalogProducts,
-  total: fallbackCatalogProducts.length,
-  page: 1,
-  pageSize: fallbackCatalogProducts.length,
+  data: [],
+  meta: {
+    pagination: {
+      page: 1,
+      pageSize: 0,
+      total: 0,
+      totalPages: 0,
+    },
+  },
 };
 
 export async function listCatalogProducts() {
