@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
@@ -12,9 +12,8 @@ import {
   Palette,
   Ruler,
   ShoppingCart,
-  Upload,
 } from "lucide-react";
-import { useDropzone } from "react-dropzone";
+
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -29,12 +28,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CupArtworkEditor } from "@/features/cup-designer/components/cup-artwork-editor";
-import { CupPreview3d } from "@/features/cup-designer/components/cup-preview-3d";
 import {
-  createCupDesignFileSnapshot,
-  createLocalDesignId,
-} from "@/features/cup-designer/utils/design-file";
+  CupArtworkEditor,
+  type BrushStrokeData,
+  type ImportedImageData,
+} from "@/features/cup-designer/components/cup-artwork-editor";
+import { CupPreview3d } from "@/features/cup-designer/components/cup-preview-3d";
+import { createCupDesignFileSnapshot } from "@/features/cup-designer/utils/design-file";
 import { useCartStore } from "@/stores/cart-store";
 import type {
   CatalogProduct,
@@ -154,6 +154,20 @@ const moneyFormatter = new Intl.NumberFormat("vi-VN", {
   style: "currency",
 });
 
+const CUP_ARTBOARD_WIDTH: Record<CupDesignConfig["size"], number> = {
+  S: 600,
+  M: 690,
+  L: 780,
+  XL: 860,
+};
+
+const CUP_MAX_ARTBOARD_HEIGHT: Record<CupDesignConfig["size"], number> = {
+  S: 280,
+  M: 330,
+  L: 385,
+  XL: 430,
+};
+
 function createTextLayer(artwork: DesignArtwork): DesignArtworkLayer {
   return {
     fill: artwork.fill,
@@ -184,9 +198,21 @@ export function CupDesignerClient() {
   const [artwork, setArtwork] = useState<DesignArtwork>(
     templateDesigns[0].artwork,
   );
+  const [brushStrokes, setBrushStrokes] = useState<BrushStrokeData[]>([]);
+  const [importedImages, setImportedImages] = useState<ImportedImageData[]>(
+    [],
+  );
+  const artboardWidth = CUP_ARTBOARD_WIDTH[cupConfig.size];
+  const [printHeightPct, setPrintHeightPct] = useState(70);
+  const artboardHeight = Math.round(
+    CUP_MAX_ARTBOARD_HEIGHT[cupConfig.size] * printHeightPct / 100,
+  );
+  const [canvasTextureUrl, setCanvasTextureUrl] = useState<
+    string | undefined
+  >();
 
   const layers = useMemo<DesignArtworkLayer[]>(() => {
-    const nextLayers = [createTextLayer(artwork)];
+    const nextLayers: DesignArtworkLayer[] = [createTextLayer(artwork)];
 
     if (previewDataUrl) {
       nextLayers.push({
@@ -200,8 +226,36 @@ export function CupDesignerClient() {
       });
     }
 
+    for (const stroke of brushStrokes) {
+      nextLayers.push({
+        id: stroke.id,
+        kind: "brush",
+        x: 0,
+        y: 0,
+        scale: 1,
+        rotation: 0,
+        fill: stroke.color,
+        points: stroke.points,
+        strokeWidth: stroke.strokeWidth,
+      });
+    }
+
+    for (const img of importedImages) {
+      nextLayers.push({
+        id: img.id,
+        kind: "image",
+        x: img.x,
+        y: img.y,
+        scale: 1,
+        rotation: 0,
+        imageUrl: img.dataUrl,
+        width: img.width,
+        height: img.height,
+      });
+    }
+
     return nextLayers;
-  }, [artwork, previewDataUrl]);
+  }, [artwork, previewDataUrl, brushStrokes, importedImages]);
 
   const artworkSnapshot = useMemo<DesignArtwork>(
     () => ({
@@ -230,41 +284,7 @@ export function CupDesignerClient() {
   const uploadedSizeKb =
     uploadedMeta.size > 0 ? Math.ceil(uploadedMeta.size / 1024) : 0;
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const file = acceptedFiles[0];
 
-    if (!file) {
-      return;
-    }
-
-    const nextDesignId = createLocalDesignId();
-    const reader = new FileReader();
-    reader.onload = () => {
-      setDesignId(nextDesignId);
-      setDesignName(file.name.replace(/\.[^.]+$/, ""));
-      setPreviewDataUrl(String(reader.result));
-      setUploadedMeta({
-        mimeType: file.type || "application/octet-stream",
-        size: file.size,
-      });
-      setArtwork((current) => ({
-        ...current,
-        text: file.name.replace(/\.[^.]+$/, "").slice(0, 18),
-      }));
-    };
-    reader.readAsDataURL(file);
-  }, []);
-
-  const { getInputProps, getRootProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      "image/png": [".png"],
-      "image/jpeg": [".jpg", ".jpeg"],
-      "image/svg+xml": [".svg"],
-    },
-    maxFiles: 1,
-    maxSize: 5 * 1024 * 1024,
-  });
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -287,22 +307,6 @@ export function CupDesignerClient() {
           </CardHeader>
           <CardContent className="grid gap-5 p-5 lg:grid-cols-[300px_minmax(0,1fr)]">
             <div className="space-y-4">
-              <div
-                {...getRootProps()}
-                className="grid min-h-36 cursor-pointer gap-2 rounded-2xl border-2 border-dashed border-[#D2B48C] bg-[#FAF8F6] p-4 text-sm transition hover:border-primary hover:bg-white"
-              >
-                <input {...getInputProps()} />
-                <div className="flex size-11 items-center justify-center rounded-xl border border-[#E6DFD9] bg-white text-primary shadow-sm">
-                  <Upload className="size-5" />
-                </div>
-                <div className="font-black text-[#1C1917]">
-                  {isDragActive ? "Thả file design" : "Upload artwork"}
-                </div>
-                <div className="text-xs leading-5 text-[#7A6F68]">
-                  PNG, JPG hoặc SVG dưới 5MB. File upload được lưu trong
-                  hồ sơ thiết kế local cho giỏ hàng.
-                </div>
-              </div>
 
               <div className="grid gap-2">
                 <Label className="text-xs font-black uppercase tracking-[0.14em] text-primary">
@@ -328,6 +332,8 @@ export function CupDesignerClient() {
                           mimeType: "application/json",
                           size: 0,
                         });
+                        setBrushStrokes([]);
+                        setImportedImages([]);
                       }}
                     >
                       <div className="flex items-center gap-2 text-sm font-black">
@@ -467,7 +473,15 @@ export function CupDesignerClient() {
                     text: nextArtwork.text,
                   });
                 }}
-                previewDataUrl={previewDataUrl}
+                brushStrokes={brushStrokes}
+                onBrushStrokesChange={setBrushStrokes}
+                importedImages={importedImages}
+                onImportedImagesChange={setImportedImages}
+                artboardWidth={artboardWidth}
+                artboardHeight={artboardHeight}
+                printHeightPct={printHeightPct}
+                onPrintHeightChange={setPrintHeightPct}
+                onCanvasCapture={setCanvasTextureUrl}
               />
 
               <div className="grid gap-4 rounded-2xl border border-[#E6DFD9] bg-white p-4 sm:grid-cols-2">
@@ -583,6 +597,8 @@ export function CupDesignerClient() {
             <CupPreview3d
               artwork={artworkSnapshot}
               previewDataUrl={previewDataUrl}
+              canvasTextureUrl={canvasTextureUrl}
+              printHeightRatio={printHeightPct / 100}
             />
 
             <div className="grid grid-cols-2 gap-2 text-xs">

@@ -1,15 +1,35 @@
 "use client";
 
 import NextImage from "next/image";
-import { Suspense, useEffect, useState } from "react";
-import { Image as DreiImage, OrbitControls, Text } from "@react-three/drei";
+import { Suspense, useEffect, useRef, useState } from "react";
+import {
+  ContactShadows,
+  Environment,
+  OrbitControls,
+  Text,
+  useTexture,
+} from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 
 import type { CupDesignConfig, DesignArtwork } from "@/types/api";
 
+/* ------------------------------------------------------------------ */
+/*  Types & constants                                                  */
+/* ------------------------------------------------------------------ */
+
 type CupPreview3dProps = {
   artwork: DesignArtwork;
   previewDataUrl?: string;
+  canvasTextureUrl?: string;
+  /** 0.4 – 1.0, how much of the cup height the print covers */
+  printHeightRatio?: number;
+};
+
+const DEFAULT_CONFIG: CupDesignConfig = {
+  cupColor: "#f8fafc",
+  materialType: "frosted",
+  size: "M",
+  style: "u_shape",
 };
 
 const sizeMap: Record<CupDesignConfig["size"], [number, number, number]> = {
@@ -20,40 +40,66 @@ const sizeMap: Record<CupDesignConfig["size"], [number, number, number]> = {
 };
 
 function canUseWebGl() {
-  if (typeof document === "undefined") {
-    return false;
-  }
-
+  if (typeof document === "undefined") return false;
   const canvas = document.createElement("canvas");
   return Boolean(
     canvas.getContext("webgl") ?? canvas.getContext("experimental-webgl"),
   );
 }
 
-function ArtworkTexturePlane({
-  previewDataUrl,
-  scale,
+/* ------------------------------------------------------------------ */
+/*  Sleeve component – wraps a texture around the cup via useTexture   */
+/* ------------------------------------------------------------------ */
+
+function ArtworkSleeve({
+  textureUrl,
+  topRadius,
+  effectiveBottom,
+  height,
+  printHeightRatio,
 }: {
-  previewDataUrl: string;
-  scale: number;
+  textureUrl: string;
+  topRadius: number;
+  effectiveBottom: number;
+  height: number;
+  printHeightRatio: number;
 }) {
+  const texture = useTexture(textureUrl);
+
+  const gapFrac = (1 - printHeightRatio) / 2;
+  const sleeveTopR =
+    topRadius + (effectiveBottom - topRadius) * gapFrac + 0.006;
+  const sleeveBtmR =
+    topRadius + (effectiveBottom - topRadius) * (1 - gapFrac) + 0.006;
+  const sleeveH = height * printHeightRatio;
+
   return (
-    <DreiImage
-      url={previewDataUrl}
-      position={[0, 0, 1.025]}
-      scale={[1.08 * scale, 0.68 * scale]}
-      transparent
-    />
+    <mesh>
+      <cylinderGeometry
+        args={[sleeveTopR, sleeveBtmR, sleeveH, 80, 1, true]}
+      />
+      <meshStandardMaterial
+        map={texture}
+        transparent
+        polygonOffset
+        polygonOffsetFactor={-1}
+        depthWrite={false}
+      />
+    </mesh>
   );
 }
+
+/* ------------------------------------------------------------------ */
+/*  Cup material                                                       */
+/* ------------------------------------------------------------------ */
 
 function CupMaterial({ config }: { config: CupDesignConfig }) {
   if (config.materialType === "metal") {
     return (
       <meshStandardMaterial
         color={config.cupColor}
-        roughness={0.2}
-        metalness={0.85}
+        roughness={0.15}
+        metalness={0.9}
       />
     );
   }
@@ -62,7 +108,7 @@ function CupMaterial({ config }: { config: CupDesignConfig }) {
     return (
       <meshStandardMaterial
         color={config.cupColor}
-        roughness={0.85}
+        roughness={0.9}
         metalness={0}
       />
     );
@@ -71,66 +117,87 @@ function CupMaterial({ config }: { config: CupDesignConfig }) {
   return (
     <meshPhysicalMaterial
       color={config.cupColor}
-      roughness={config.materialType === "frosted" ? 0.42 : 0.12}
+      roughness={config.materialType === "frosted" ? 0.42 : 0.08}
       metalness={0.02}
-      transmission={config.materialType === "glass" ? 0.75 : 0.45}
-      thickness={0.8}
+      transmission={config.materialType === "glass" ? 0.82 : 0.5}
+      thickness={1.2}
       transparent
-      opacity={config.materialType === "clear" ? 0.72 : 0.86}
+      opacity={config.materialType === "clear" ? 0.68 : 0.88}
     />
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  3D cup model                                                       */
+/* ------------------------------------------------------------------ */
+
 function CupModel({
   artwork,
-  previewDataUrl,
+  canvasTextureUrl,
+  printHeightRatio = 0.7,
 }: {
   artwork: DesignArtwork;
-  previewDataUrl?: string;
+  canvasTextureUrl?: string;
+  printHeightRatio?: number;
 }) {
-  const config =
-    artwork.cupConfig ??
-    ({
-      cupColor: "#f8fafc",
-      materialType: "frosted",
-      size: "M",
-      style: "u_shape",
-    } satisfies CupDesignConfig);
+  const config = artwork.cupConfig ?? DEFAULT_CONFIG;
   const [topRadius, bottomRadius, height] = sizeMap[config.size];
   const isMug = config.style === "mug";
+  const effectiveBottom =
+    config.style === "u_shape" ? bottomRadius * 0.82 : bottomRadius;
 
   return (
     <group rotation={[0, -0.35, 0]}>
+      {/* Cup body */}
       <mesh castShadow receiveShadow>
         <cylinderGeometry
-          args={[
-            topRadius,
-            config.style === "u_shape" ? bottomRadius * 0.82 : bottomRadius,
-            height,
-            80,
-            1,
-            false,
-          ]}
+          args={[topRadius, effectiveBottom, height, 80, 1, false]}
         />
         <CupMaterial config={config} />
       </mesh>
 
-      <mesh position={[0, height * 0.03, topRadius + 0.03]}>
-        <boxGeometry args={[topRadius * 1.35, height * 0.34, 0.025]} />
-        <meshStandardMaterial color="#FDFBF7" roughness={0.6} />
+      {/* Rim – torus lying flat around the top edge */}
+      <mesh
+        position={[0, height / 2, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+        castShadow
+      >
+        <torusGeometry args={[topRadius, 0.035, 16, 80]} />
+        <meshStandardMaterial
+          color={config.cupColor}
+          roughness={0.25}
+          metalness={config.materialType === "metal" ? 0.9 : 0.05}
+        />
       </mesh>
 
-      {previewDataUrl ? (
-        <ArtworkTexturePlane previewDataUrl={previewDataUrl} scale={topRadius} />
+      {/* Bottom ring – torus lying flat */}
+      <mesh position={[0, -height / 2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[effectiveBottom, 0.022, 12, 60]} />
+        <meshStandardMaterial
+          color={config.cupColor}
+          roughness={0.4}
+          metalness={0.05}
+        />
+      </mesh>
+
+      {/* Artwork: sleeve wrapping the texture around the cup */}
+      {canvasTextureUrl ? (
+        <ArtworkSleeve
+          textureUrl={canvasTextureUrl}
+          topRadius={topRadius}
+          effectiveBottom={effectiveBottom}
+          height={height}
+          printHeightRatio={printHeightRatio}
+        />
       ) : (
         <Text
           position={[
-            artwork.offsetX / 180,
-            -artwork.offsetY / 180,
-            topRadius + 0.08,
+            artwork.offsetX / 200,
+            -artwork.offsetY / 200,
+            topRadius + 0.01,
           ]}
           rotation={[0, 0, (artwork.rotation * Math.PI) / 180]}
-          fontSize={0.16 * artwork.scale}
+          fontSize={0.18 * artwork.scale}
           color={artwork.fill}
           anchorX="center"
           anchorY="middle"
@@ -139,19 +206,41 @@ function CupModel({
         </Text>
       )}
 
-      {isMug ? (
-        <mesh position={[-topRadius - 0.1, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+      {/* Mug handle */}
+      {isMug && (
+        <mesh
+          position={[-topRadius - 0.1, 0, 0]}
+          rotation={[0, 0, Math.PI / 2]}
+          castShadow
+        >
           <torusGeometry args={[height * 0.18, 0.055, 16, 36, Math.PI]} />
           <CupMaterial config={config} />
         </mesh>
-      ) : null}
+      )}
+
+      {/* Heart lid */}
+      {config.style === "heart" && (
+        <mesh position={[0, height / 2 + 0.18, 0]}>
+          <sphereGeometry
+            args={[topRadius * 0.38, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]}
+          />
+          <meshStandardMaterial
+            color="#f472b6"
+            roughness={0.4}
+            metalness={0.05}
+          />
+        </mesh>
+      )}
     </group>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  Fallback 2D preview                                                */
+/* ------------------------------------------------------------------ */
+
 function CupFallbackPreview({ artwork, previewDataUrl }: CupPreview3dProps) {
-  const config = artwork.cupConfig;
-  const cupColor = config?.cupColor ?? "#f8fafc";
+  const cupColor = artwork.cupConfig?.cupColor ?? "#f8fafc";
 
   return (
     <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[#E6DFD9] bg-[#E5E2DD] p-5 shadow-inner">
@@ -187,21 +276,32 @@ function CupFallbackPreview({ artwork, previewDataUrl }: CupPreview3dProps) {
   );
 }
 
-export function CupPreview3d({ artwork, previewDataUrl }: CupPreview3dProps) {
+/* ------------------------------------------------------------------ */
+/*  Main export                                                        */
+/* ------------------------------------------------------------------ */
+
+export function CupPreview3d({
+  artwork,
+  previewDataUrl,
+  canvasTextureUrl,
+  printHeightRatio = 0.7,
+}: CupPreview3dProps) {
   const [webGlReady, setWebGlReady] = useState<boolean | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setWebGlReady(canUseWebGl());
     });
-
     return () => window.cancelAnimationFrame(frame);
   }, []);
+
+  const config = artwork.cupConfig ?? DEFAULT_CONFIG;
+  const [, , height] = sizeMap[config.size];
 
   if (webGlReady === null) {
     return (
       <div className="grid aspect-[4/3] place-items-center rounded-2xl border border-[#E6DFD9] bg-[#FAF8F6] p-6 text-center text-sm font-semibold text-[#7A6F68]">
-        Đang kiểm tra WebGL preview...
+        Đang kiểm tra WebGL preview…
       </div>
     );
   }
@@ -213,18 +313,52 @@ export function CupPreview3d({ artwork, previewDataUrl }: CupPreview3dProps) {
   }
 
   return (
-    <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-[#E6DFD9] bg-[#E5E2DD] shadow-inner">
+    <div
+      className="aspect-[4/3] overflow-hidden rounded-2xl border border-[#E6DFD9] shadow-inner"
+      style={{
+        background:
+          "radial-gradient(ellipse at 50% 40%, #F5F0EB 0%, #DDD6CF 60%, #C4BCB4 100%)",
+      }}
+    >
       <Canvas
-        camera={{ position: [0, 0.2, 4.6], fov: 42 }}
+        camera={{ position: [0, 0.4, 4.2], fov: 38 }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         shadows
       >
-        <ambientLight intensity={0.85} />
-        <directionalLight position={[3, 4, 5]} intensity={1.25} castShadow />
-        <directionalLight position={[-4, 2, -3]} intensity={0.45} />
+        <ambientLight intensity={0.55} color="#f5f0eb" />
+        <directionalLight position={[4, 6, 5]} intensity={1.6} castShadow />
+        <directionalLight position={[-3, 3, -4]} intensity={0.35} />
+        <spotLight
+          position={[0, 6, 2]}
+          intensity={0.5}
+          angle={0.4}
+          penumbra={0.8}
+        />
+
         <Suspense fallback={null}>
-          <CupModel artwork={artwork} previewDataUrl={previewDataUrl} />
-          <OrbitControls enablePan={false} minDistance={2.8} maxDistance={5.4} />
+          <CupModel
+            artwork={artwork}
+            canvasTextureUrl={canvasTextureUrl}
+            printHeightRatio={printHeightRatio}
+          />
+
+          <ContactShadows
+            position={[0, -height / 2 - 0.02, 0]}
+            opacity={0.35}
+            scale={6}
+            blur={2.5}
+            far={4}
+          />
+
+          <Environment preset="studio" background={false} />
+
+          <OrbitControls
+            enablePan={false}
+            minDistance={2.8}
+            maxDistance={5.4}
+            minPolarAngle={Math.PI / 6}
+            maxPolarAngle={Math.PI / 1.8}
+          />
         </Suspense>
       </Canvas>
     </div>

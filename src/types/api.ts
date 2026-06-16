@@ -31,6 +31,10 @@ export type DesignArtworkLayer = {
   fill?: string;
   text?: string;
   imageUrl?: string;
+  points?: number[];
+  strokeWidth?: number;
+  width?: number;
+  height?: number;
 };
 
 export type DesignArtwork = {
