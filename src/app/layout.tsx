@@ -3,9 +3,7 @@ import type { Metadata } from "next";
 import { ScrollToTop } from "@/components/layout/scroll-to-top";
 import { StoreFooter } from "@/components/layout/store-footer";
 import { StoreHeader } from "@/components/layout/store-header";
-import { StoreFooter } from "@/components/layout/store-footer";
 import { AppProviders } from "@/providers/app-providers";
-import { ScrollToTop } from "@/components/layout/scroll-to-top";
 
 import "./globals.css";
 
