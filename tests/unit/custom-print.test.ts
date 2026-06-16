@@ -4,7 +4,10 @@ import {
   hasCustomPrintItems,
   isCodAllowedForCart,
 } from "@/features/cart/utils/cart";
-import { createDesignFileSnapshot } from "@/features/cup-designer/utils/design-file";
+import {
+  createCupDesignFileSnapshot,
+  createDesignFileSnapshot,
+} from "@/features/cup-designer/utils/design-file";
 import { getAvailablePaymentOptions } from "@/features/payment/payment-options";
 import type { CartItem } from "@/types/api";
 
@@ -53,5 +56,38 @@ describe("custom print cart behavior", () => {
         (option) => option.value === "COD",
       ),
     ).toBe(false);
+  });
+
+  it("exports cup designer snapshots with cup config and layered artwork", () => {
+    const designFile = createCupDesignFileSnapshot({
+      designId: "design-cup-1",
+      name: "PBVM Premium Cup",
+      previewDataUrl: "data:image/png;base64,cup",
+      cupConfig: {
+        cupColor: "#f8fafc",
+        materialType: "frosted",
+        size: "M",
+        style: "u_shape",
+      },
+      layers: [
+        {
+          fill: "#5c3d2e",
+          id: "text-1",
+          kind: "text",
+          rotation: 0,
+          scale: 1,
+          text: "PBVM",
+          x: 0,
+          y: 0,
+        },
+      ],
+    });
+
+    expect(designFile.snapshotVersion).toBe(1);
+    expect(designFile.designId).toBe("design-cup-1");
+    expect(designFile.artwork.cupConfig?.cupColor).toBe("#f8fafc");
+    expect(designFile.artwork.cupConfig?.materialType).toBe("frosted");
+    expect(designFile.artwork.layers?.[0]?.kind).toBe("text");
+    expect(designFile.previewDataUrl).toBe("data:image/png;base64,cup");
   });
 });

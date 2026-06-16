@@ -1,17 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Paintbrush } from "lucide-react";
+import { Box, Paintbrush, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
 import type { CatalogProduct } from "@/types/api";
 import { formatCurrency } from "@/utils/format-currency";
@@ -30,53 +22,78 @@ export function ProductCard({
   priority?: boolean;
 }) {
   const imageSrc = product.imageUrl || "/images/product-placeholder.svg";
+  const isCustomPrint = product.fulfillmentType === "CUSTOM_PRINT";
 
   return (
-    <Card className="h-full">
+    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-[#E6DFD9] bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg">
       <Link href={`/products/${product.slug}`} className="block">
-        <div className="relative aspect-[4/3] overflow-hidden">
+        <div className="relative aspect-[4/3] overflow-hidden bg-[#FAF8F6]">
           <Image
             src={imageSrc}
             alt={product.name}
             fill
             priority={priority}
             sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-            className="object-cover"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
+          <div className="absolute left-3 top-3 flex flex-wrap gap-2">
+            <Badge className="border-0 bg-white/90 text-[#5C3D2E] shadow-sm">
+              {categoryCopy[product.category]}
+            </Badge>
+            {isCustomPrint ? (
+              <Badge className="border-0 bg-primary text-white shadow-sm">
+                <Sparkles className="mr-1 size-3" />
+                Custom
+              </Badge>
+            ) : null}
+          </div>
         </div>
       </Link>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <Badge variant="secondary">{categoryCopy[product.category]}</Badge>
-          <span className="text-xs text-muted-foreground">
-            {product.stockSnapshot.toLocaleString("vi-VN")} còn
-          </span>
+      <div className="flex flex-1 flex-col gap-4 p-4">
+        <div className="min-h-[92px]">
+          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-[#7A6F68]">
+            <Box className="size-3.5 text-primary" />
+            {product.productRefId}
+          </div>
+          <h3 className="line-clamp-2 text-base font-black leading-snug text-[#1C1917]">
+            <Link href={`/products/${product.slug}`}>{product.name}</Link>
+          </h3>
+          <p className="mt-2 text-xs font-medium text-[#7A6F68]">
+            Tồn kho:{" "}
+            <span className="font-bold text-[#1C1917]">
+              {product.stockSnapshot.toLocaleString("vi-VN")} {product.unit}
+            </span>
+          </p>
         </div>
-        <CardTitle className="text-base">
-          <Link href={`/products/${product.slug}`}>{product.name}</Link>
-        </CardTitle>
-        <CardDescription>{product.productRefId}</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="text-lg font-semibold">
-          {formatCurrency(product.price)}
+
+        <div className="rounded-xl border border-[#E6DFD9] bg-[#FAF8F6] p-3">
+          <div className="text-xl font-black text-primary">
+            {formatCurrency(product.b2bPrice)}
+          </div>
+          <div className="mt-0.5 text-[11px] font-semibold text-[#7A6F68]">
+            Giá lẻ tham chiếu: {formatCurrency(product.price)} / {product.unit}
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground">
-          Giá B2B: {formatCurrency(product.b2bPrice)} / {product.unit}
-        </div>
-      </CardContent>
-      <CardFooter>
-        {product.fulfillmentType === "CUSTOM_PRINT" ? (
-          <Button asChild className="w-full">
+
+        <div className="mt-auto">
+          {isCustomPrint ? (
+            <Button
+              asChild
+              className="h-10 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#4A2E22]"
+            >
             <Link href={`/design-cup?productId=${product.id}`}>
               <Paintbrush data-icon="inline-start" />
               Thiết kế ly
             </Link>
-          </Button>
-        ) : (
-          <AddToCartButton className="w-full" product={product} />
-        )}
-      </CardFooter>
-    </Card>
+            </Button>
+          ) : (
+            <AddToCartButton
+              className="h-10 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#4A2E22]"
+              product={product}
+            />
+          )}
+        </div>
+      </div>
+    </article>
   );
 }

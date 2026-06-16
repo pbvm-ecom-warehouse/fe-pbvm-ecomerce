@@ -2,6 +2,37 @@ export type CustomerType = "B2B" | "B2C";
 
 export type FulfillmentType = "STANDARD" | "PRINTED_TEMPLATE" | "CUSTOM_PRINT";
 
+export type CupDesignSize = "S" | "M" | "L" | "XL";
+
+export type CupDesignStyle = "straight" | "u_shape" | "heart" | "mug";
+
+export type CupDesignMaterial =
+  | "clear"
+  | "frosted"
+  | "paper"
+  | "glass"
+  | "metal";
+
+export type CupDesignConfig = {
+  size: CupDesignSize;
+  style: CupDesignStyle;
+  materialType: CupDesignMaterial;
+  cupColor: string;
+  color?: string;
+};
+
+export type DesignArtworkLayer = {
+  id: string;
+  kind: "text" | "image" | "brush";
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  fill?: string;
+  text?: string;
+  imageUrl?: string;
+};
+
 export type DesignArtwork = {
   text: string;
   fill: string;
@@ -9,6 +40,8 @@ export type DesignArtwork = {
   rotation: number;
   offsetX: number;
   offsetY: number;
+  cupConfig?: CupDesignConfig;
+  layers?: DesignArtworkLayer[];
 };
 
 export type DesignFileSnapshot = {
