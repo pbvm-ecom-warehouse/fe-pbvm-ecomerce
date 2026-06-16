@@ -15,3 +15,5 @@
 - `app` pages should call feature services/hooks, not raw endpoints.
 - Cross-feature imports must be minimal and intentional.
 - Shared UI primitives stay under `src/components/ui`.
+- Cup designer code belongs under `src/features/cup-designer`.
+- Keep Konva/React Three Fiber components client-only and isolated from route files.

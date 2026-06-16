@@ -1,7 +1,10 @@
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Paintbrush } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
 import { getCatalogProductBySlug } from "@/features/catalog/services/catalog.service";
@@ -52,7 +55,16 @@ export default async function ProductDetailPage({
             </span>
             . Checkout sẽ gọi WMS realtime để chọn kho xuất.
           </div>
-          <AddToCartButton className="w-full" product={product} />
+          {product.fulfillmentType === "CUSTOM_PRINT" ? (
+            <Button asChild className="w-full">
+              <Link href={`/design-cup?productId=${product.id}`}>
+                <Paintbrush data-icon="inline-start" />
+                Thiết kế ly
+              </Link>
+            </Button>
+          ) : (
+            <AddToCartButton className="w-full" product={product} />
+          )}
         </CardContent>
       </Card>
     </main>

@@ -1,4 +1,5 @@
 import { env } from "@/lib/env";
+import { buildApiUrl, unwrapApiData } from "@/lib/api-contract";
 
 type NextFetchInit = RequestInit & {
   next?: {
@@ -7,7 +8,7 @@ type NextFetchInit = RequestInit & {
 };
 
 function buildPublicApiUrl(path: string) {
-  return new URL(path, env.NEXT_PUBLIC_ECOMMERCE_API_URL).toString();
+  return buildApiUrl(env.NEXT_PUBLIC_ECOMMERCE_API_URL, path);
 }
 
 export async function publicApiFetch<T>(
@@ -28,5 +29,5 @@ export async function publicApiFetch<T>(
     throw new Error(`Public API request failed: ${response.status}`);
   }
 
-  return (await response.json()) as T;
+  return unwrapApiData((await response.json()) as T);
 }

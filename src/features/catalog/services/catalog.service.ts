@@ -3,9 +3,14 @@ import type { ApiListResponse, CatalogProduct } from "@/types/api";
 
 const emptyCatalogResponse: ApiListResponse<CatalogProduct> = {
   data: [],
-  total: 0,
-  page: 1,
-  pageSize: 0,
+  meta: {
+    pagination: {
+      page: 1,
+      pageSize: 0,
+      total: 0,
+      totalPages: 0,
+    },
+  },
 };
 
 export async function listCatalogProducts() {
