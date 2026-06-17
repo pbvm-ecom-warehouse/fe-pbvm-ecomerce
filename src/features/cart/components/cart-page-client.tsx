@@ -110,33 +110,55 @@ export function CartPageClient() {
                 </Button>
               </div>
             ) : (
-              <div className="divide-y divide-[#E6DFD9]/70">
-                {items.map((item) => {
-                  const itemKey = item.cartItemId ?? item.productId;
-                  const isCustomPrint = isCustomPrintCartItem(item);
-                  const previewSrc =
-                    item.designFile?.previewDataUrl || item.imageUrl;
-                  const cupConfig = item.designFile?.artwork.cupConfig;
+              items.map((item) => (
+                <div
+                  key={item.cartItemId}
+                  className="grid gap-4 py-5 first:pt-0 last:pb-0 sm:grid-cols-[100px_1fr_auto] items-start"
+                >
+                  {/* Thumbnail */}
+                  <div className="relative aspect-square w-full rounded-xl border border-[#E6DFD9]/60 overflow-hidden bg-[#FAF8F6] flex items-center justify-center p-2">
+                    {item.imageUrl && item.imageUrl.startsWith("data:") ? (
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.name}
+                        className="h-full w-full object-contain p-1"
+                      />
+                    ) : item.imageUrl ? (
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.name}
+                        fill
+                        className="object-cover p-1"
+                      />
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground">No image</span>
+                    )}
+                  </div>
 
-                  return (
-                    <div
-                      key={itemKey}
-                      className="grid gap-4 py-5 first:pt-0 last:pb-0 sm:grid-cols-[104px_1fr_auto]"
-                    >
-                      <div className="relative aspect-square overflow-hidden rounded-xl border border-[#E6DFD9] bg-[#FAF8F6]">
-                        {previewSrc ? (
-                          <Image
-                            src={previewSrc}
-                            alt={item.name}
-                            fill
-                            unoptimized={previewSrc.startsWith("data:")}
-                            className="object-contain p-2"
-                          />
-                        ) : (
-                          <div className="grid h-full place-items-center text-[10px] text-[#7A6F68]">
-                            No image
-                          </div>
-                        )}
+                  {/* Product Details */}
+                  <div className="space-y-1.5">
+                    <div>
+                      {item.fulfillmentType === "CUSTOM_PRINT" ? (
+                        <span className="font-extrabold text-[#1C1917] text-sm sm:text-base leading-snug block">
+                          {item.name}
+                        </span>
+                      ) : (
+                        <Link href={`/products/${item.slug}`} className="font-extrabold text-[#1C1917] text-sm sm:text-base leading-snug hover:text-primary transition-colors">
+                          {item.name}
+                        </Link>
+                      )}
+                    </div>
+
+                    {item.fulfillmentType === "CUSTOM_PRINT" && item.designFile && (
+                      <div className="space-y-1 rounded-xl bg-[#FAF8F6] p-3 text-[10px] font-semibold text-[#7A6F68] border border-[#E6DFD9]/50 max-w-md">
+                        <div className="text-[#5C3D2E] font-bold uppercase text-[9px] tracking-wider mb-1 flex items-center gap-1">
+                          <span className="size-1.5 rounded-full bg-primary" /> Bản in CUSTOM_PRINT:
+                        </div>
+                        <div>• Design ID: <span className="text-[#1C1917]">{item.designId}</span></div>
+                        <div>• Size cốc: <span className="text-[#1C1917]">{item.designFile.artwork.cup.size}</span></div>
+                        <div>• Chất liệu: <span className="text-[#1C1917]">{item.designFile.artwork.cup.materialType}</span></div>
+                        <div>• Chiều cao in: <span className="text-[#1C1917]">{item.designFile.artwork.artboard.printHeightPercent}%</span></div>
+                        <div>• Layers: <span className="text-[#1C1917]">{item.designFile.artwork.layers.length}</span></div>
                       </div>
 
                       <div className="min-w-0 space-y-2">
@@ -153,94 +175,46 @@ export function CartPageClient() {
                           </div>
                         </div>
 
-                        {isCustomPrint ? (
-                          <div className="max-w-xl rounded-xl border border-primary/20 bg-[#FAF8F6] p-3 text-xs">
-                            <div className="mb-2 flex items-center gap-1.5 font-black uppercase tracking-[0.12em] text-primary">
-                              <Paintbrush className="size-3.5" />
-                              Ly in custom
-                            </div>
-                            <div className="grid gap-1 text-[#7A6F68] sm:grid-cols-2">
-                              <span>
-                                Design:{" "}
-                                <strong className="text-[#1C1917]">
-                                  {item.designFile?.name ?? item.designId}
-                                </strong>
-                              </span>
-                              <span>
-                                ID:{" "}
-                                <strong className="text-[#1C1917]">
-                                  {item.designId}
-                                </strong>
-                              </span>
-                              {cupConfig ? (
-                                <>
-                                  <span>
-                                    Size:{" "}
-                                    <strong className="text-[#1C1917]">
-                                      {cupConfig.size}
-                                    </strong>
-                                  </span>
-                                  <span>
-                                    Material:{" "}
-                                    <strong className="text-[#1C1917]">
-                                      {cupConfig.materialType}
-                                    </strong>
-                                  </span>
-                                </>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : null}
-
-                        <div className="flex items-center gap-3 pt-1">
-                          <div className="flex overflow-hidden rounded-lg border border-[#E6DFD9] bg-white">
-                            <Button
-                              size="icon-sm"
-                              variant="ghost"
-                              className="rounded-none border-r border-[#E6DFD9]"
-                              onClick={() =>
-                                updateQuantity(itemKey, item.quantity - 1)
-                              }
-                              aria-label="Giảm số lượng"
-                            >
-                              <Minus className="size-3.5" />
-                            </Button>
-                            <span className="grid w-11 place-items-center text-sm font-black">
-                              {item.quantity}
-                            </span>
-                            <Button
-                              size="icon-sm"
-                              variant="ghost"
-                              className="rounded-none border-l border-[#E6DFD9]"
-                              onClick={() =>
-                                updateQuantity(itemKey, item.quantity + 1)
-                              }
-                              aria-label="Tăng số lượng"
-                            >
-                              <Plus className="size-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-start">
-                        <div className="text-base font-black text-primary">
-                          {formatCurrency(item.price * item.quantity)}
-                        </div>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="rounded-lg text-[#7A6F68] hover:bg-red-50 hover:text-red-600"
-                          onClick={() => removeItem(itemKey)}
-                          aria-label="Xóa sản phẩm"
+                    {/* Quantity selectors */}
+                    <div className="pt-2 flex items-center gap-3">
+                      <div className="flex items-center rounded-lg border border-[#E6DFD9] bg-white overflow-hidden shadow-xs">
+                        <button
+                          type="button"
+                          className="px-2.5 py-1.5 hover:bg-[#FAF8F6] text-[#7A6F68] transition-colors border-r border-[#E6DFD9] active:scale-95"
+                          onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
                         >
-                          <Trash2 className="size-4" />
-                        </Button>
+                          <Minus className="size-3" />
+                        </button>
+                        <span className="w-10 text-center text-xs font-extrabold text-[#1C1917]">
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          className="px-2.5 py-1.5 hover:bg-[#FAF8F6] text-[#7A6F68] transition-colors border-l border-[#E6DFD9] active:scale-95"
+                          onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
+                        >
+                          <Plus className="size-3" />
+                        </button>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+
+                  {/* Actions and total */}
+                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-4">
+                    <div className="font-extrabold text-primary text-sm sm:text-base">
+                      {formatCurrency(item.price * item.quantity)}
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="text-[#7A6F68] hover:text-red-500 hover:bg-red-50 rounded-lg h-9 w-9 shrink-0 transition-colors"
+                      onClick={() => removeItem(item.cartItemId)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))
             )}
           </CardContent>
         </Card>

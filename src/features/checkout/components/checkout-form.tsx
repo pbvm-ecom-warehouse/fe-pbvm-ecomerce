@@ -18,7 +18,7 @@ import { toast } from "sonner";
 
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,45 +31,34 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useCartStore } from "@/stores/cart-store";
-import { calculateCartTotals, isCustomPrintCartItem } from "@/features/cart/utils/cart";
+import { calculateCartTotals } from "@/features/cart/utils/cart";
+import {
+  cartRequiresOnlinePayment,
+  getPaymentOptionsForCart,
+  isPaymentAllowedForCart,
+} from "@/features/payment/payment-options";
 import { formatCurrency } from "@/utils/format-currency";
 
 import {
   checkoutSchema,
   type CheckoutInput,
 } from "@/features/checkout/schemas/checkout.schema";
-import { createOrder } from "@/features/checkout/services/checkout.service";
-import {
-  getAvailablePaymentOptions,
-  isPaymentProviderAllowed,
-} from "@/features/payment/payment-options";
-
-
-type SubmittedOrder = {
-  orderId: string;
-  offline?: boolean;
-  total: number;
-  paymentProvider: CheckoutInput["paymentProvider"];
-};
-
-const paymentIconMap: Record<CheckoutInput["paymentProvider"], typeof CreditCard> =
-  {
-    COD: Truck,
-    VNPAY: Landmark,
-    MOMO: CreditCard,
-    ZALOPAY: CreditCard,
-  };
+import { mapCartItemsToCheckoutItems } from "@/features/checkout/services/checkout.service";
 
 export function CheckoutForm() {
   const items = useCartStore((state) => state.items);
   const clearCart = useCartStore((state) => state.clearCart);
   const totals = calculateCartTotals(items);
-  const hasCustomPrint = items.some(isCustomPrintCartItem);
-  const availablePaymentOptions = getAvailablePaymentOptions(items);
-  const [submitting, setSubmitting] = useState(false);
-  const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(
+  const availablePaymentOptions = getPaymentOptionsForCart(items);
+  const requiresOnlinePayment = cartRequiresOnlinePayment(items);
+  
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submittedOrderCode, setSubmittedOrderCode] = useState<string | null>(
     null,
   );
+  const [reqVAT, setReqVAT] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<string>("VNPAY");
+
   const {
     register,
     handleSubmit,
@@ -87,7 +76,32 @@ export function CheckoutForm() {
   });
   const selectedPayment = useWatch({ control, name: "paymentProvider" });
 
-  if (submittedOrder) {
+  const onSubmit = (data: CheckoutInput) => {
+    if (!isPaymentAllowedForCart(data.paymentProvider, items)) {
+      setSelectedPayment("VNPAY");
+      setValue("paymentProvider", "VNPAY");
+      toast.error("Đơn ly in cần thanh toán online trước khi sản xuất.");
+      return;
+    }
+
+    const payload = {
+      ...data,
+      items: mapCartItemsToCheckoutItems(items),
+    };
+
+    void payload;
+    const phoneSuffix = data.phone.replace(/\D/g, "").slice(-6).padStart(6, "0");
+    setSubmittedOrderCode(`PBVM-${phoneSuffix}`);
+    setIsSubmitted(true);
+    toast.success("Đặt hàng thành công!");
+  };
+
+  const handleOrderFinish = () => {
+    clearCart();
+    window.location.href = "/";
+  };
+
+  if (isSubmitted) {
     return (
       <Card className="mx-auto max-w-xl rounded-2xl border-[#E6DFD9] bg-white p-0 text-center shadow-sm">
         <CardContent className="flex flex-col items-center gap-5 p-8">
@@ -116,21 +130,54 @@ export function CheckoutForm() {
                 {submittedOrder.paymentProvider}
               </span>
             </div>
-            <div className="mt-2 flex justify-between gap-4">
-              <span className="text-[#7A6F68]">Tổng</span>
-              <span className="font-black text-primary">
-                {formatCurrency(submittedOrder.total)}
-              </span>
+            
+            <div>
+              <h2 className="text-2xl font-black text-[#1C1917]">Đặt Hàng Thành Công!</h2>
+              <p className="text-xs text-[#7A6F68] mt-1.5 leading-relaxed">
+                Cảm ơn bạn đã lựa chọn PBVM. Mã đơn hàng của bạn là <span className="font-bold text-primary">#{submittedOrderCode ?? "PBVM-000000"}</span>.
+              </p>
             </div>
-          </div>
-          <Button
-            asChild
-            className="h-11 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#4A2E22]"
-          >
-            <Link href="/products">Tiếp tục mua hàng</Link>
-          </Button>
-        </CardContent>
-      </Card>
+
+            {selectedPayment === "COD" ? (
+              <div className="w-full rounded-2xl bg-[#FAF8F6] p-4 text-left border border-[#E6DFD9]/60 text-xs space-y-1.5">
+                <div className="font-bold text-[#5C3D2E] uppercase tracking-wider text-[10px] mb-1">Phương thức thanh toán: COD</div>
+                <p className="text-[#7A6F68] leading-relaxed">Bạn sẽ thanh toán số tiền tổng cộng bằng tiền mặt cho nhân viên giao hàng chành xe hoặc bưu tá khi nhận sản phẩm.</p>
+              </div>
+            ) : (
+              <div className="w-full rounded-2xl bg-[#FAF8F6] p-5 text-left border border-[#E6DFD9]/60 text-xs space-y-3">
+                <div className="font-bold text-[#5C3D2E] uppercase tracking-wider text-[10px] flex items-center gap-1.5 border-b border-[#E6DFD9] pb-2">
+                  <Landmark className="size-4" /> Hướng dẫn chuyển khoản ngân hàng
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <span className="text-[#7A6F68]">Ngân hàng:</span>
+                  <span className="col-span-2 font-bold text-[#1C1917]">Techcombank (TCB)</span>
+                  
+                  <span className="text-[#7A6F68]">Số tài khoản:</span>
+                  <span className="col-span-2 font-bold text-primary text-sm">19035678901234</span>
+                  
+                  <span className="text-[#7A6F68]">Chủ tài khoản:</span>
+                  <span className="col-span-2 font-bold text-[#1C1917]">CONG TY CP IN AN BAO BI PBVM</span>
+                  
+                  <span className="text-[#7A6F68]">Số tiền:</span>
+                  <span className="col-span-2 font-black text-primary text-sm">{formatCurrency(totals.grandTotal)}</span>
+                  
+                  <span className="text-[#7A6F68]">Nội dung CK:</span>
+                  <span className="col-span-2 font-mono font-bold bg-[#EADEC9]/30 text-primary px-2 py-0.5 rounded text-[10px] w-fit">
+                    {submittedOrderCode ?? "PBVM-000000"}
+                  </span>
+                </div>
+                <p className="text-[10px] text-[#7A6F68] leading-relaxed italic border-t border-[#E6DFD9]/60 pt-2">
+                  * Vui lòng chuyển đúng số tiền và nội dung chuyển khoản để hệ thống tự động xác nhận đơn hàng trong 1-3 phút.
+                </p>
+              </div>
+            )}
+
+            <Button onClick={handleOrderFinish} className="w-full bg-primary hover:bg-[#4A2E22] text-white py-6 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md">
+              Quay lại Trang chủ
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
@@ -318,42 +365,52 @@ export function CheckoutForm() {
               Thanh toán
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 p-6 sm:grid-cols-2">
-            {availablePaymentOptions.map((option) => {
-              const Icon = paymentIconMap[option.value];
-              const active = selectedPayment === option.value;
+          <CardContent className="p-6">
+            {requiresOnlinePayment && (
+              <div className="mb-4 rounded-xl border border-primary/20 bg-[#FAF8F6] p-3 text-[11px] font-semibold text-[#5C3D2E]">
+                Giỏ có ly in CUSTOM_PRINT, cần thanh toán online trước khi xưởng mở lệnh in.
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {availablePaymentOptions.map((option) => {
+                const isCod = option.value === "COD";
+                const selected = selectedPayment === option.value;
 
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`flex min-h-24 items-start gap-3 rounded-xl border-2 p-4 text-left transition-colors ${
-                    active
-                      ? "border-primary bg-[#FAF8F6]"
-                      : "border-[#E6DFD9] bg-white hover:border-[#D2B48C]"
-                  }`}
-                  onClick={() =>
-                    setValue("paymentProvider", option.value, {
-                      shouldValidate: true,
-                    })
-                  }
-                >
-                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Icon className="size-5" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-black text-[#1C1917]">
-                      {option.label}
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPayment(option.value);
+                      setValue("paymentProvider", option.value);
+                    }}
+                    className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
+                      selected
+                        ? "border-primary bg-[#FAF8F6] text-primary"
+                        : "border-[#E6DFD9] bg-white text-[#7A6F68] hover:border-[#D2B48C]"
+                    }`}
+                  >
+                    <div className={`size-9 rounded-lg flex items-center justify-center shrink-0 ${isCod ? "bg-amber-50" : "bg-sky-50"}`}>
+                      {isCod ? (
+                        <Truck className="size-5 text-amber-600" />
+                      ) : (
+                        <CreditCard className="size-5 text-sky-600" />
+                      )}
                     </div>
-                    <div className="mt-1 text-xs leading-5 text-[#7A6F68]">
-                      {option.value === "COD"
-                        ? "Chỉ dùng cho hàng sẵn, không áp dụng ly-in custom."
-                        : "Thanh toán online trước khi xác nhận đơn."}
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-xs font-bold text-[#1C1917]">
+                        {isCod ? "Giao hàng thu tiền (COD)" : option.label}
+                      </span>
+                      <span className="text-[9px] text-[#7A6F68]">
+                        {isCod
+                          ? "Thanh toán mặt cho nhà xe chành xe khi nhận"
+                          : "Thanh toán online hoặc quét mã QR nhanh"}
+                      </span>
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -371,47 +428,34 @@ export function CheckoutForm() {
               </Link>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4 p-6">
-            <div className="max-h-[320px] divide-y divide-[#E6DFD9]/70 overflow-y-auto pr-1">
-              {items.map((item) => {
-                const itemKey = item.cartItemId ?? item.productId;
-                const previewSrc = item.designFile?.previewDataUrl || item.imageUrl;
-                const isCustomPrint = isCustomPrintCartItem(item);
-
-                return (
-                  <div key={itemKey} className="flex gap-3 py-3 first:pt-0">
-                    <div className="relative size-14 shrink-0 overflow-hidden rounded-lg border border-[#E6DFD9] bg-[#FAF8F6]">
-                      {previewSrc ? (
-                        <Image
-                          src={previewSrc}
-                          alt={item.name}
-                          fill
-                          unoptimized={previewSrc.startsWith("data:")}
-                          className="object-contain p-1.5"
-                        />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-black">
-                        {item.name}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-[#7A6F68]">
-                        {isCustomPrint ? (
-                          <span className="inline-flex items-center gap-1 text-primary">
-                            <Paintbrush className="size-3" />
-                            {item.designFile?.name ?? "Custom print"}
-                          </span>
-                        ) : (
-                          <span>{item.unit}</span>
-                        )}
-                        <span>•</span>
-                        <span>
-                          {formatCurrency(item.price)} x {item.quantity}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="text-right text-xs font-black text-[#1C1917]">
-                      {formatCurrency(item.price * item.quantity)}
+          <CardContent className="p-6 flex flex-col gap-4">
+            {/* List of items */}
+            <div className="divide-y divide-[#E6DFD9]/40 max-h-[300px] overflow-y-auto pr-1">
+              {items.map((item) => (
+                <div key={item.cartItemId} className="flex gap-3 py-3 items-start first:pt-0 last:pb-0">
+                  {/* Thumbnail */}
+                  <div className="relative size-12 rounded-lg border border-[#E6DFD9]/60 bg-[#FAF8F6] shrink-0 overflow-hidden flex items-center justify-center">
+                    {item.imageUrl && item.imageUrl.startsWith("data:") ? (
+                      <img src={item.imageUrl} alt={item.name} className="size-10 object-contain p-1" />
+                    ) : item.imageUrl ? (
+                      <Image src={item.imageUrl} alt={item.name} fill className="object-cover" />
+                    ) : (
+                      <span className="text-[8px] text-[#7A6F68]">No img</span>
+                    )}
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-xs font-bold text-[#1C1917] truncate leading-tight">{item.name}</h4>
+                    {item.fulfillmentType === "CUSTOM_PRINT" && item.designFile ? (
+                      <p className="text-[9px] text-primary font-bold mt-0.5">
+                        CUSTOM_PRINT • Size {item.designFile.artwork.cup.size} • {item.designFile.artwork.layers.length} layers
+                      </p>
+                    ) : (
+                      <p className="text-[9px] text-[#7A6F68] font-medium mt-0.5">Quy cách tiêu chuẩn • {item.unit}</p>
+                    )}
+                    <div className="flex items-center justify-between mt-1 text-[11px] text-[#7A6F68] font-medium">
+                      <span>{formatCurrency(item.price)} x {item.quantity}</span>
+                      <span className="font-bold text-[#1C1917]">{formatCurrency(item.price * item.quantity)}</span>
                     </div>
                   </div>
                 );

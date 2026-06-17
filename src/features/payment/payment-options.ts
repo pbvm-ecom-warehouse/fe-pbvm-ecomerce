@@ -1,4 +1,3 @@
-import { isCodAllowedForCart } from "@/features/cart/utils/cart";
 import type { CartItem } from "@/types/api";
 
 export const paymentOptions = [
@@ -10,19 +9,23 @@ export const paymentOptions = [
 
 export type PaymentProvider = (typeof paymentOptions)[number]["value"];
 
-export function getAvailablePaymentOptions(items: CartItem[]) {
-  if (isCodAllowedForCart(items)) {
+export function cartRequiresOnlinePayment(items: CartItem[]) {
+  return items.some((item) => item.fulfillmentType === "CUSTOM_PRINT");
+}
+
+export function getPaymentOptionsForCart(items: CartItem[]) {
+  if (!cartRequiresOnlinePayment(items)) {
     return paymentOptions;
   }
 
   return paymentOptions.filter((option) => option.value !== "COD");
 }
 
-export function isPaymentProviderAllowed(
-  provider: PaymentProvider,
+export function isPaymentAllowedForCart(
+  paymentProvider: PaymentProvider,
   items: CartItem[],
 ) {
-  return getAvailablePaymentOptions(items).some(
-    (option) => option.value === provider,
+  return getPaymentOptionsForCart(items).some(
+    (option) => option.value === paymentProvider,
   );
 }

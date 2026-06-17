@@ -20,14 +20,6 @@ export function countCartItems(items: CartItem[]) {
   return items.reduce((total, item) => total + item.quantity, 0);
 }
 
-export function isCustomPrintCartItem(item: CartItem) {
-  return item.fulfillmentType === "CUSTOM_PRINT" || item.isPrintItem === true;
-}
-
 export function hasCustomPrintItems(items: CartItem[]) {
-  return items.some(isCustomPrintCartItem);
-}
-
-export function isCodAllowedForCart(items: CartItem[]) {
-  return !hasCustomPrintItems(items);
+  return items.some((item) => item.fulfillmentType === "CUSTOM_PRINT");
 }
