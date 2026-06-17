@@ -93,7 +93,7 @@ export function CartPageClient() {
                   {/* Thumbnail */}
                   <div className="relative aspect-square w-full rounded-xl border border-[#E6DFD9]/60 overflow-hidden bg-[#FAF8F6] flex items-center justify-center p-2">
                     {item.imageUrl && item.imageUrl.startsWith("data:") ? (
-                      <img
+                      <Image
                         src={item.imageUrl}
                         alt={item.name}
                         className="h-full w-full object-contain p-1"
