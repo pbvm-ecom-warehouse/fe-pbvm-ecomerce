@@ -19,3 +19,7 @@ export function calculateCartTotals(items: CartItem[]) {
 export function countCartItems(items: CartItem[]) {
   return items.reduce((total, item) => total + item.quantity, 0);
 }
+
+export function hasCustomPrintItems(items: CartItem[]) {
+  return items.some((item) => item.fulfillmentType === "CUSTOM_PRINT");
+}

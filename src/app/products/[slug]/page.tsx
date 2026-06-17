@@ -207,7 +207,7 @@ export default async function ProductDetailPage({
                     Bạn muốn xem thử logo quán trà sữa của mình hiển thị như thế nào trên chiếc ly này? Hãy thử ngay công cụ mô phỏng 3D góc nhìn 360 độ của chúng tôi.
                   </p>
                 </div>
-                <Link href="/design">
+                <Link href="/design-cup">
                   <Button className="w-full bg-primary hover:bg-[#4A2E22] text-white font-bold text-xs py-5 rounded-xl flex items-center justify-center gap-1.5 shadow-md active:scale-[0.98]">
                     Mở xưởng thiết kế 3D ngay
                   </Button>

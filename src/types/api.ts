@@ -1,5 +1,73 @@
 export type CustomerType = "B2B" | "B2C";
 
+export type FulfillmentType = "STANDARD" | "PRINTED_TEMPLATE" | "CUSTOM_PRINT";
+
+export type CupSize = "S" | "M" | "L" | "XL";
+
+export type CupStyle = "straight" | "u_shape" | "heart" | "mug";
+
+export type CupMaterialType = "clear" | "frosted" | "paper" | "glass" | "metal";
+
+export type DesignLayerBase = {
+  id: string;
+  x: number;
+  y: number;
+  rotation?: number;
+};
+
+export type DesignTextLayer = DesignLayerBase & {
+  type: "text";
+  text: string;
+  color: string;
+  fontSize: number;
+};
+
+export type DesignImageLayer = DesignLayerBase & {
+  type: "image";
+  src: string;
+  width: number;
+  height: number;
+  source: "upload" | "ai";
+  prompt?: string;
+};
+
+export type DesignBrushLayer = {
+  id: string;
+  type: "brush";
+  points: number[];
+  color: string;
+  size: number;
+};
+
+export type DesignArtworkLayer =
+  | DesignTextLayer
+  | DesignImageLayer
+  | DesignBrushLayer;
+
+export type DesignArtwork = {
+  artboard: {
+    width: number;
+    height: number;
+    printHeightPercent: number;
+  };
+  cup: {
+    size: CupSize;
+    style: CupStyle;
+    materialType: CupMaterialType;
+    cupColor: string;
+  };
+  layers: DesignArtworkLayer[];
+};
+
+export type DesignFileSnapshot = {
+  snapshotVersion: 1;
+  designId: string;
+  name: string;
+  previewDataUrl: string;
+  artwork: DesignArtwork;
+  exportedAt: string;
+};
+
 export type CatalogProduct = {
   id: string;
   productRefId: string;
@@ -12,21 +80,11 @@ export type CatalogProduct = {
   stockSnapshot: number;
   imageUrl: string;
   updatedAt: string;
-  customConfig?: {
-    isCustom: boolean;
-    size: "S" | "M" | "L" | "XL";
-    style: "straight" | "u_shape" | "heart" | "mug";
-    materialType: string;
-    cupColor: string;
-    logoUrl: string | null;
-    decalY: number;
-    decalScale: number;
-    decalRotation: number;
-    promptUsed?: string;
-  };
+  fulfillmentType?: FulfillmentType;
 };
 
 export type CartItem = {
+  cartItemId: string;
   productId: string;
   name: string;
   slug: string;
@@ -34,18 +92,9 @@ export type CartItem = {
   quantity: number;
   unit: string;
   imageUrl: string;
-  customConfig?: {
-    isCustom: boolean;
-    size: "S" | "M" | "L" | "XL";
-    style: "straight" | "u_shape" | "heart" | "mug";
-    materialType: string;
-    cupColor: string;
-    logoUrl: string | null;
-    decalY: number;
-    decalScale: number;
-    decalRotation: number;
-    promptUsed?: string;
-  };
+  fulfillmentType: FulfillmentType;
+  designId?: string;
+  designFile?: DesignFileSnapshot;
 };
 
 export type OrderStatus =

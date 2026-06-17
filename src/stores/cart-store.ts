@@ -2,15 +2,29 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { persist } from "zustand/middleware";
 
-import type { CartItem, CatalogProduct } from "@/types/api";
+import type { CartItem, CatalogProduct, DesignFileSnapshot } from "@/types/api";
 
 type CartState = {
   items: CartItem[];
   addProduct: (product: CatalogProduct, quantity?: number) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  removeItem: (productId: string) => void;
+  addCustomPrintItem: (input: {
+    product: CatalogProduct;
+    quantity: number;
+    designId: string;
+    designFile: DesignFileSnapshot;
+  }) => void;
+  updateQuantity: (cartItemId: string, quantity: number) => void;
+  removeItem: (cartItemId: string) => void;
   clearCart: () => void;
 };
+
+function createStandardCartItemId(productId: string) {
+  return `standard:${productId}`;
+}
+
+function createCustomCartItemId(productId: string, designId: string) {
+  return `custom:${productId}:${designId}:${Date.now()}`;
+}
 
 export const useCartStore = create<CartState>()(
   persist(
@@ -18,8 +32,11 @@ export const useCartStore = create<CartState>()(
       items: [],
       addProduct: (product, quantity = 1) =>
         set((state) => {
+          const cartItemId = createStandardCartItemId(product.id);
           const existing = state.items.find(
-            (item) => item.productId === product.id,
+            (item) =>
+              item.cartItemId === cartItemId &&
+              item.fulfillmentType !== "CUSTOM_PRINT",
           );
 
           if (existing) {
@@ -28,6 +45,7 @@ export const useCartStore = create<CartState>()(
           }
 
           state.items.push({
+            cartItemId,
             productId: product.id,
             name: product.name,
             slug: product.slug,
@@ -35,13 +53,29 @@ export const useCartStore = create<CartState>()(
             quantity,
             unit: product.unit,
             imageUrl: product.imageUrl,
-            customConfig: product.customConfig,
+            fulfillmentType: product.fulfillmentType ?? "STANDARD",
           });
         }),
-      updateQuantity: (productId, quantity) =>
+      addCustomPrintItem: ({ product, quantity, designId, designFile }) =>
+        set((state) => {
+          state.items.push({
+            cartItemId: createCustomCartItemId(product.id, designId),
+            productId: product.id,
+            name: product.name,
+            slug: product.slug,
+            price: product.price,
+            quantity,
+            unit: product.unit,
+            imageUrl: designFile.previewDataUrl || product.imageUrl,
+            fulfillmentType: "CUSTOM_PRINT",
+            designId,
+            designFile,
+          });
+        }),
+      updateQuantity: (cartItemId, quantity) =>
         set((state) => {
           const item = state.items.find(
-            (cartItem) => cartItem.productId === productId,
+            (cartItem) => cartItem.cartItemId === cartItemId,
           );
 
           if (!item) {
@@ -50,10 +84,10 @@ export const useCartStore = create<CartState>()(
 
           item.quantity = Math.max(quantity, 1);
         }),
-      removeItem: (productId) =>
+      removeItem: (cartItemId) =>
         set((state) => {
           state.items = state.items.filter(
-            (item) => item.productId !== productId,
+            (item) => item.cartItemId !== cartItemId,
           );
         }),
       clearCart: () =>

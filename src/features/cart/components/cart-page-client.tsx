@@ -87,7 +87,7 @@ export function CartPageClient() {
             ) : (
               items.map((item) => (
                 <div
-                  key={item.productId}
+                  key={item.cartItemId}
                   className="grid gap-4 py-5 first:pt-0 last:pb-0 sm:grid-cols-[100px_1fr_auto] items-start"
                 >
                   {/* Thumbnail */}
@@ -113,7 +113,7 @@ export function CartPageClient() {
                   {/* Product Details */}
                   <div className="space-y-1.5">
                     <div>
-                      {item.customConfig ? (
+                      {item.fulfillmentType === "CUSTOM_PRINT" ? (
                         <span className="font-extrabold text-[#1C1917] text-sm sm:text-base leading-snug block">
                           {item.name}
                         </span>
@@ -124,23 +124,16 @@ export function CartPageClient() {
                       )}
                     </div>
 
-                    {/* Show custom specifications if 3D customized */}
-                    {item.customConfig && (
+                    {item.fulfillmentType === "CUSTOM_PRINT" && item.designFile && (
                       <div className="space-y-1 rounded-xl bg-[#FAF8F6] p-3 text-[10px] font-semibold text-[#7A6F68] border border-[#E6DFD9]/50 max-w-md">
                         <div className="text-[#5C3D2E] font-bold uppercase text-[9px] tracking-wider mb-1 flex items-center gap-1">
-                          <span className="size-1.5 rounded-full bg-primary" /> Bản vẽ in ấn 3D tùy chỉnh:
+                          <span className="size-1.5 rounded-full bg-primary" /> Bản in CUSTOM_PRINT:
                         </div>
-                        <div>• Kiểu dáng: <span className="text-[#1C1917]">
-                          {item.customConfig.style === "straight" ? "Ly thẳng classic" :
-                           item.customConfig.style === "u_shape" ? "Ly bầu đáy tròn" :
-                           item.customConfig.style === "heart" ? "Ly tim cao cấp" : "Cốc quai tiện dụng"}
-                        </span></div>
-                        <div>• Size cốc: <span className="text-[#1C1917]">{item.customConfig.size}</span></div>
-                        <div>• Chất liệu: <span className="text-[#1C1917]">{item.customConfig.materialType}</span></div>
-                        <div>• Màu nền ly: <span className="text-[#1C1917] font-mono">{item.customConfig.cupColor}</span></div>
-                        {item.customConfig.promptUsed && (
-                          <div className="line-clamp-2 mt-0.5">• Trí tuệ nhân tạo (AI Prompt): <span className="italic text-primary">&quot;{item.customConfig.promptUsed}&quot;</span></div>
-                        )}
+                        <div>• Design ID: <span className="text-[#1C1917]">{item.designId}</span></div>
+                        <div>• Size cốc: <span className="text-[#1C1917]">{item.designFile.artwork.cup.size}</span></div>
+                        <div>• Chất liệu: <span className="text-[#1C1917]">{item.designFile.artwork.cup.materialType}</span></div>
+                        <div>• Chiều cao in: <span className="text-[#1C1917]">{item.designFile.artwork.artboard.printHeightPercent}%</span></div>
+                        <div>• Layers: <span className="text-[#1C1917]">{item.designFile.artwork.layers.length}</span></div>
                       </div>
                     )}
 
@@ -156,7 +149,7 @@ export function CartPageClient() {
                         <button
                           type="button"
                           className="px-2.5 py-1.5 hover:bg-[#FAF8F6] text-[#7A6F68] transition-colors border-r border-[#E6DFD9] active:scale-95"
-                          onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
                         >
                           <Minus className="size-3" />
                         </button>
@@ -166,7 +159,7 @@ export function CartPageClient() {
                         <button
                           type="button"
                           className="px-2.5 py-1.5 hover:bg-[#FAF8F6] text-[#7A6F68] transition-colors border-l border-[#E6DFD9] active:scale-95"
-                          onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
                         >
                           <Plus className="size-3" />
                         </button>
@@ -183,7 +176,7 @@ export function CartPageClient() {
                       size="icon"
                       variant="ghost"
                       className="text-[#7A6F68] hover:text-red-500 hover:bg-red-50 rounded-lg h-9 w-9 shrink-0 transition-colors"
-                      onClick={() => removeItem(item.productId)}
+                      onClick={() => removeItem(item.cartItemId)}
                     >
                       <Trash2 className="size-4" />
                     </Button>
