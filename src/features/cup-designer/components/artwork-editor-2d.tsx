@@ -174,12 +174,16 @@ export function ArtworkEditor2D({
   function updateLayer(layerId: string, patch: Partial<DesignArtworkLayer>) {
     onLayersChange(
       layers.map((layer) =>
-        layer.id === layerId ? ({ ...layer, ...patch } as DesignArtworkLayer) : layer,
+        layer.id === layerId
+          ? ({ ...layer, ...patch } as DesignArtworkLayer)
+          : layer,
       ),
     );
   }
 
-  function handleStagePointerDown(event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
+  function handleStagePointerDown(
+    event: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
+  ) {
     const clickedStage = event.target === event.target.getStage();
 
     if (tool === "select") {
@@ -207,7 +211,9 @@ export function ArtworkEditor2D({
       return;
     }
 
-    setActiveStroke((current) => (current ? [...current, ...pointer] : current));
+    setActiveStroke((current) =>
+      current ? [...current, ...pointer] : current,
+    );
   }
 
   function handleStagePointerUp() {
@@ -251,7 +257,11 @@ export function ArtworkEditor2D({
     setTool("select");
   }
 
-  function addImageLayer(src: string, source: DesignImageLayer["source"], prompt?: string) {
+  function addImageLayer(
+    src: string,
+    source: DesignImageLayer["source"],
+    prompt?: string,
+  ) {
     if (imageLayerCount >= MAX_IMAGE_LAYERS) {
       return;
     }
@@ -363,7 +373,7 @@ export function ArtworkEditor2D({
             onClick={() => setTool("select")}
           >
             <MousePointer2 className="size-3.5" />
-            Chon
+            Chọn
           </Button>
           <Button
             type="button"
@@ -373,7 +383,7 @@ export function ArtworkEditor2D({
             onClick={() => setTool("brush")}
           >
             <Paintbrush className="size-3.5" />
-            Ve tay
+            Vẽ tay
           </Button>
           <Button
             type="button"
@@ -399,7 +409,7 @@ export function ArtworkEditor2D({
         </div>
       </div>
 
-      <div className="grid gap-4 p-4 xl:grid-cols-[1fr_260px]">
+      <div className="grid gap-4 p-4 min-[2200px]:grid-cols-[minmax(0,1fr)_260px]">
         <div className="overflow-auto rounded-lg border border-[#E6DFD9] bg-[linear-gradient(#eee_1px,transparent_1px),linear-gradient(90deg,#eee_1px,transparent_1px)] bg-[size:24px_24px] p-4">
           <Stage
             ref={stageRef}
@@ -560,116 +570,136 @@ export function ArtworkEditor2D({
           </Stage>
         </div>
 
-        <aside className="space-y-4">
-          <div className="rounded-lg border border-[#E6DFD9] bg-[#FAF8F6] p-3">
-            <Label className="text-[11px] font-bold text-[#5C3D2E]">
-              Brush size
-            </Label>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {BRUSH_SIZES.map((sizeOption) => (
-                <button
-                  key={sizeOption}
-                  type="button"
-                  className={cn(
-                    "h-8 w-9 rounded-md border text-xs font-bold transition",
-                    brushSize === sizeOption
-                      ? "border-[#5C3D2E] bg-[#5C3D2E] text-white"
-                      : "border-[#E6DFD9] bg-white text-[#5C3D2E]",
-                  )}
-                  onClick={() => setBrushSize(sizeOption)}
+        <aside className="overflow-hidden rounded-lg border border-[#E6DFD9] bg-white">
+          <div className="flex items-center justify-between border-b border-[#E6DFD9] bg-[#FAF8F6] px-3 py-2">
+            <h3 className="text-xs font-black uppercase text-[#5C3D2E]">
+              Công cụ thiết kế
+            </h3>
+            <span className="rounded-md border border-[#E6DFD9] bg-white px-2 py-1 text-[10px] font-black text-[#5C3D2E]">
+              {layers.length} layer
+            </span>
+          </div>
+
+          <div className="grid xl:grid-cols-[230px_minmax(0,1fr)_minmax(0,1fr)_146px]">
+            <div className="border-b border-[#E6DFD9] p-3 xl:border-r xl:border-b-0">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Paintbrush className="size-3.5 text-[#5C3D2E]" />
+                  <Label className="text-[11px] font-bold text-[#5C3D2E]">
+                    Vẽ tay
+                  </Label>
+                </div>
+                <input
+                  id="brush-color"
+                  type="color"
+                  aria-label="Màu nét vẽ"
+                  value={brushColor}
+                  onChange={(event) => setBrushColor(event.target.value)}
+                  className="h-7 w-12 rounded-md border border-[#E6DFD9] bg-white p-1"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {BRUSH_SIZES.map((sizeOption) => (
+                  <button
+                    key={sizeOption}
+                    type="button"
+                    aria-label={`Brush size ${sizeOption}`}
+                    className={cn(
+                      "h-8 w-9 rounded-md border text-xs font-bold transition",
+                      brushSize === sizeOption
+                        ? "border-[#5C3D2E] bg-[#5C3D2E] text-white"
+                        : "border-[#E6DFD9] bg-[#FAF8F6] text-[#5C3D2E] hover:bg-[#F1ECE7]",
+                    )}
+                    onClick={() => setBrushSize(sizeOption)}
+                  >
+                    {sizeOption}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-w-0 border-b border-[#E6DFD9] p-3 xl:border-r xl:border-b-0">
+              <div className="mb-2 flex items-center gap-2">
+                <Type className="size-3.5 text-[#5C3D2E]" />
+                <Label
+                  htmlFor="design-text"
+                  className="text-[11px] font-bold text-[#5C3D2E]"
                 >
-                  {sizeOption}
-                </button>
-              ))}
+                  Text/logo
+                </Label>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  id="design-text"
+                  value={textValue}
+                  onChange={(event) => setTextValue(event.target.value)}
+                  className="h-9 min-w-0 rounded-md bg-[#FAF8F6] text-xs"
+                />
+                <Button
+                  type="button"
+                  aria-label="Thêm text"
+                  size="icon"
+                  variant="outline"
+                  className="h-9 w-9 rounded-md"
+                  onClick={addTextLayer}
+                >
+                  <Type className="size-4" />
+                </Button>
+              </div>
             </div>
 
-            <Label
-              htmlFor="brush-color"
-              className="mt-3 block text-[11px] font-bold text-[#5C3D2E]"
-            >
-              Mau
-            </Label>
-            <input
-              id="brush-color"
-              type="color"
-              value={brushColor}
-              onChange={(event) => setBrushColor(event.target.value)}
-              className="mt-2 h-9 w-full rounded-md border border-[#E6DFD9] bg-white p-1"
-            />
-          </div>
+            <div className="min-w-0 border-b border-[#E6DFD9] p-3 xl:border-r xl:border-b-0">
+              <div className="mb-2 flex items-center gap-2">
+                <Sparkles className="size-3.5 text-[#5C3D2E]" />
+                <Label
+                  htmlFor="ai-prompt"
+                  className="text-[11px] font-bold text-[#5C3D2E]"
+                >
+                  Generate hình
+                </Label>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  id="ai-prompt"
+                  value={aiPrompt}
+                  onChange={(event) => setAiPrompt(event.target.value)}
+                  className="h-9 min-w-0 rounded-md bg-[#FAF8F6] text-xs"
+                />
+                <Button
+                  type="button"
+                  aria-label="Generate hình"
+                  size="icon"
+                  variant="outline"
+                  className="h-9 w-9 rounded-md"
+                  disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
+                  onClick={handleGenerateArtwork}
+                >
+                  <Sparkles className="size-4" />
+                </Button>
+              </div>
+            </div>
 
-          <div className="rounded-lg border border-[#E6DFD9] bg-white p-3">
-            <Label htmlFor="design-text" className="text-[11px] font-bold text-[#5C3D2E]">
-              Text/logo
-            </Label>
-            <div className="mt-2 flex gap-2">
-              <Input
-                id="design-text"
-                value={textValue}
-                onChange={(event) => setTextValue(event.target.value)}
-                className="h-9 rounded-md text-xs"
-              />
+            <div className="grid gap-2 bg-[#FAF8F6] p-3">
               <Button
                 type="button"
-                aria-label="Them text"
-                size="icon"
                 variant="outline"
-                className="h-9 w-9 rounded-md"
-                onClick={addTextLayer}
+                className="h-9 gap-1.5 rounded-md text-xs"
+                onClick={undoLastStroke}
               >
-                <Type className="size-4" />
+                <RotateCcw className="size-3.5" />
+                Undo
               </Button>
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-[#E6DFD9] bg-white p-3">
-            <Label htmlFor="ai-prompt" className="text-[11px] font-bold text-[#5C3D2E]">
-              Generate hinh
-            </Label>
-            <div className="mt-2 flex gap-2">
-              <Input
-                id="ai-prompt"
-                value={aiPrompt}
-                onChange={(event) => setAiPrompt(event.target.value)}
-                className="h-9 rounded-md text-xs"
-              />
               <Button
                 type="button"
-                aria-label="Generate hinh"
-                size="icon"
                 variant="outline"
-                className="h-9 w-9 rounded-md"
-                disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
-                onClick={handleGenerateArtwork}
+                className="h-9 gap-1.5 rounded-md text-xs"
+                disabled={!selectedLayerId}
+                onClick={deleteSelectedLayer}
               >
-                <Sparkles className="size-4" />
+                <Trash2 className="size-3.5" />
+                Xóa layer
               </Button>
             </div>
-            <p className="mt-2 text-[10px] font-medium text-[#7A6F68]">
-              Anh AI tao layer anh trong editor, tinh chung quota Import.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 flex-1 gap-1.5 rounded-md text-xs"
-              onClick={undoLastStroke}
-            >
-              <RotateCcw className="size-3.5" />
-              Undo
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 flex-1 gap-1.5 rounded-md text-xs"
-              disabled={!selectedLayerId}
-              onClick={deleteSelectedLayer}
-            >
-              <Trash2 className="size-3.5" />
-              Xoa
-            </Button>
           </div>
         </aside>
       </div>
