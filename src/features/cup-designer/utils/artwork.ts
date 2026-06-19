@@ -15,23 +15,43 @@ export const CUP_SIZE_SPECS: Record<
     price: number;
   }
 > = {
-  S: { label: "S", circumferenceWidth: 600, printableHeight: 336, price: 1_200 },
-  M: { label: "M", circumferenceWidth: 690, printableHeight: 386, price: 1_500 },
-  L: { label: "L", circumferenceWidth: 780, printableHeight: 437, price: 1_800 },
-  XL: { label: "XL", circumferenceWidth: 860, printableHeight: 482, price: 2_200 },
+  S: {
+    label: "S",
+    circumferenceWidth: 600,
+    printableHeight: 336,
+    price: 1_200,
+  },
+  M: {
+    label: "M",
+    circumferenceWidth: 690,
+    printableHeight: 386,
+    price: 1_500,
+  },
+  L: {
+    label: "L",
+    circumferenceWidth: 780,
+    printableHeight: 437,
+    price: 1_800,
+  },
+  XL: {
+    label: "XL",
+    circumferenceWidth: 860,
+    printableHeight: 482,
+    price: 2_200,
+  },
 };
 
 export const CUP_STYLE_LABELS: Record<CupStyle, string> = {
-  straight: "Ly thang",
-  u_shape: "Day U",
-  heart: "Nap tim",
+  straight: "Ly thẳng",
+  u_shape: "Đáy U",
+  heart: "Nắp tim",
   mug: "Mug",
 };
 
 export const CUP_MATERIAL_LABELS: Record<CupMaterialType, string> = {
-  clear: "Nhua trong",
-  frosted: "Nhua mo",
-  paper: "Giay",
+  clear: "Nhựa trong",
+  frosted: "Nhựa mờ",
+  paper: "Giấy",
   glass: "Glass",
   metal: "Metal",
 };
@@ -110,11 +130,11 @@ export function createCustomCupProduct({
     id: `custom-cup-${size.toLowerCase()}`,
     productRefId: "CUP_PRINTED",
     slug: "ly-in-theo-thiet-ke",
-    name: `Ly in theo thiet ke size ${size}`,
+    name: `Ly in theo thiết kế size ${size}`,
     category: "printed_cup" as const,
     price,
     b2bPrice: price,
-    unit: "cai",
+    unit: "cái",
     stockSnapshot: 999_999,
     imageUrl: "",
     updatedAt: new Date().toISOString(),

@@ -2,7 +2,12 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { ContactShadows, Environment, OrbitControls, useTexture } from "@react-three/drei";
+import {
+  ContactShadows,
+  Environment,
+  OrbitControls,
+  useTexture,
+} from "@react-three/drei";
 import type { Group } from "three";
 
 import type { CupMaterialType, CupSize, CupStyle } from "@/types/api";
@@ -73,7 +78,13 @@ function ArtworkSleeve({
   );
 }
 
-function HeartLidDecoration({ topRadius, height }: { topRadius: number; height: number }) {
+function HeartLidDecoration({
+  topRadius,
+  height,
+}: {
+  topRadius: number;
+  height: number;
+}) {
   return (
     <group position={[0, height / 2 + 0.11, 0]}>
       <mesh position={[-0.055, 0.02, 0]}>
@@ -132,14 +143,7 @@ function CupModel({
     <group ref={groupRef} rotation={[0.04, 0.18, 0]}>
       <mesh>
         <cylinderGeometry
-          args={[
-            cup.topRadius,
-            cup.bottomRadius,
-            cup.height,
-            128,
-            1,
-            true,
-          ]}
+          args={[cup.topRadius, cup.bottomRadius, cup.height, 128, 1, true]}
         />
         <meshPhysicalMaterial
           color={cupColor}
@@ -162,11 +166,17 @@ function CupModel({
         </Suspense>
       ) : null}
 
-      <mesh position={[0, cup.height / 2 + 0.015, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh
+        position={[0, cup.height / 2 + 0.015, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+      >
         <torusGeometry args={[cup.topRadius, 0.025, 20, 128]} />
         <meshStandardMaterial color="#F7F0E8" roughness={0.2} />
       </mesh>
-      <mesh position={[0, -cup.height / 2 + 0.035, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh
+        position={[0, -cup.height / 2 + 0.035, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+      >
         <torusGeometry args={[cup.bottomRadius, 0.024, 20, 128]} />
         <meshStandardMaterial color="#F7F0E8" roughness={0.25} />
       </mesh>
@@ -176,7 +186,10 @@ function CupModel({
       ) : null}
 
       {style === "mug" ? (
-        <mesh position={[cup.topRadius + 0.08, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <mesh
+          position={[cup.topRadius + 0.08, 0, 0]}
+          rotation={[0, 0, Math.PI / 2]}
+        >
           <torusGeometry args={[0.42, 0.045, 20, 72]} />
           <meshStandardMaterial color={cupColor} roughness={0.38} />
         </mesh>
@@ -209,12 +222,12 @@ export function CupPreview3D(props: CupPreview3DProps) {
         {props.artworkTextureUrl ? (
           <img
             src={props.artworkTextureUrl}
-            alt="Ban in xem truoc"
+            alt="Bản in xem trước"
             className="max-h-[300px] max-w-full rounded-md border border-[#E6DFD9] bg-white object-contain p-4"
           />
         ) : (
           <p className="text-sm font-semibold text-[#7A6F68]">
-            Trinh duyet khong ho tro WebGL.
+            Trình duyệt không hỗ trợ WebGL.
           </p>
         )}
       </div>

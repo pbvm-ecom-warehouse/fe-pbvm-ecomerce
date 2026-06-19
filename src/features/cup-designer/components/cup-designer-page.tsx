@@ -38,8 +38,7 @@ import {
 } from "../utils/artwork";
 
 const ArtworkEditor2D = dynamic(
-  () =>
-    import("./artwork-editor-2d").then((module) => module.ArtworkEditor2D),
+  () => import("./artwork-editor-2d").then((module) => module.ArtworkEditor2D),
   {
     ssr: false,
     loading: () => (
@@ -109,7 +108,9 @@ export function CupDesignerPage() {
   );
 
   const handleTextureChange = useCallback((dataUrl: string) => {
-    setArtworkTextureUrl((current) => (current === dataUrl ? current : dataUrl));
+    setArtworkTextureUrl((current) =>
+      current === dataUrl ? current : dataUrl,
+    );
   }, []);
 
   function handleSizeChange(nextSize: CupSize) {
@@ -120,7 +121,9 @@ export function CupDesignerPage() {
 
   function addToCart() {
     if (layers.length === 0) {
-      toast.error("Hay them text, import logo hoac generate hinh truoc khi dat in.");
+      toast.error(
+        "Hãy thêm text, import logo hoặc generate hình trước khi đặt in.",
+      );
       return;
     }
 
@@ -138,7 +141,7 @@ export function CupDesignerPage() {
       designFile,
     });
 
-    toast.success("Da them ly in vao gio hang. COD se bi tat cho don nay.");
+    toast.success("Đã thêm ly in vào giỏ hàng. COD sẽ bị tắt cho đơn này.");
   }
 
   return (
@@ -146,8 +149,13 @@ export function CupDesignerPage() {
       <div className="mx-auto flex max-w-[1500px] flex-col gap-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <Button asChild variant="outline" size="icon" className="h-9 w-9 rounded-md">
-              <Link href="/" aria-label="Ve trang chu">
+            <Button
+              asChild
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 rounded-md"
+            >
+              <Link href="/" aria-label="Về trang chủ">
                 <ArrowLeft className="size-4" />
               </Link>
             </Button>
@@ -156,7 +164,7 @@ export function CupDesignerPage() {
                 Design-cup studio
               </h1>
               <p className="text-xs font-medium text-[#7A6F68]">
-                Artwork 2D la file san xuat. 3D chi dung de xac nhan vi tri.
+                Artwork 2D là file sản xuất. 3D chỉ dùng để xác nhận vị trí.
               </p>
             </div>
           </div>
@@ -172,17 +180,19 @@ export function CupDesignerPage() {
           </div>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+        <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)_340px]">
           <aside className="space-y-4">
             <section className="rounded-lg border border-[#E6DFD9] bg-white p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-[#5C3D2E]">
                 <Ruler className="size-4" />
-                Cau hinh ly
+                Cấu hình ly
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <Label className="text-[11px] font-bold text-[#5C3D2E]">Size</Label>
+                  <Label className="text-[11px] font-bold text-[#5C3D2E]">
+                    Size
+                  </Label>
                   <div className="mt-2 grid grid-cols-4 gap-2">
                     {SIZES.map((sizeOption) => (
                       <button
@@ -204,7 +214,7 @@ export function CupDesignerPage() {
 
                 <div>
                   <Label className="text-[11px] font-bold text-[#5C3D2E]">
-                    Kieu dang
+                    Kiểu dáng
                   </Label>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     {STYLES.map((styleOption) => (
@@ -227,7 +237,7 @@ export function CupDesignerPage() {
 
                 <div>
                   <Label className="text-[11px] font-bold text-[#5C3D2E]">
-                    Chat lieu
+                    Chất liệu
                   </Label>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     {MATERIALS.map((materialOption) => (
@@ -249,8 +259,11 @@ export function CupDesignerPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="cup-color" className="text-[11px] font-bold text-[#5C3D2E]">
-                    Mau ly
+                  <Label
+                    htmlFor="cup-color"
+                    className="text-[11px] font-bold text-[#5C3D2E]"
+                  >
+                    Màu ly
                   </Label>
                   <input
                     id="cup-color"
@@ -267,7 +280,7 @@ export function CupDesignerPage() {
                       htmlFor="print-height"
                       className="text-[11px] font-bold text-[#5C3D2E]"
                     >
-                      Chieu cao vung in
+                      Chiều cao vùng in
                     </Label>
                     <span className="text-xs font-black text-[#5C3D2E]">
                       {printHeightPercent}%
@@ -286,7 +299,7 @@ export function CupDesignerPage() {
                     className="mt-3 w-full accent-[#5C3D2E]"
                   />
                   <p className="mt-2 text-[10px] font-medium text-[#7A6F68]">
-                    100% in sat mieng va day ly. 70% chua khoang cach tren duoi.
+                    100% in sát miệng và đáy ly. 70% chừa khoảng cách trên dưới.
                   </p>
                 </div>
               </div>
@@ -306,7 +319,9 @@ export function CupDesignerPage() {
                 </div>
                 <div className="flex justify-between">
                   <span>Layers</span>
-                  <span className="font-black text-[#3C2F2F]">{layers.length}</span>
+                  <span className="font-black text-[#3C2F2F]">
+                    {layers.length}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Texture</span>
@@ -329,7 +344,7 @@ export function CupDesignerPage() {
             onTextureChange={handleTextureChange}
           />
 
-          <aside className="space-y-4">
+          <aside className="space-y-4 lg:col-start-2 2xl:col-start-auto">
             <CupPreview3D
               size={size}
               style={style}
@@ -342,12 +357,15 @@ export function CupDesignerPage() {
             <section className="rounded-lg border border-[#E6DFD9] bg-white p-4">
               <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-[#5C3D2E]">
                 <PackagePlus className="size-4" />
-                Dat in
+                Đặt in
               </div>
               <div className="space-y-3">
                 <div>
-                  <Label htmlFor="quantity" className="text-[11px] font-bold text-[#5C3D2E]">
-                    So luong
+                  <Label
+                    htmlFor="quantity"
+                    className="text-[11px] font-bold text-[#5C3D2E]"
+                  >
+                    Số lượng
                   </Label>
                   <Input
                     id="quantity"
@@ -362,14 +380,16 @@ export function CupDesignerPage() {
                 </div>
                 <div className="rounded-lg border border-[#E6DFD9] bg-[#FAF8F6] p-3 text-sm">
                   <div className="flex justify-between text-[#7A6F68]">
-                    <span>Don gia</span>
+                    <span>Đơn giá</span>
                     <span className="font-black text-[#3C2F2F]">
                       {formatCurrency(price)}
                     </span>
                   </div>
                   <div className="mt-2 flex justify-between text-[#5C3D2E]">
-                    <span className="font-bold">Tam tinh</span>
-                    <span className="font-black">{formatCurrency(subtotal)}</span>
+                    <span className="font-bold">Tạm tính</span>
+                    <span className="font-black">
+                      {formatCurrency(subtotal)}
+                    </span>
                   </div>
                 </div>
                 <Button
@@ -377,10 +397,11 @@ export function CupDesignerPage() {
                   className="h-11 w-full rounded-md bg-[#5C3D2E] font-black text-white hover:bg-[#4A2E22]"
                   onClick={addToCart}
                 >
-                  Them vao gio custom print
+                  Thêm vào giỏ custom print
                 </Button>
                 <p className="text-[10px] font-medium text-[#7A6F68]">
-                  Don ly in khong ap dung COD. File 2D snapshot se di theo checkout.
+                  Đơn ly in không áp dụng COD. File 2D snapshot sẽ đi theo
+                  checkout.
                 </p>
               </div>
             </section>
