@@ -218,15 +218,15 @@ export function CupPreview3D(props: CupPreview3DProps) {
 
   if (!webglSupported) {
     return (
-      <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-[#E6DFD9] bg-[#F2ECE5] p-6">
+      <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-border bg-[#E8F4EE] p-6">
         {props.artworkTextureUrl ? (
           <img
             src={props.artworkTextureUrl}
             alt="Bản in xem trước"
-            className="max-h-[300px] max-w-full rounded-md border border-[#E6DFD9] bg-white object-contain p-4"
+            className="max-h-[300px] max-w-full rounded-md border border-border bg-white object-contain p-4"
           />
         ) : (
-          <p className="text-sm font-semibold text-[#7A6F68]">
+          <p className="text-sm font-semibold text-muted-foreground">
             Trình duyệt không hỗ trợ WebGL.
           </p>
         )}
@@ -235,7 +235,7 @@ export function CupPreview3D(props: CupPreview3DProps) {
   }
 
   return (
-    <section className="relative h-[520px] overflow-hidden rounded-lg border border-[#E6DFD9] bg-[radial-gradient(circle_at_50%_25%,#FFFFFF_0%,#E9DFD3_42%,#CFC3B8_100%)]">
+    <section className="relative h-[520px] overflow-hidden rounded-lg border border-border bg-[radial-gradient(circle_at_50%_25%,#FFFFFF_0%,#E8F4EE_50%,#B8DCCB_100%)]">
       <Canvas
         camera={{ position: [0, 0.55, 5.8], fov: 38 }}
         dpr={[1, 2]}
@@ -243,7 +243,7 @@ export function CupPreview3D(props: CupPreview3DProps) {
       >
         <ambientLight intensity={0.72} />
         <directionalLight position={[3, 4, 5]} intensity={2.2} />
-        <pointLight position={[-3, 2, 3]} intensity={0.7} color="#F2D8C2" />
+        <pointLight position={[-3, 2, 3]} intensity={0.7} color="#DEF3E9" />
         <Suspense fallback={null}>
           <CupModel {...props} />
           <Environment preset="studio" />

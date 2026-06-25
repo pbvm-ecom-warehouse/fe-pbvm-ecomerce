@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Quicksand } from "next/font/google";
 
 import { ScrollToTop } from "@/components/layout/scroll-to-top";
 import { StoreFooter } from "@/components/layout/store-footer";
@@ -6,6 +7,13 @@ import { StoreHeader } from "@/components/layout/store-header";
 import { AppProviders } from "@/providers/app-providers";
 
 import "./globals.css";
+
+const quicksand = Quicksand({
+  subsets: ["vietnamese", "latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-quicksand",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "PBVM Shop | Bao bì và nguyên liệu B2B",
@@ -19,8 +27,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi" suppressHydrationWarning>
-      <body className="min-h-screen bg-background text-foreground antialiased flex flex-col justify-between">
+    <html lang="vi" suppressHydrationWarning className={quicksand.variable}>
+      <body className={`${quicksand.className} min-h-screen bg-background text-foreground antialiased flex flex-col justify-between`}>
         <AppProviders>
           <ScrollToTop />
           <div className="flex min-h-screen flex-col">
@@ -33,3 +41,4 @@ export default function RootLayout({
     </html>
   );
 }
+

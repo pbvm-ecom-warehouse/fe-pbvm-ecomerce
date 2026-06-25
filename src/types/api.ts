@@ -8,6 +8,13 @@ export type CupStyle = "straight" | "u_shape" | "heart" | "mug";
 
 export type CupMaterialType = "clear" | "frosted" | "paper" | "glass" | "metal";
 
+export type CupDesignConfig = {
+  size: CupSize;
+  style: CupStyle;
+  materialType: CupMaterialType;
+  cupColor: string;
+};
+
 export type DesignLayerBase = {
   id: string;
   x: number;
@@ -81,7 +88,6 @@ export type CatalogProduct = {
   stockSnapshot: number;
   imageUrl: string;
   updatedAt: string;
-  fulfillmentType?: FulfillmentType;
 };
 
 export type CartItem = {

@@ -6,13 +6,13 @@ export function calculateCartTotals(items: CartItem[]) {
     0,
   );
   const shippingFee = subtotal >= 5_000_000 || subtotal === 0 ? 0 : 45_000;
-  const tax = Math.round(subtotal * 0.08);
+  const tax = 0;
 
   return {
     subtotal,
     shippingFee,
     tax,
-    grandTotal: subtotal + shippingFee + tax,
+    grandTotal: subtotal + shippingFee,
   };
 }
 

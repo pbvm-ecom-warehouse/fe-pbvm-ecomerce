@@ -1,7 +1,7 @@
 import { publicApiFetch } from "@/lib/public-api";
 import type { ApiListResponse, CatalogProduct } from "@/types/api";
 
-const fallbackCatalogProducts: CatalogProduct[] = [
+export const fallbackCatalogProducts: CatalogProduct[] = [
   {
     id: "p1",
     productRefId: "REF-TRA-01",

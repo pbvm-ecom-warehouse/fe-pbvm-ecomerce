@@ -19,7 +19,7 @@ const categoryTiles = [
     title: "Ly nhựa đã in",
     description: "Mẫu in sẵn cho chuỗi F&B, đóng thùng và xuất kho nhanh.",
     href: "/products?category=printed_cup",
-    image: "/images/hero-bg.png",
+    image: "/images/pbvm-hero-clean.png",
   },
   {
     title: "Nguyên liệu trà sữa",
@@ -31,7 +31,7 @@ const categoryTiles = [
     title: "Ly trắng in riêng",
     description: "Thiết kế logo, kiểm tra 3D và gửi file in theo đơn.",
     href: "/design-cup",
-    image: "/images/hero-bg.png",
+    image: "/images/pbvm-hero-clean.png",
   },
 ];
 
@@ -47,10 +47,10 @@ export function StorefrontHome({
   featuredProducts: CatalogProduct[];
 }) {
   return (
-    <main className="flex min-h-screen flex-col bg-[#FAF8F6] text-[#1C1917]">
+    <main className="flex min-h-screen flex-col bg-background text-foreground">
       <section className="relative isolate flex min-h-[520px] items-center overflow-hidden">
         <Image
-          src="/images/hero-bg.png"
+          src="/images/pbvm-hero-clean.png"
           alt="Ly in thương hiệu và nguyên liệu đóng gói PBVM"
           fill
           priority
@@ -60,7 +60,7 @@ export function StorefrontHome({
         <div className="relative z-10 mx-auto grid w-full max-w-7xl gap-8 px-4 py-14 lg:grid-cols-[minmax(0,1fr)_360px] lg:px-8">
           <div className="max-w-3xl text-white">
             <p className="text-xs font-bold uppercase tracking-[0.28em] text-[#D7C4B7]">
-              Bao bì và nguyên liệu B2B
+              Bao bì và nguyên liệu
             </p>
             <h1 className="mt-4 text-4xl font-black leading-tight tracking-normal md:text-6xl">
               Đặt hàng nhanh cho quán, nâng tầm thương hiệu trà sữa.

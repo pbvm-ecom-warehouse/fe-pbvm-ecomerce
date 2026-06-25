@@ -110,7 +110,7 @@ export function ArtworkEditor2D({
   onTextureChange,
 }: ArtworkEditor2DProps) {
   const [tool, setTool] = useState<ToolMode>("select");
-  const [brushColor, setBrushColor] = useState("#5C3D2E");
+  const [brushColor, setBrushColor] = useState("#3BB77E");
   const [brushSize, setBrushSize] = useState<(typeof BRUSH_SIZES)[number]>(5);
   const [activeStroke, setActiveStroke] = useState<number[] | null>(null);
   const [textValue, setTextValue] = useState("TEA HOUSE");
@@ -354,13 +354,13 @@ export function ArtworkEditor2D({
   }
 
   return (
-    <section className="rounded-lg border border-[#E6DFD9] bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E6DFD9] px-4 py-3">
+    <section className="rounded-lg border border-border bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
-          <h2 className="text-sm font-black uppercase text-[#5C3D2E]">
+          <h2 className="text-sm font-black uppercase text-[#253D4E]">
             2D print artboard
           </h2>
-          <p className="text-[11px] font-medium text-[#7A6F68]">
+          <p className="text-[11px] font-medium text-muted-foreground">
             {dimensions.width} x {dimensions.printArea.height}px content
           </p>
         </div>
@@ -410,7 +410,7 @@ export function ArtworkEditor2D({
       </div>
 
       <div className="grid gap-4 p-4 min-[2200px]:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="overflow-auto rounded-lg border border-[#E6DFD9] bg-[linear-gradient(#eee_1px,transparent_1px),linear-gradient(90deg,#eee_1px,transparent_1px)] bg-[size:24px_24px] p-4">
+        <div className="overflow-auto rounded-lg border border-border bg-[linear-gradient(#eee_1px,transparent_1px),linear-gradient(90deg,#eee_1px,transparent_1px)] bg-[size:24px_24px] p-4">
           <Stage
             ref={stageRef}
             width={dimensions.width}
@@ -441,7 +441,7 @@ export function ArtworkEditor2D({
                 height={dimensions.printArea.height}
                 cornerRadius={14}
                 fill="rgba(255,255,255,0.55)"
-                stroke="#5C3D2E"
+                stroke="#253D4E"
                 strokeWidth={2}
                 dash={[8, 7]}
               />
@@ -449,7 +449,7 @@ export function ArtworkEditor2D({
                 x={dimensions.printArea.x + 16}
                 y={dimensions.printArea.y + 16}
                 text="PRINT AREA"
-                fill="#5C3D2E"
+                fill="#253D4E"
                 fontSize={14}
                 fontStyle="bold"
               />
@@ -562,30 +562,30 @@ export function ArtworkEditor2D({
                 ref={transformerRef}
                 rotateEnabled
                 anchorSize={8}
-                borderStroke="#5C3D2E"
+                borderStroke="#3BB77E"
                 anchorFill="#FFFFFF"
-                anchorStroke="#5C3D2E"
+                anchorStroke="#3BB77E"
               />
             </Layer>
           </Stage>
         </div>
 
-        <aside className="overflow-hidden rounded-lg border border-[#E6DFD9] bg-white">
-          <div className="flex items-center justify-between border-b border-[#E6DFD9] bg-[#FAF8F6] px-3 py-2">
-            <h3 className="text-xs font-black uppercase text-[#5C3D2E]">
+        <aside className="overflow-hidden rounded-lg border border-border bg-white">
+          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
+            <h3 className="text-xs font-black uppercase text-[#253D4E]">
               Công cụ thiết kế
             </h3>
-            <span className="rounded-md border border-[#E6DFD9] bg-white px-2 py-1 text-[10px] font-black text-[#5C3D2E]">
+            <span className="rounded-md border border-border bg-white px-2 py-1 text-[10px] font-black text-primary">
               {layers.length} layer
             </span>
           </div>
 
           <div className="grid xl:grid-cols-[230px_minmax(0,1fr)_minmax(0,1fr)_146px]">
-            <div className="border-b border-[#E6DFD9] p-3 xl:border-r xl:border-b-0">
+            <div className="border-b border-border p-3 xl:border-r xl:border-b-0">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <Paintbrush className="size-3.5 text-[#5C3D2E]" />
-                  <Label className="text-[11px] font-bold text-[#5C3D2E]">
+                  <Paintbrush className="size-3.5 text-primary" />
+                  <Label className="text-[11px] font-bold text-[#253D4E]">
                     Vẽ tay
                   </Label>
                 </div>
@@ -595,7 +595,7 @@ export function ArtworkEditor2D({
                   aria-label="Màu nét vẽ"
                   value={brushColor}
                   onChange={(event) => setBrushColor(event.target.value)}
-                  className="h-7 w-12 rounded-md border border-[#E6DFD9] bg-white p-1"
+                  className="h-7 w-12 rounded-md border border-border bg-white p-1"
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -607,8 +607,8 @@ export function ArtworkEditor2D({
                     className={cn(
                       "h-8 w-9 rounded-md border text-xs font-bold transition",
                       brushSize === sizeOption
-                        ? "border-[#5C3D2E] bg-[#5C3D2E] text-white"
-                        : "border-[#E6DFD9] bg-[#FAF8F6] text-[#5C3D2E] hover:bg-[#F1ECE7]",
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
                     )}
                     onClick={() => setBrushSize(sizeOption)}
                   >
@@ -618,12 +618,12 @@ export function ArtworkEditor2D({
               </div>
             </div>
 
-            <div className="min-w-0 border-b border-[#E6DFD9] p-3 xl:border-r xl:border-b-0">
+            <div className="min-w-0 border-b border-border p-3 xl:border-r xl:border-b-0">
               <div className="mb-2 flex items-center gap-2">
-                <Type className="size-3.5 text-[#5C3D2E]" />
+                <Type className="size-3.5 text-primary" />
                 <Label
                   htmlFor="design-text"
-                  className="text-[11px] font-bold text-[#5C3D2E]"
+                  className="text-[11px] font-bold text-[#253D4E]"
                 >
                   Text/logo
                 </Label>
@@ -633,7 +633,7 @@ export function ArtworkEditor2D({
                   id="design-text"
                   value={textValue}
                   onChange={(event) => setTextValue(event.target.value)}
-                  className="h-9 min-w-0 rounded-md bg-[#FAF8F6] text-xs"
+                  className="h-9 min-w-0 rounded-md bg-muted/40 text-xs"
                 />
                 <Button
                   type="button"
@@ -648,12 +648,12 @@ export function ArtworkEditor2D({
               </div>
             </div>
 
-            <div className="min-w-0 border-b border-[#E6DFD9] p-3 xl:border-r xl:border-b-0">
+            <div className="min-w-0 border-b border-border p-3 xl:border-r xl:border-b-0">
               <div className="mb-2 flex items-center gap-2">
-                <Sparkles className="size-3.5 text-[#5C3D2E]" />
+                <Sparkles className="size-3.5 text-primary" />
                 <Label
                   htmlFor="ai-prompt"
-                  className="text-[11px] font-bold text-[#5C3D2E]"
+                  className="text-[11px] font-bold text-[#253D4E]"
                 >
                   Generate hình
                 </Label>
@@ -663,7 +663,7 @@ export function ArtworkEditor2D({
                   id="ai-prompt"
                   value={aiPrompt}
                   onChange={(event) => setAiPrompt(event.target.value)}
-                  className="h-9 min-w-0 rounded-md bg-[#FAF8F6] text-xs"
+                  className="h-9 min-w-0 rounded-md bg-muted/40 text-xs"
                 />
                 <Button
                   type="button"
@@ -679,7 +679,7 @@ export function ArtworkEditor2D({
               </div>
             </div>
 
-            <div className="grid gap-2 bg-[#FAF8F6] p-3">
+            <div className="grid gap-2 bg-muted/30 p-3">
               <Button
                 type="button"
                 variant="outline"

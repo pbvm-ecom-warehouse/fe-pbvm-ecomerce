@@ -42,7 +42,7 @@ const ArtworkEditor2D = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="min-h-[460px] rounded-lg border border-[#E6DFD9] bg-white" />
+      <div className="min-h-[460px] rounded-lg border border-border bg-white" />
     ),
   },
 );
@@ -52,7 +52,7 @@ const CupPreview3D = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="min-h-[520px] rounded-lg border border-[#E6DFD9] bg-[#E9DFD3]" />
+      <div className="min-h-[520px] rounded-lg border border-border bg-muted/30" />
     ),
   },
 );
@@ -145,7 +145,7 @@ export function CupDesignerPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#FAF8F6] px-4 py-6 text-[#1C1917] lg:px-8">
+    <main className="min-h-screen bg-background px-4 py-6 text-foreground lg:px-8">
       <div className="mx-auto flex max-w-[1500px] flex-col gap-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -160,7 +160,7 @@ export function CupDesignerPage() {
               </Link>
             </Button>
             <div>
-              <h1 className="text-xl font-black uppercase tracking-normal text-[#3C2F2F]">
+              <h1 className="text-xl font-black uppercase tracking-normal text-[#253D4E]">
                 Design-cup studio
               </h1>
               <p className="text-xs font-medium text-[#7A6F68]">
@@ -168,13 +168,13 @@ export function CupDesignerPage() {
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold text-[#5C3D2E]">
-            <span className="inline-flex items-center gap-1 rounded-md border border-[#E6DFD9] bg-white px-3 py-2">
-              <BadgeCheck className="size-3.5" />
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold text-[#253D4E]">
+            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-3 py-2">
+              <BadgeCheck className="size-3.5 text-primary" />
               CUSTOM_PRINT
             </span>
-            <span className="inline-flex items-center gap-1 rounded-md border border-[#E6DFD9] bg-white px-3 py-2">
-              <CreditCard className="size-3.5" />
+            <span className="inline-flex items-center gap-1 rounded-md border border-border bg-white px-3 py-2">
+              <CreditCard className="size-3.5 text-primary" />
               Online only
             </span>
           </div>
@@ -182,15 +182,15 @@ export function CupDesignerPage() {
 
         <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[280px_minmax(0,1fr)_340px]">
           <aside className="space-y-4">
-            <section className="rounded-lg border border-[#E6DFD9] bg-white p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-[#5C3D2E]">
+            <section className="rounded-lg border border-border bg-white p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-[#253D4E]">
                 <Ruler className="size-4" />
                 Cấu hình ly
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <Label className="text-[11px] font-bold text-[#5C3D2E]">
+                  <Label className="text-[11px] font-bold text-[#253D4E]">
                     Size
                   </Label>
                   <div className="mt-2 grid grid-cols-4 gap-2">
@@ -201,8 +201,8 @@ export function CupDesignerPage() {
                         className={cn(
                           "h-9 rounded-md border text-xs font-black transition",
                           size === sizeOption
-                            ? "border-[#5C3D2E] bg-[#5C3D2E] text-white"
-                            : "border-[#E6DFD9] bg-[#FAF8F6] text-[#5C3D2E]",
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
                         )}
                         onClick={() => handleSizeChange(sizeOption)}
                       >
@@ -213,7 +213,7 @@ export function CupDesignerPage() {
                 </div>
 
                 <div>
-                  <Label className="text-[11px] font-bold text-[#5C3D2E]">
+                  <Label className="text-[11px] font-bold text-[#253D4E]">
                     Kiểu dáng
                   </Label>
                   <div className="mt-2 grid grid-cols-2 gap-2">
@@ -224,8 +224,8 @@ export function CupDesignerPage() {
                         className={cn(
                           "h-9 rounded-md border px-2 text-xs font-bold transition",
                           style === styleOption
-                            ? "border-[#5C3D2E] bg-[#5C3D2E] text-white"
-                            : "border-[#E6DFD9] bg-[#FAF8F6] text-[#5C3D2E]",
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
                         )}
                         onClick={() => setStyle(styleOption)}
                       >
@@ -236,7 +236,7 @@ export function CupDesignerPage() {
                 </div>
 
                 <div>
-                  <Label className="text-[11px] font-bold text-[#5C3D2E]">
+                  <Label className="text-[11px] font-bold text-[#253D4E]">
                     Chất liệu
                   </Label>
                   <div className="mt-2 grid grid-cols-2 gap-2">
@@ -247,8 +247,8 @@ export function CupDesignerPage() {
                         className={cn(
                           "h-9 rounded-md border px-2 text-xs font-bold transition",
                           materialType === materialOption
-                            ? "border-[#5C3D2E] bg-[#5C3D2E] text-white"
-                            : "border-[#E6DFD9] bg-[#FAF8F6] text-[#5C3D2E]",
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
                         )}
                         onClick={() => setMaterialType(materialOption)}
                       >
@@ -261,7 +261,7 @@ export function CupDesignerPage() {
                 <div>
                   <Label
                     htmlFor="cup-color"
-                    className="text-[11px] font-bold text-[#5C3D2E]"
+                    className="text-[11px] font-bold text-[#253D4E]"
                   >
                     Màu ly
                   </Label>
@@ -270,7 +270,7 @@ export function CupDesignerPage() {
                     type="color"
                     value={cupColor}
                     onChange={(event) => setCupColor(event.target.value)}
-                    className="mt-2 h-10 w-full rounded-md border border-[#E6DFD9] bg-white p-1"
+                    className="mt-2 h-10 w-full rounded-md border border-border bg-white p-1"
                   />
                 </div>
 
@@ -278,11 +278,11 @@ export function CupDesignerPage() {
                   <div className="flex items-center justify-between">
                     <Label
                       htmlFor="print-height"
-                      className="text-[11px] font-bold text-[#5C3D2E]"
+                      className="text-[11px] font-bold text-[#253D4E]"
                     >
                       Chiều cao vùng in
                     </Label>
-                    <span className="text-xs font-black text-[#5C3D2E]">
+                    <span className="text-xs font-black text-[#253D4E]">
                       {printHeightPercent}%
                     </span>
                   </div>
@@ -296,36 +296,36 @@ export function CupDesignerPage() {
                     onChange={(event) =>
                       setPrintHeightPercent(Number(event.target.value))
                     }
-                    className="mt-3 w-full accent-[#5C3D2E]"
+                    className="mt-3 w-full accent-primary"
                   />
-                  <p className="mt-2 text-[10px] font-medium text-[#7A6F68]">
+                  <p className="mt-2 text-[10px] font-medium text-muted-foreground">
                     100% in sát miệng và đáy ly. 70% chừa khoảng cách trên dưới.
                   </p>
                 </div>
               </div>
             </section>
 
-            <section className="rounded-lg border border-[#E6DFD9] bg-white p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-[#5C3D2E]">
+            <section className="rounded-lg border border-border bg-white p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-[#253D4E]">
                 <Layers3 className="size-4" />
                 Snapshot
               </div>
-              <div className="space-y-2 text-[11px] font-semibold text-[#7A6F68]">
+              <div className="space-y-2 text-[11px] font-semibold text-muted-foreground">
                 <div className="flex justify-between">
                   <span>Artboard</span>
-                  <span className="font-black text-[#3C2F2F]">
+                  <span className="font-black text-foreground">
                     {dimensions.width} x {dimensions.printArea.height}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Layers</span>
-                  <span className="font-black text-[#3C2F2F]">
+                  <span className="font-black text-foreground">
                     {layers.length}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Texture</span>
-                  <span className="font-black text-[#3C2F2F]">
+                  <span className="font-black text-foreground">
                     {artworkTextureUrl ? "ready" : "empty"}
                   </span>
                 </div>
@@ -354,8 +354,8 @@ export function CupDesignerPage() {
               printHeightPercent={printHeightPercent}
             />
 
-            <section className="rounded-lg border border-[#E6DFD9] bg-white p-4">
-              <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-[#5C3D2E]">
+            <section className="rounded-lg border border-border bg-white p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-[#253D4E]">
                 <PackagePlus className="size-4" />
                 Đặt in
               </div>
@@ -363,7 +363,7 @@ export function CupDesignerPage() {
                 <div>
                   <Label
                     htmlFor="quantity"
-                    className="text-[11px] font-bold text-[#5C3D2E]"
+                    className="text-[11px] font-bold text-[#253D4E]"
                   >
                     Số lượng
                   </Label>
@@ -378,14 +378,14 @@ export function CupDesignerPage() {
                     className="mt-2 h-10 rounded-md"
                   />
                 </div>
-                <div className="rounded-lg border border-[#E6DFD9] bg-[#FAF8F6] p-3 text-sm">
-                  <div className="flex justify-between text-[#7A6F68]">
+                <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
                     <span>Đơn giá</span>
-                    <span className="font-black text-[#3C2F2F]">
+                    <span className="font-black text-foreground">
                       {formatCurrency(price)}
                     </span>
                   </div>
-                  <div className="mt-2 flex justify-between text-[#5C3D2E]">
+                  <div className="mt-2 flex justify-between text-[#253D4E]">
                     <span className="font-bold">Tạm tính</span>
                     <span className="font-black">
                       {formatCurrency(subtotal)}
@@ -394,12 +394,12 @@ export function CupDesignerPage() {
                 </div>
                 <Button
                   type="button"
-                  className="h-11 w-full rounded-md bg-[#5C3D2E] font-black text-white hover:bg-[#4A2E22]"
+                  className="h-11 w-full rounded-md bg-primary font-black text-white hover:bg-[#2FA36E]"
                   onClick={addToCart}
                 >
                   Thêm vào giỏ custom print
                 </Button>
-                <p className="text-[10px] font-medium text-[#7A6F68]">
+                <p className="text-[10px] font-medium text-muted-foreground">
                   Đơn ly in không áp dụng COD. File 2D snapshot sẽ đi theo
                   checkout.
                 </p>

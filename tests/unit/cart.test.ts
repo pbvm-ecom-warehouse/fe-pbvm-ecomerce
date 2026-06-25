@@ -29,8 +29,8 @@ describe("cart utilities", () => {
     expect(calculateCartTotals(items)).toEqual({
       subtotal: 200_000,
       shippingFee: 45_000,
-      tax: 16_000,
-      grandTotal: 261_000,
+      tax: 0,
+      grandTotal: 245_000,
     });
   });
 });

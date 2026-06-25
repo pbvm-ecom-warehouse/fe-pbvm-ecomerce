@@ -43,7 +43,7 @@ import {
   checkoutSchema,
   type CheckoutInput,
 } from "@/features/checkout/schemas/checkout.schema";
-import { mapCartItemsToCheckoutItems } from "@/features/checkout/services/checkout.service";
+import { createOrder, mapCartItemsToCheckoutItems } from "@/features/checkout/services/checkout.service";
 
 export function CheckoutForm() {
   const items = useCartStore((state) => state.items);
@@ -51,13 +51,14 @@ export function CheckoutForm() {
   const totals = calculateCartTotals(items);
   const availablePaymentOptions = getPaymentOptionsForCart(items);
   const requiresOnlinePayment = cartRequiresOnlinePayment(items);
-  
+  const hasCustomPrint = items.some((item) => item.fulfillmentType === "CUSTOM_PRINT");
+
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [submittedOrderCode, setSubmittedOrderCode] = useState<string | null>(
-    null,
-  );
-  const [reqVAT, setReqVAT] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState<string>("VNPAY");
+  const [submittedOrder, setSubmittedOrder] = useState<{
+    orderId: string;
+    offline?: boolean;
+    paymentProvider: string;
+  } | null>(null);
 
   const {
     register,
@@ -70,52 +71,31 @@ export function CheckoutForm() {
     defaultValues: {
       customerType: "B2B",
       paymentProvider: "VNPAY",
-      reqVAT: false,
       shippingMethod: "TRUCK",
     },
   });
   const selectedPayment = useWatch({ control, name: "paymentProvider" });
-
-  const onSubmit = (data: CheckoutInput) => {
-    if (!isPaymentAllowedForCart(data.paymentProvider, items)) {
-      setSelectedPayment("VNPAY");
-      setValue("paymentProvider", "VNPAY");
-      toast.error("Đơn ly in cần thanh toán online trước khi sản xuất.");
-      return;
-    }
-
-    const payload = {
-      ...data,
-      items: mapCartItemsToCheckoutItems(items),
-    };
-
-    void payload;
-    const phoneSuffix = data.phone.replace(/\D/g, "").slice(-6).padStart(6, "0");
-    setSubmittedOrderCode(`PBVM-${phoneSuffix}`);
-    setIsSubmitted(true);
-    toast.success("Đặt hàng thành công!");
-  };
 
   const handleOrderFinish = () => {
     clearCart();
     window.location.href = "/";
   };
 
-  if (isSubmitted) {
+  if (isSubmitted && submittedOrder) {
     return (
-      <Card className="mx-auto max-w-xl rounded-2xl border-[#E6DFD9] bg-white p-0 text-center shadow-sm">
+      <Card className="mx-auto max-w-xl rounded-2xl border-border bg-white p-0 text-center shadow-sm">
         <CardContent className="flex flex-col items-center gap-5 p-8">
           <div className="flex size-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
             <CheckCircle2 className="size-9" />
           </div>
           <div>
-            <h2 className="text-2xl font-black tracking-normal">
-              Đã tạo đơn hàng
+            <h2 className="text-2xl font-black tracking-normal text-foreground">
+              Đặt Hàng Thành Công!
             </h2>
-            <p className="mt-2 text-sm leading-6 text-[#7A6F68]">
-              Mã đơn:{" "}
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Cảm ơn bạn đã lựa chọn PBVM. Mã đơn hàng của bạn là{" "}
               <span className="font-black text-primary">
-                {submittedOrder.orderId}
+                #{submittedOrder.orderId}
               </span>
               .{" "}
               {submittedOrder.offline
@@ -123,80 +103,72 @@ export function CheckoutForm() {
                 : "Đơn đã được hệ thống tiếp nhận."}
             </p>
           </div>
-          <div className="w-full rounded-xl border border-[#E6DFD9] bg-[#FAF8F6] p-4 text-sm">
-            <div className="flex justify-between gap-4">
-              <span className="text-[#7A6F68]">Thanh toán</span>
-              <span className="font-black text-[#1C1917]">
-                {submittedOrder.paymentProvider}
-              </span>
-            </div>
-            
-            <div>
-              <h2 className="text-2xl font-black text-[#1C1917]">Đặt Hàng Thành Công!</h2>
-              <p className="text-xs text-[#7A6F68] mt-1.5 leading-relaxed">
-                Cảm ơn bạn đã lựa chọn PBVM. Mã đơn hàng của bạn là <span className="font-bold text-primary">#{submittedOrderCode ?? "PBVM-000000"}</span>.
+
+          {submittedOrder.paymentProvider === "COD" ? (
+            <div className="w-full rounded-2xl bg-muted/40 p-4 text-left border border-border text-xs space-y-1.5">
+              <div className="font-bold text-[#253D4E] uppercase tracking-wider text-[10px] mb-1">
+                Phương thức thanh toán: COD
+              </div>
+              <p className="text-muted-foreground leading-relaxed">
+                Bạn sẽ thanh toán số tiền tổng cộng bằng tiền mặt cho nhân viên giao hàng chành xe hoặc bưu tá khi nhận sản phẩm.
               </p>
             </div>
-
-            {selectedPayment === "COD" ? (
-              <div className="w-full rounded-2xl bg-[#FAF8F6] p-4 text-left border border-[#E6DFD9]/60 text-xs space-y-1.5">
-                <div className="font-bold text-[#5C3D2E] uppercase tracking-wider text-[10px] mb-1">Phương thức thanh toán: COD</div>
-                <p className="text-[#7A6F68] leading-relaxed">Bạn sẽ thanh toán số tiền tổng cộng bằng tiền mặt cho nhân viên giao hàng chành xe hoặc bưu tá khi nhận sản phẩm.</p>
+          ) : (
+            <div className="w-full rounded-2xl bg-muted/40 p-5 text-left border border-border text-xs space-y-3">
+              <div className="font-bold text-[#253D4E] uppercase tracking-wider text-[10px] flex items-center gap-1.5 border-b border-border pb-2">
+                <Landmark className="size-4 text-primary" /> Hướng dẫn chuyển khoản ngân hàng
               </div>
-            ) : (
-              <div className="w-full rounded-2xl bg-[#FAF8F6] p-5 text-left border border-[#E6DFD9]/60 text-xs space-y-3">
-                <div className="font-bold text-[#5C3D2E] uppercase tracking-wider text-[10px] flex items-center gap-1.5 border-b border-[#E6DFD9] pb-2">
-                  <Landmark className="size-4" /> Hướng dẫn chuyển khoản ngân hàng
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <span className="text-[#7A6F68]">Ngân hàng:</span>
-                  <span className="col-span-2 font-bold text-[#1C1917]">Techcombank (TCB)</span>
-                  
-                  <span className="text-[#7A6F68]">Số tài khoản:</span>
-                  <span className="col-span-2 font-bold text-primary text-sm">19035678901234</span>
-                  
-                  <span className="text-[#7A6F68]">Chủ tài khoản:</span>
-                  <span className="col-span-2 font-bold text-[#1C1917]">CONG TY CP IN AN BAO BI PBVM</span>
-                  
-                  <span className="text-[#7A6F68]">Số tiền:</span>
-                  <span className="col-span-2 font-black text-primary text-sm">{formatCurrency(totals.grandTotal)}</span>
-                  
-                  <span className="text-[#7A6F68]">Nội dung CK:</span>
-                  <span className="col-span-2 font-mono font-bold bg-[#EADEC9]/30 text-primary px-2 py-0.5 rounded text-[10px] w-fit">
-                    {submittedOrderCode ?? "PBVM-000000"}
-                  </span>
-                </div>
-                <p className="text-[10px] text-[#7A6F68] leading-relaxed italic border-t border-[#E6DFD9]/60 pt-2">
-                  * Vui lòng chuyển đúng số tiền và nội dung chuyển khoản để hệ thống tự động xác nhận đơn hàng trong 1-3 phút.
-                </p>
-              </div>
-            )}
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Ngân hàng:</span>
+                <span className="col-span-2 font-bold text-foreground">Techcombank (TCB)</span>
 
-            <Button onClick={handleOrderFinish} className="w-full bg-primary hover:bg-[#4A2E22] text-white py-6 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md">
-              Quay lại Trang chủ
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+                <span className="text-muted-foreground">Số tài khoản:</span>
+                <span className="col-span-2 font-bold text-primary text-sm">19035678901234</span>
+
+                <span className="text-muted-foreground">Chủ tài khoản:</span>
+                <span className="col-span-2 font-bold text-foreground">CONG TY CP IN AN BAO BI PBVM</span>
+
+                <span className="text-muted-foreground">Số tiền:</span>
+                <span className="col-span-2 font-black text-[#253D4E] text-sm">{formatCurrency(totals.grandTotal)}</span>
+
+                <span className="text-muted-foreground">Nội dung CK:</span>
+                <span className="col-span-2 font-mono font-bold bg-primary/10 text-primary px-2 py-0.5 rounded text-[10px] w-fit">
+                  {submittedOrder.orderId}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed italic border-t border-border pt-2">
+                * Vui lòng chuyển đúng số tiền và nội dung chuyển khoản để hệ thống tự động xác nhận đơn hàng trong 1-3 phút.
+              </p>
+            </div>
+          )}
+
+          <Button
+            onClick={handleOrderFinish}
+            className="w-full bg-primary hover:bg-[#2F9A68] text-white py-6 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md"
+          >
+            Quay lại Trang chủ
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
   if (items.length === 0) {
     return (
-      <Card className="mx-auto max-w-md rounded-2xl border-[#E6DFD9] bg-white p-0 text-center shadow-sm">
+      <Card className="mx-auto max-w-md rounded-2xl border-border bg-white p-0 text-center shadow-sm">
         <CardContent className="flex flex-col items-center gap-5 p-8">
-          <div className="flex size-16 items-center justify-center rounded-full bg-[#FAF8F6] text-[#7A6F68]">
+          <div className="flex size-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
             <ShoppingBag className="size-8" />
           </div>
           <div>
-            <h2 className="text-lg font-black">Giỏ hàng đang trống</h2>
-            <p className="mt-1 text-sm text-[#7A6F68]">
+            <h2 className="text-lg font-black text-foreground">Giỏ hàng đang trống</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
               Chọn sản phẩm trước khi tạo đơn checkout.
             </p>
           </div>
           <Button
             asChild
-            className="h-11 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#4A2E22]"
+            className="h-11 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#2FA36E]"
           >
             <Link href="/products">Khám phá catalog</Link>
           </Button>
@@ -209,19 +181,18 @@ export function CheckoutForm() {
     <form
       className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_430px]"
       onSubmit={handleSubmit(async (values) => {
-        if (!isPaymentProviderAllowed(values.paymentProvider, items)) {
-          toast.error("Đơn ly-in cần thanh toán online trước khi in");
+        if (!isPaymentAllowedForCart(values.paymentProvider, items)) {
+          toast.error("Đơn ly in cần thanh toán online trước khi sản xuất.");
           return;
         }
 
-        setSubmitting(true);
         try {
           const order = await createOrder({
             ...values,
             items: items.map((item) => ({
               productId: item.productId,
               quantity: item.quantity,
-              isPrintItem: item.isPrintItem,
+              fulfillmentType: item.fulfillmentType,
               designId: item.designId,
               designFile: item.designFile,
             })),
@@ -229,23 +200,23 @@ export function CheckoutForm() {
           setSubmittedOrder({
             orderId: order.orderId,
             offline: order.offline,
-            total: totals.grandTotal,
             paymentProvider: values.paymentProvider,
           });
+          setIsSubmitted(true);
           clearCart();
           toast.success(
             order.offline
               ? "Đã lưu đơn tạm trong chế độ fallback"
               : "Đã tạo đơn hàng",
           );
-        } finally {
-          setSubmitting(false);
+        } catch (error) {
+          toast.error("Có lỗi xảy ra khi tạo đơn hàng.");
         }
       })}
     >
       <div className="space-y-5">
-        <Card className="overflow-hidden rounded-2xl border-[#E6DFD9] bg-white p-0 shadow-sm">
-          <CardHeader className="border-b border-[#E6DFD9]/70 bg-[#FAF8F6] px-6 py-4">
+        <Card className="overflow-hidden rounded-2xl border-border bg-white p-0 shadow-sm">
+          <CardHeader className="border-b border-border/70 bg-muted/40 px-6 py-4">
             <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.14em] text-primary">
               <Truck className="size-4" />
               Thông tin giao nhận
@@ -253,7 +224,7 @@ export function CheckoutForm() {
           </CardHeader>
           <CardContent className="grid gap-4 p-6">
             {hasCustomPrint ? (
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm leading-6 text-[#7A6F68]">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm leading-6 text-muted-foreground">
                 Đơn có ly-in custom nên COD bị ẩn. Mẫu thiết kế sẽ đi kèm từng
                 sản phẩm in riêng.
               </div>
@@ -269,7 +240,7 @@ export function CheckoutForm() {
               <Input
                 id="customerName"
                 placeholder="Nguyễn Văn A"
-                className="h-11 rounded-xl border-[#E6DFD9] bg-white"
+                className="h-11 rounded-xl border-border bg-white"
                 {...register("customerName")}
               />
               {errors.customerName ? (
@@ -294,7 +265,7 @@ export function CheckoutForm() {
                     )
                   }
                 >
-                  <SelectTrigger className="h-11 w-full rounded-xl border-[#E6DFD9] bg-white">
+                  <SelectTrigger className="h-11 w-full rounded-xl border-border bg-white">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -313,7 +284,7 @@ export function CheckoutForm() {
                 <Input
                   id="phone"
                   placeholder="0900000000"
-                  className="h-11 rounded-xl border-[#E6DFD9] bg-white"
+                  className="h-11 rounded-xl border-border bg-white"
                   {...register("phone")}
                 />
                 {errors.phone ? (
@@ -334,7 +305,7 @@ export function CheckoutForm() {
               <Input
                 id="address"
                 placeholder="Số nhà, đường, phường/xã, quận/huyện, tỉnh/thành"
-                className="h-11 rounded-xl border-[#E6DFD9] bg-white"
+                className="h-11 rounded-xl border-border bg-white"
                 {...register("address")}
               />
               {errors.address ? (
@@ -351,15 +322,15 @@ export function CheckoutForm() {
               <Textarea
                 id="note"
                 placeholder="Giao giờ hành chính, gọi trước khi giao..."
-                className="min-h-24 rounded-xl border-[#E6DFD9] bg-white text-sm"
+                className="min-h-24 rounded-xl border-border bg-white text-sm"
                 {...register("note")}
               />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden rounded-2xl border-[#E6DFD9] bg-white p-0 shadow-sm">
-          <CardHeader className="border-b border-[#E6DFD9]/70 bg-[#FAF8F6] px-6 py-4">
+        <Card className="overflow-hidden rounded-2xl border-border bg-white p-0 shadow-sm">
+          <CardHeader className="border-b border-border/70 bg-muted/40 px-6 py-4">
             <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.14em] text-primary">
               <CreditCard className="size-4" />
               Thanh toán
@@ -367,7 +338,7 @@ export function CheckoutForm() {
           </CardHeader>
           <CardContent className="p-6">
             {requiresOnlinePayment && (
-              <div className="mb-4 rounded-xl border border-primary/20 bg-[#FAF8F6] p-3 text-[11px] font-semibold text-[#5C3D2E]">
+              <div className="mb-4 rounded-xl border border-primary/20 bg-muted/40 p-3 text-[11px] font-semibold text-[#253D4E]">
                 Giỏ có ly in CUSTOM_PRINT, cần thanh toán online trước khi xưởng mở lệnh in.
               </div>
             )}
@@ -381,14 +352,12 @@ export function CheckoutForm() {
                     key={option.value}
                     type="button"
                     onClick={() => {
-                      setSelectedPayment(option.value);
                       setValue("paymentProvider", option.value);
                     }}
-                    className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${
-                      selected
-                        ? "border-primary bg-[#FAF8F6] text-primary"
-                        : "border-[#E6DFD9] bg-white text-[#7A6F68] hover:border-[#D2B48C]"
-                    }`}
+                    className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${selected
+                        ? "border-primary bg-muted/40 text-primary"
+                        : "border-border bg-white text-muted-foreground hover:border-primary"
+                      }`}
                   >
                     <div className={`size-9 rounded-lg flex items-center justify-center shrink-0 ${isCod ? "bg-amber-50" : "bg-sky-50"}`}>
                       {isCod ? (
@@ -398,10 +367,10 @@ export function CheckoutForm() {
                       )}
                     </div>
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-xs font-bold text-[#1C1917]">
+                      <span className="text-xs font-bold text-foreground">
                         {isCod ? "Giao hàng thu tiền (COD)" : option.label}
                       </span>
-                      <span className="text-[9px] text-[#7A6F68]">
+                      <span className="text-[9px] text-muted-foreground">
                         {isCod
                           ? "Thanh toán mặt cho nhà xe chành xe khi nhận"
                           : "Thanh toán online hoặc quét mã QR nhanh"}
@@ -416,8 +385,8 @@ export function CheckoutForm() {
       </div>
 
       <aside className="space-y-4 lg:sticky lg:top-36">
-        <Card className="overflow-hidden rounded-2xl border-[#E6DFD9] bg-white p-0 shadow-sm">
-          <CardHeader className="border-b border-[#E6DFD9]/70 bg-[#FAF8F6] px-6 py-4">
+        <Card className="overflow-hidden rounded-2xl border-border bg-white p-0 shadow-sm">
+          <CardHeader className="border-b border-border/70 bg-muted/40 px-6 py-4">
             <CardTitle className="flex items-center justify-between gap-4 text-xs font-black uppercase tracking-[0.14em] text-primary">
               <span>Đơn hàng ({items.length})</span>
               <Link
@@ -430,74 +399,68 @@ export function CheckoutForm() {
           </CardHeader>
           <CardContent className="p-6 flex flex-col gap-4">
             {/* List of items */}
-            <div className="divide-y divide-[#E6DFD9]/40 max-h-[300px] overflow-y-auto pr-1">
+            <div className="divide-y divide-border max-h-[300px] overflow-y-auto pr-1">
               {items.map((item) => (
                 <div key={item.cartItemId} className="flex gap-3 py-3 items-start first:pt-0 last:pb-0">
                   {/* Thumbnail */}
-                  <div className="relative size-12 rounded-lg border border-[#E6DFD9]/60 bg-[#FAF8F6] shrink-0 overflow-hidden flex items-center justify-center">
+                  <div className="relative size-12 rounded-lg border border-border bg-muted/40 shrink-0 overflow-hidden flex items-center justify-center">
                     {item.imageUrl && item.imageUrl.startsWith("data:") ? (
                       <img src={item.imageUrl} alt={item.name} className="size-10 object-contain p-1" />
                     ) : item.imageUrl ? (
                       <Image src={item.imageUrl} alt={item.name} fill className="object-cover" />
                     ) : (
-                      <span className="text-[8px] text-[#7A6F68]">No img</span>
+                      <span className="text-[8px] text-muted-foreground">No img</span>
                     )}
                   </div>
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-[#1C1917] truncate leading-tight">{item.name}</h4>
+                    <h4 className="text-xs font-bold text-foreground truncate leading-tight">{item.name}</h4>
                     {item.fulfillmentType === "CUSTOM_PRINT" && item.designFile ? (
                       <p className="text-[9px] text-primary font-bold mt-0.5">
                         CUSTOM_PRINT • Size {item.designFile.artwork.cup.size} • {item.designFile.artwork.layers.length} layers
                       </p>
                     ) : (
-                      <p className="text-[9px] text-[#7A6F68] font-medium mt-0.5">Quy cách tiêu chuẩn • {item.unit}</p>
+                      <p className="text-[9px] text-muted-foreground font-medium mt-0.5">Quy cách tiêu chuẩn • {item.unit}</p>
                     )}
-                    <div className="flex items-center justify-between mt-1 text-[11px] text-[#7A6F68] font-medium">
+                    <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground font-medium">
                       <span>{formatCurrency(item.price)} x {item.quantity}</span>
-                      <span className="font-bold text-[#1C1917]">{formatCurrency(item.price * item.quantity)}</span>
+                      <span className="font-bold text-foreground">{formatCurrency(item.price * item.quantity)}</span>
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
 
-            <div className="space-y-2.5 border-t border-[#E6DFD9] pt-4 text-sm">
-              <div className="flex justify-between gap-4 text-[#7A6F68]">
+            <div className="space-y-2.5 border-t border-border pt-4 text-sm">
+              <div className="flex justify-between gap-4 text-muted-foreground">
                 <span>Tạm tính</span>
-                <span className="font-bold text-[#1C1917]">
+                <span className="font-bold text-foreground">
                   {formatCurrency(totals.subtotal)}
                 </span>
               </div>
-              <div className="flex justify-between gap-4 text-[#7A6F68]">
+              <div className="flex justify-between gap-4 text-muted-foreground">
                 <span>Giao hàng</span>
-                <span className="font-bold text-[#1C1917]">
+                <span className="font-bold text-foreground">
                   {totals.shippingFee === 0
                     ? "Miễn phí"
                     : formatCurrency(totals.shippingFee)}
                 </span>
               </div>
-              <div className="flex justify-between gap-4 text-[#7A6F68]">
-                <span>VAT dự kiến</span>
-                <span className="font-bold text-[#1C1917]">
-                  {formatCurrency(totals.tax)}
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4 border-t border-[#E6DFD9] pt-4">
-                <span className="font-black text-primary">Tổng</span>
-                <span className="text-xl font-black text-primary">
-                  {formatCurrency(totals.grandTotal)}
-                </span>
-              </div>
+               <div className="flex items-baseline justify-between gap-4 border-t border-border pt-4">
+                 <span className="font-black text-[#253D4E]">Tổng</span>
+                 <span className="text-xl font-black text-[#253D4E]">
+                   {formatCurrency(totals.grandTotal)}
+                 </span>
+               </div>
             </div>
 
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="h-12 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#4A2E22]"
-            >
-              {submitting ? "Đang tạo đơn..." : "Xác nhận đặt hàng"}
-              <ArrowRight data-icon="inline-end" />
+             <Button
+               type="submit"
+               disabled={isSubmitting}
+               className="h-12 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#2F9A68]"
+             >
+               {isSubmitting ? "Đang tạo đơn..." : "Xác nhận đặt hàng"}
+               <ArrowRight data-icon="inline-start" />
             </Button>
           </CardContent>
         </Card>
