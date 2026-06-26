@@ -10,6 +10,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       defaultTheme="light"
       disableTransitionOnChange
       enableSystem
+      scriptProps={{ suppressHydrationWarning: true }}
     >
       {children}
     </NextThemesProvider>

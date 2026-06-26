@@ -7,6 +7,11 @@ export const checkoutSchema = z.object({
   address: z.string().min(10, "Nhập địa chỉ giao hàng chi tiết"),
   paymentProvider: z.enum(["COD", "VNPAY", "MOMO", "ZALOPAY"]),
   note: z.string().max(300).optional(),
+  shippingMethod: z.string().optional(),
+  reqVAT: z.boolean().optional(),
+  companyName: z.string().optional(),
+  companyTaxId: z.string().optional(),
+  companyAddress: z.string().optional(),
 });
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;

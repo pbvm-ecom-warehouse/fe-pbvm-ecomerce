@@ -1,106 +1,268 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { OrbitControls, Text } from "@react-three/drei";
-import { Canvas } from "@react-three/fiber";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import {
+  ContactShadows,
+  Environment,
+  OrbitControls,
+  useTexture,
+} from "@react-three/drei";
+import type { Group } from "three";
 
-import type { DesignArtwork } from "@/types/api";
+import type { CupMaterialType, CupSize, CupStyle } from "@/types/api";
 
-function canUseWebGl() {
-  if (typeof document === "undefined") {
-    return false;
-  }
+type CupPreview3DProps = {
+  size: CupSize;
+  style: CupStyle;
+  materialType: CupMaterialType;
+  cupColor: string;
+  artworkTextureUrl: string;
+  printHeightPercent: number;
+};
 
-  const canvas = document.createElement("canvas");
-  return Boolean(
-    canvas.getContext("webgl") ?? canvas.getContext("experimental-webgl"),
+const CUP_GEOMETRY: Record<
+  CupSize,
+  { height: number; topRadius: number; bottomRadius: number }
+> = {
+  S: { height: 2.7, topRadius: 0.86, bottomRadius: 0.55 },
+  M: { height: 3.05, topRadius: 0.98, bottomRadius: 0.62 },
+  L: { height: 3.38, topRadius: 1.1, bottomRadius: 0.69 },
+  XL: { height: 3.72, topRadius: 1.2, bottomRadius: 0.76 },
+};
+
+function getRadiusAtY({
+  y,
+  height,
+  topRadius,
+  bottomRadius,
+}: {
+  y: number;
+  height: number;
+  topRadius: number;
+  bottomRadius: number;
+}) {
+  const normalized = (y + height / 2) / height;
+  return bottomRadius + (topRadius - bottomRadius) * normalized;
+}
+
+function ArtworkSleeve({
+  textureUrl,
+  size,
+  printHeightPercent,
+}: {
+  textureUrl: string;
+  size: CupSize;
+  printHeightPercent: number;
+}) {
+  const texture = useTexture(textureUrl);
+  const cup = CUP_GEOMETRY[size];
+  const sleeveHeight = cup.height * (printHeightPercent / 100);
+  const topY = sleeveHeight / 2;
+  const bottomY = -sleeveHeight / 2;
+  const topRadius = getRadiusAtY({ y: topY, ...cup }) + 0.012;
+  const bottomRadius = getRadiusAtY({ y: bottomY, ...cup }) + 0.012;
+
+  return (
+    <mesh position={[0, 0, 0]} rotation={[0, Math.PI / 2 + 0.9, 0]}>
+      <cylinderGeometry
+        args={[topRadius, bottomRadius, sleeveHeight, 128, 1, true]}
+      />
+      <meshStandardMaterial
+        map={texture}
+        transparent
+        opacity={0.96}
+        roughness={0.46}
+      />
+    </mesh>
   );
 }
 
-function CupModel({ artwork }: { artwork: DesignArtwork }) {
+function HeartLidDecoration({
+  topRadius,
+  height,
+}: {
+  topRadius: number;
+  height: number;
+}) {
   return (
-    <group rotation={[0, -0.35, 0]}>
-      <mesh>
-        <cylinderGeometry args={[0.95, 0.72, 2.2, 64]} />
-        <meshStandardMaterial
-          color="#f8fafc"
-          roughness={0.42}
-          metalness={0.05}
-        />
+    <group position={[0, height / 2 + 0.11, 0]}>
+      <mesh position={[-0.055, 0.02, 0]}>
+        <sphereGeometry args={[0.07, 18, 18]} />
+        <meshStandardMaterial color="#D9A7A0" roughness={0.35} />
       </mesh>
-      <mesh position={[0, 0, 0.98]}>
-        <boxGeometry args={[1.15, 0.62, 0.02]} />
-        <meshStandardMaterial color="#ecfeff" roughness={0.6} />
+      <mesh position={[0.055, 0.02, 0]}>
+        <sphereGeometry args={[0.07, 18, 18]} />
+        <meshStandardMaterial color="#D9A7A0" roughness={0.35} />
       </mesh>
-      <Text
-        position={[artwork.offsetX / 180, -artwork.offsetY / 180, 1.02]}
-        rotation={[0, 0, (artwork.rotation * Math.PI) / 180]}
-        fontSize={0.16 * artwork.scale}
-        color={artwork.fill}
-        anchorX="center"
-        anchorY="middle"
-      >
-        {artwork.text}
-      </Text>
+      <mesh rotation={[0, 0, Math.PI / 4]} position={[0, -0.045, 0]}>
+        <boxGeometry args={[0.11, 0.11, 0.045]} />
+        <meshStandardMaterial color="#D9A7A0" roughness={0.35} />
+      </mesh>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[topRadius * 0.72, 0.018, 18, 96]} />
+        <meshStandardMaterial color="#E9DFD3" roughness={0.28} />
+      </mesh>
     </group>
   );
 }
 
-function CupFallbackPreview({ artwork }: { artwork: DesignArtwork }) {
+function CupModel({
+  size,
+  style,
+  materialType,
+  cupColor,
+  artworkTextureUrl,
+  printHeightPercent,
+}: CupPreview3DProps) {
+  const groupRef = useRef<Group>(null);
+  const cup = CUP_GEOMETRY[size];
+  const material = useMemo(() => {
+    if (materialType === "clear") {
+      return { opacity: 0.36, roughness: 0.08, metalness: 0.02 };
+    }
+
+    if (materialType === "glass") {
+      return { opacity: 0.42, roughness: 0.03, metalness: 0 };
+    }
+
+    if (materialType === "metal") {
+      return { opacity: 0.86, roughness: 0.2, metalness: 0.45 };
+    }
+
+    return { opacity: 0.78, roughness: 0.38, metalness: 0.02 };
+  }, [materialType]);
+
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * 0.03;
+    }
+  });
+
   return (
-    <div className="relative aspect-[4/3] overflow-hidden rounded-lg border bg-muted/25 p-5">
-      <div className="absolute inset-x-8 bottom-6 top-6 rounded-[32px_32px_52px_52px] border bg-card shadow-sm" />
-      <div className="absolute inset-x-14 bottom-14 top-14 rounded-[24px_24px_38px_38px] border border-dashed border-primary/55 bg-background" />
-      <div
-        className="absolute left-1/2 top-1/2 max-w-44 -translate-x-1/2 -translate-y-1/2 text-center font-bold"
-        style={{
-          color: artwork.fill,
-          fontSize: `${Math.max(16, Math.round(24 * artwork.scale))}px`,
-          transform: `translate(calc(-50% + ${artwork.offsetX / 3}px), calc(-50% + ${artwork.offsetY / 3}px)) rotate(${artwork.rotation}deg)`,
-        }}
+    <group ref={groupRef} rotation={[0.04, 0.18, 0]}>
+      <mesh>
+        <cylinderGeometry
+          args={[cup.topRadius, cup.bottomRadius, cup.height, 128, 1, true]}
+        />
+        <meshPhysicalMaterial
+          color={cupColor}
+          transparent
+          opacity={material.opacity}
+          roughness={material.roughness}
+          metalness={material.metalness}
+          clearcoat={0.35}
+          clearcoatRoughness={0.22}
+        />
+      </mesh>
+
+      {artworkTextureUrl ? (
+        <Suspense fallback={null}>
+          <ArtworkSleeve
+            textureUrl={artworkTextureUrl}
+            size={size}
+            printHeightPercent={printHeightPercent}
+          />
+        </Suspense>
+      ) : null}
+
+      <mesh
+        position={[0, cup.height / 2 + 0.015, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
       >
-        {artwork.text}
-      </div>
-      <div className="absolute bottom-3 left-3 rounded-full border bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
-        2D fallback preview
-      </div>
-    </div>
+        <torusGeometry args={[cup.topRadius, 0.025, 20, 128]} />
+        <meshStandardMaterial color="#F7F0E8" roughness={0.2} />
+      </mesh>
+      <mesh
+        position={[0, -cup.height / 2 + 0.035, 0]}
+        rotation={[Math.PI / 2, 0, 0]}
+      >
+        <torusGeometry args={[cup.bottomRadius, 0.024, 20, 128]} />
+        <meshStandardMaterial color="#F7F0E8" roughness={0.25} />
+      </mesh>
+
+      {style === "heart" ? (
+        <HeartLidDecoration topRadius={cup.topRadius} height={cup.height} />
+      ) : null}
+
+      {style === "mug" ? (
+        <mesh
+          position={[cup.topRadius + 0.08, 0, 0]}
+          rotation={[0, 0, Math.PI / 2]}
+        >
+          <torusGeometry args={[0.42, 0.045, 20, 72]} />
+          <meshStandardMaterial color={cupColor} roughness={0.38} />
+        </mesh>
+      ) : null}
+    </group>
   );
 }
 
-export function CupPreview3d({ artwork }: { artwork: DesignArtwork }) {
-  const [webGlReady, setWebGlReady] = useState<boolean | null>(null);
+function hasWebGlSupport() {
+  const canvas = document.createElement("canvas");
+  return Boolean(
+    canvas.getContext("webgl") || canvas.getContext("experimental-webgl"),
+  );
+}
+
+export function CupPreview3D(props: CupPreview3DProps) {
+  const [webglSupported, setWebglSupported] = useState(true);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      setWebGlReady(canUseWebGl());
-    });
+    const timeoutId = window.setTimeout(() => {
+      setWebglSupported(hasWebGlSupport());
+    }, 0);
 
-    return () => window.cancelAnimationFrame(frame);
+    return () => window.clearTimeout(timeoutId);
   }, []);
 
-  if (webGlReady === null) {
+  if (!webglSupported) {
     return (
-      <div className="grid aspect-[4/3] place-items-center rounded-lg border bg-muted/35 p-6 text-center text-sm text-muted-foreground">
-        Đang kiểm tra WebGL preview...
+      <div className="flex min-h-[420px] items-center justify-center rounded-lg border border-border bg-[#E8F4EE] p-6">
+        {props.artworkTextureUrl ? (
+          <img
+            src={props.artworkTextureUrl}
+            alt="Bản in xem trước"
+            className="max-h-[300px] max-w-full rounded-md border border-border bg-white object-contain p-4"
+          />
+        ) : (
+          <p className="text-sm font-semibold text-muted-foreground">
+            Trình duyệt không hỗ trợ WebGL.
+          </p>
+        )}
       </div>
     );
   }
 
-  if (!webGlReady) {
-    return <CupFallbackPreview artwork={artwork} />;
-  }
-
   return (
-    <div className="aspect-[4/3] overflow-hidden rounded-lg border bg-slate-950 shadow-sm">
-      <Canvas camera={{ position: [0, 0.2, 4], fov: 42 }}>
-        <ambientLight intensity={0.9} />
-        <directionalLight position={[3, 4, 5]} intensity={1.2} />
+    <section className="relative h-[520px] overflow-hidden rounded-lg border border-border bg-[radial-gradient(circle_at_50%_25%,#FFFFFF_0%,#E8F4EE_50%,#B8DCCB_100%)]">
+      <Canvas
+        camera={{ position: [0, 0.55, 5.8], fov: 38 }}
+        dpr={[1, 2]}
+        gl={{ antialias: true, preserveDrawingBuffer: true }}
+      >
+        <ambientLight intensity={0.72} />
+        <directionalLight position={[3, 4, 5]} intensity={2.2} />
+        <pointLight position={[-3, 2, 3]} intensity={0.7} color="#DEF3E9" />
         <Suspense fallback={null}>
-          <CupModel artwork={artwork} />
-          <OrbitControls enablePan={false} minDistance={2.8} maxDistance={5} />
+          <CupModel {...props} />
+          <Environment preset="studio" />
+          <ContactShadows
+            position={[0, -2.05, 0]}
+            opacity={0.36}
+            scale={5}
+            blur={2.4}
+            far={4}
+          />
+          <OrbitControls
+            enablePan={false}
+            minDistance={4.6}
+            maxDistance={7}
+            minPolarAngle={Math.PI / 3.1}
+            maxPolarAngle={Math.PI / 1.72}
+          />
         </Suspense>
       </Canvas>
-    </div>
+    </section>
   );
 }

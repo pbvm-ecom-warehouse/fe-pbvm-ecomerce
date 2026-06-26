@@ -8,6 +8,7 @@ import type { CartItem } from "@/types/api";
 
 const items: CartItem[] = [
   {
+    cartItemId: "standard:cat-001",
     productId: "cat-001",
     name: "Bột sữa",
     slug: "bot-sua",
@@ -15,6 +16,7 @@ const items: CartItem[] = [
     quantity: 2,
     unit: "Bao",
     imageUrl: "https://example.com/image.jpg",
+    fulfillmentType: "STANDARD",
   },
 ];
 
@@ -27,8 +29,8 @@ describe("cart utilities", () => {
     expect(calculateCartTotals(items)).toEqual({
       subtotal: 200_000,
       shippingFee: 45_000,
-      tax: 16_000,
-      grandTotal: 261_000,
+      tax: 0,
+      grandTotal: 245_000,
     });
   });
 });
