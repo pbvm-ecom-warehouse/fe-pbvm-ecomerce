@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ProductCard } from "@/features/catalog/components/product-card";
 import type { CatalogProduct } from "@/types/api";
@@ -15,7 +15,7 @@ const CATEGORIES = [
 
 type CategoryId = (typeof CATEGORIES)[number]["id"];
 
-export function CatalogGrid({
+function CatalogGridContent({
   products,
   title,
 }: {
@@ -89,5 +89,16 @@ export function CatalogGrid({
         </div>
       )}
     </section>
+  );
+}
+
+export function CatalogGrid(props: {
+  products: CatalogProduct[];
+  title: string;
+}) {
+  return (
+    <Suspense fallback={<div className="py-12 text-center text-sm text-muted-foreground">Đang tải sản phẩm...</div>}>
+      <CatalogGridContent {...props} />
+    </Suspense>
   );
 }
