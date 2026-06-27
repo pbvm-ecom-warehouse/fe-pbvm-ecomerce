@@ -1,12 +1,31 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
+import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
+import { registerSchema } from "@/features/auth/schemas/login.schema";
+import { register as registerApi } from "@/features/auth/services/auth.service";
+import { env } from "@/lib/env";
+
+// Extend registerSchema with confirmPassword validation
+const localRegisterSchema = registerSchema.extend({
+  confirmPassword: z.string().min(8, "Mật khẩu tối thiểu 8 ký tự"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Mật khẩu xác nhận không khớp",
+  path: ["confirmPassword"],
+});
+
+type LocalRegisterInput = z.infer<typeof localRegisterSchema>;
 
 const GoogleIcon = () => (
   <svg className="mr-2 h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -18,6 +37,39 @@ const GoogleIcon = () => (
 );
 
 export default function RegisterPage() {
+  const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LocalRegisterInput>({
+    resolver: zodResolver(localRegisterSchema),
+    defaultValues: {
+      name: "",
+      email: "",
+      phone: "",
+      password: "",
+      confirmPassword: "",
+      tenantId: env.NEXT_PUBLIC_DEFAULT_TENANT_ID,
+      customerType: "B2B",
+    },
+  });
+
+  const onSubmit = async (data: LocalRegisterInput) => {
+    try {
+      await registerApi(data);
+      toast.success("Đăng ký tài khoản thành công! Vui lòng đăng nhập.");
+      router.push("/login");
+    } catch (error: any) {
+      console.error(error);
+      const errorMsg = error.response?.data?.message || "Đăng ký thất bại. Vui lòng kiểm tra lại.";
+      toast.error(errorMsg);
+    }
+  };
+
   return (
     <div className="flex flex-col">
       {/* Header section with centered logo */}
@@ -33,7 +85,10 @@ export default function RegisterPage() {
         </p>
       </div>
 
-      <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+      <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
+        <input type="hidden" {...register("tenantId")} />
+        <input type="hidden" {...register("customerType")} />
+
         {/* Google sign-in button matching mockup */}
         <Button
           type="button"
@@ -62,8 +117,12 @@ export default function RegisterPage() {
             <Input
               id="name"
               placeholder="Trà sữa PBVM"
+              {...register("name")}
               className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-[#253D4E] transition-all placeholder:text-slate-300 focus:border-[#3BB77E] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 shadow-sm"
             />
+            {errors.name && (
+              <p className="text-[11px] font-semibold text-rose-500 mt-1">{errors.name.message}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -74,8 +133,12 @@ export default function RegisterPage() {
               id="email"
               type="email"
               placeholder="shop@example.com"
+              {...register("email")}
               className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-[#253D4E] transition-all placeholder:text-slate-300 focus:border-[#3BB77E] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 shadow-sm"
             />
+            {errors.email && (
+              <p className="text-[11px] font-semibold text-rose-500 mt-1">{errors.email.message}</p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -85,19 +148,72 @@ export default function RegisterPage() {
             <Input
               id="phone"
               placeholder="0900000000"
+              {...register("phone")}
               className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-[#253D4E] transition-all placeholder:text-slate-300 focus:border-[#3BB77E] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 shadow-sm"
             />
+            {errors.phone && (
+              <p className="text-[11px] font-semibold text-rose-500 mt-1">{errors.phone.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="password" className="text-xs font-bold text-[#78858F] tracking-wide">
+              Mật khẩu đăng nhập
+            </Label>
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                {...register("password")}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-sm text-[#253D4E] transition-all placeholder:text-slate-300 focus:border-[#3BB77E] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 shadow-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer flex items-center justify-center"
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {errors.password && (
+              <p className="text-[11px] font-semibold text-rose-500 mt-1">{errors.password.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="confirmPassword" className="text-xs font-bold text-[#78858F] tracking-wide">
+              Xác nhận mật khẩu
+            </Label>
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                placeholder="••••••••"
+                {...register("confirmPassword")}
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-4 pr-10 text-sm text-[#253D4E] transition-all placeholder:text-slate-300 focus:border-[#3BB77E] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 shadow-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer flex items-center justify-center"
+              >
+                {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            {errors.confirmPassword && (
+              <p className="text-[11px] font-semibold text-rose-500 mt-1">{errors.confirmPassword.message}</p>
+            )}
           </div>
         </div>
 
         {/* Main action button */}
         <Button
-          asChild
-          className="h-11 w-full rounded-xl bg-[#3BB77E] hover:bg-[#34a370] active:scale-[0.98] font-bold text-white shadow-md shadow-emerald-500/5 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer mt-5"
+          type="submit"
+          disabled={isSubmitting}
+          className="h-11 w-full rounded-xl bg-[#3BB77E] hover:bg-[#34a370] active:scale-[0.98] font-bold text-white shadow-md shadow-emerald-500/5 transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer mt-5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Link href="/account">
-            Đăng ký ngay
-          </Link>
+          {isSubmitting ? "Đang xử lý..." : "Đăng ký ngay"}
         </Button>
 
         {/* Footer link */}

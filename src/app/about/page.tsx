@@ -1,13 +1,16 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import { Award, Clock, Cpu, Layers, Paintbrush, ShieldCheck, Sparkles, Target, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-
-export const metadata = {
-  title: "Về PBVM | Bao bì & Nguyên liệu B2B",
-  description: "Tìm hiểu về PBVM - giải pháp cung cấp ly nhựa in thương hiệu và nguyên liệu trà sữa sỉ trọn gói, đồng bộ kho WMS cho chuỗi F&B.",
-};
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function AboutPage() {
   const stats = [
@@ -56,7 +59,7 @@ export default function AboutPage() {
   return (
     <main className="min-h-screen bg-white dark:bg-[#0b1310] text-foreground">
       {/* Section 1: Hero Split Layout */}
-      <section className="relative overflow-hidden py-12 md:py-20 lg:py-24 border-b border-[#E2EDE8] dark:border-zinc-800/80">
+      <section className="relative overflow-hidden pt-6 pb-12 md:pt-10 md:pb-20 lg:pt-12 lg:pb-24 border-b border-[#E2EDE8] dark:border-zinc-800/80">
         <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
           <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
             {/* Left Content */}
@@ -76,10 +79,24 @@ export default function AboutPage() {
               </p>
 
               <div className="pt-4 flex flex-wrap gap-4">
-                <Button asChild className="bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold px-6 py-3 rounded-xl transition-all active:scale-[0.98] border-0 cursor-pointer">
-                  <Link href="/design-cup">Tự thiết kế ly 3D</Link>
-                </Button>
-                <Button asChild variant="outline" className="border-[#E2EDE8] hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 rounded-xl font-bold px-6 py-3 transition-all cursor-pointer">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button className="bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold px-6 py-3 rounded-xl transition-all active:scale-[0.98] border-0 cursor-pointer flex items-center gap-1.5 h-11 select-none">
+                      Đặt ly
+                      <span className="border-solid border-l-transparent border-r-transparent border-t-current border-t-4 w-0 h-0 ml-0.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-48 bg-[#FAF8F6] border border-[#E9E3DD] rounded-xl shadow-md p-1.5 z-40">
+                    <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
+                      <Link href="/products?category=plain_cup">Ly chưa thiết kế</Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
+                      <Link href="/design-cup">Ly tự thiết kế</Link>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                <Button asChild variant="outline" className="border-[#E2EDE8] hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 rounded-xl font-bold px-6 py-3 transition-all cursor-pointer h-11">
                   <Link href="/products">Xem bảng giá sỉ</Link>
                 </Button>
               </div>
@@ -181,33 +198,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Section 5: Call to Action (CTA) */}
-      <section className="py-16 md:py-24 bg-white dark:bg-[#0b1310]">
-        <div className="container mx-auto px-4 lg:px-8 max-w-5xl text-center">
-          <div className="bg-[#121d19] text-white rounded-[32px] p-8 md:p-16 border border-[#233f32] relative overflow-hidden shadow-xl">
-            {/* Background decoration elements */}
-            <div className="absolute top-0 right-0 size-64 bg-[#3BB77E]/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-0 size-64 bg-[#3BB77E]/5 rounded-full blur-3xl" />
-
-            <div className="relative z-10 space-y-6 max-w-2xl mx-auto">
-              <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight leading-tight text-white">
-                Sẵn sàng nâng tầm thương hiệu trà sữa của bạn?
-              </h2>
-              <p className="text-sm text-zinc-300 leading-relaxed">
-                Tự phối logo lên ly 3D trực quan cực nhanh, xem báo giá sỉ ly nhựa và nguyên liệu pha chế theo thời gian thực và đặt hàng dễ dàng cùng hệ thống PBVM B2B.
-              </p>
-              <div className="pt-4 flex flex-col sm:flex-row gap-4 justify-center items-center">
-                <Button asChild className="w-full sm:w-auto bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold px-8 py-3.5 rounded-xl transition-all border-0 cursor-pointer">
-                  <Link href="/design-cup">Tự thiết kế ly 3D</Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full sm:w-auto border-white/20 hover:bg-white/10 hover:text-white rounded-xl font-bold px-8 py-3.5 transition-all text-white bg-transparent cursor-pointer">
-                  <Link href="/products">Khám phá</Link>
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
     </main>
   );
 }

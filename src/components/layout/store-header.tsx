@@ -13,6 +13,7 @@ import { shopRoutes } from "@/constants/routes";
 import { countCartItems } from "@/features/cart/utils/cart";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/utils/format-currency";
 import {
   listCatalogProducts,
@@ -32,6 +33,7 @@ export function StoreHeader() {
   const pathname = usePathname();
   const items = useCartStore((state) => state.items);
   const itemCount = countCartItems(items);
+  const user = useAuthStore((state) => state.user);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
@@ -139,9 +141,13 @@ export function StoreHeader() {
             variant="ghost"
             className="hidden h-11 gap-2 rounded-xl px-3 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-primary md:inline-flex"
           >
-            <Link href="/account">
-              <UserRound className="size-5" />
-              Tài khoản
+            <Link href="/account" className="flex items-center gap-2">
+              {user?.avatar ? (
+                <img src={user.avatar} alt={user.name} className="size-5 rounded-full object-cover border border-primary/20 shrink-0" />
+              ) : (
+                <UserRound className="size-5 shrink-0" />
+              )}
+              <span className="truncate max-w-[90px]">{user ? user.name : "Tài khoản"}</span>
             </Link>
           </Button>
           <Button
@@ -163,7 +169,7 @@ export function StoreHeader() {
 
       {/* Navigation Bar Row */}
       <div className="border-t border-[#E9E3DD] py-2">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 lg:px-8">
           <div className="flex items-center gap-6">
             {/* Categories dropdown menu */}
             <DropdownMenu>
@@ -195,26 +201,74 @@ export function StoreHeader() {
 
             {/* Nav Links */}
             <nav className="hidden items-center gap-1 md:flex">
-               {shopRoutes.map((route) => {
-                 const active = pathname === route.href;
- 
-                 return (
-                   <Button
-                     key={route.href}
-                     asChild
-                     variant="ghost"
-                     className={cn(
-                       "text-xs font-semibold h-9 px-3 transition-colors",
-                       "hover:bg-[#DEF9EC] hover:text-[#253D4E]",
-                       active
-                         ? "bg-primary text-white font-bold hover:bg-primary hover:text-white"
-                         : "text-foreground"
-                     )}
-                   >
-                     <Link href={route.href}>{route.label}</Link>
-                   </Button>
-                 );
-               })}
+              {/* Trang chủ & Sản phẩm */}
+              {shopRoutes.slice(0, 2).map((route) => {
+                const active = pathname === route.href;
+                return (
+                  <Button
+                    key={route.href}
+                    asChild
+                    variant="ghost"
+                    className={cn(
+                      "text-xs font-semibold h-9 px-3 transition-colors",
+                      "hover:bg-[#DEF9EC] hover:text-[#253D4E]",
+                      active
+                        ? "bg-primary text-white font-bold hover:bg-primary hover:text-white"
+                        : "text-foreground"
+                    )}
+                  >
+                    <Link href={route.href}>{route.label}</Link>
+                  </Button>
+                );
+              })}
+
+              {/* Đặt ly Dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "text-xs font-semibold h-9 px-3 transition-colors gap-1",
+                      "hover:bg-[#DEF9EC] hover:text-[#253D4E]",
+                      pathname === "/design-cup"
+                        ? "bg-primary text-white font-bold hover:bg-primary hover:text-white"
+                        : "text-foreground cursor-pointer"
+                    )}
+                  >
+                    Đặt ly
+                    <span className="border-solid border-l-transparent border-r-transparent border-t-current border-t-4 w-0 h-0 ml-1" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-48 bg-[#FAF8F6] border border-[#E9E3DD] rounded-xl shadow-md p-1.5 z-40">
+                  <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
+                    <Link href="/products?category=plain_cup">Ly chưa thiết kế</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
+                    <Link href="/design-cup">Ly tự thiết kế</Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Giới thiệu & Đơn hàng */}
+              {shopRoutes.slice(2).map((route) => {
+                const active = pathname === route.href;
+                return (
+                  <Button
+                    key={route.href}
+                    asChild
+                    variant="ghost"
+                    className={cn(
+                      "text-xs font-semibold h-9 px-3 transition-colors",
+                      "hover:bg-[#DEF9EC] hover:text-[#253D4E]",
+                      active
+                        ? "bg-primary text-white font-bold hover:bg-primary hover:text-white"
+                        : "text-foreground"
+                    )}
+                  >
+                    <Link href={route.href}>{route.label}</Link>
+                  </Button>
+                );
+              })}
             </nav>
           </div>
 
