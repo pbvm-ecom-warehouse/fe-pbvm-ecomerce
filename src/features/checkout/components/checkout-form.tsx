@@ -12,7 +12,7 @@ import {
   ShoppingBag,
   Truck,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useCartStore } from "@/stores/cart-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { calculateCartTotals } from "@/features/cart/utils/cart";
 import {
   cartRequiresOnlinePayment,
@@ -60,6 +61,8 @@ export function CheckoutForm() {
     paymentProvider: string;
   } | null>(null);
 
+  const user = useAuthStore((state) => state.user);
+
   const {
     register,
     handleSubmit,
@@ -69,11 +72,21 @@ export function CheckoutForm() {
   } = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      customerType: "B2B",
+      customerName: user?.name || "",
+      phone: user?.phone || "",
+      customerType: user?.type || "B2B",
       paymentProvider: "VNPAY",
       shippingMethod: "TRUCK",
     },
   });
+
+  useEffect(() => {
+    if (user) {
+      setValue("customerName", user.name || "");
+      setValue("phone", user.phone || "");
+      setValue("customerType", user.type || "B2B");
+    }
+  }, [user, setValue]);
   const selectedPayment = useWatch({ control, name: "paymentProvider" });
 
   const handleOrderFinish = () => {

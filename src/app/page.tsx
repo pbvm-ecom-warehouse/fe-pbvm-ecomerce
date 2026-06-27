@@ -180,12 +180,6 @@ export default async function HomePage() {
             </p>
 
             <div className="pt-2 flex flex-col md:flex-row flex-wrap gap-4 items-stretch md:items-center">
-
-              <Link href="/design-cup" className="md:w-auto">
-                <Button className="w-full bg-[#3BB77E] hover:bg-[#2F9A68] text-white font-bold px-6 py-3 rounded-xl transition-all active:scale-[0.98] h-full flex items-center justify-center gap-2 cursor-pointer border-0">
-                  <Paintbrush className="size-4 text-white" /> Tự thiết kế ly 3D
-                </Button>
-              </Link>
             </div>
 
             <div className="flex flex-wrap items-center gap-6 pt-2 text-xs text-zinc-300 font-medium">

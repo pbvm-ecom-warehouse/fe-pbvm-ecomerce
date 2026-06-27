@@ -6,8 +6,11 @@ import type { CustomerType } from "@/types/api";
 type CustomerSession = {
   id: string;
   name: string;
+  email?: string;
   type: CustomerType;
   tenantId: string;
+  phone?: string;
+  avatar?: string;
 };
 
 type AuthState = {
