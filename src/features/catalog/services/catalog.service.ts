@@ -38,7 +38,7 @@ export const fallbackCatalogProducts: CatalogProduct[] = [
     b2bPrice: 380000,
     unit: "thùng",
     stockSnapshot: 80,
-    imageUrl: "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=400&q=80",
+    imageUrl: "/images/clear_cups.png",
     updatedAt: new Date().toISOString(),
   },
   {
@@ -108,42 +108,128 @@ export const fallbackCatalogProducts: CatalogProduct[] = [
   }
 ];
 
-const emptyCatalogResponse: ApiListResponse<CatalogProduct> = {
-  data: [],
-  meta: {
-    pagination: {
-      page: 1,
-      pageSize: 0,
-      total: 0,
-      totalPages: 0,
-    },
-  },
+// Map category ObjectId to slug string used in FE
+const CATEGORY_MAP: Record<string, CatalogProduct["category"]> = {
+  "685ba0cb233b28b7fa99c262": "ingredient",
+  "685ba0cb233b28b7fa99c263": "plain_cup",
+  "685ba0cb233b28b7fa99c264": "printed_cup",
 };
 
+const UNIT_MAP: Record<CatalogProduct["category"], string> = {
+  ingredient: "bao",
+  plain_cup: "thùng",
+  printed_cup: "thùng",
+  custom_print: "cái",
+};
+
+/**
+ * Map một product detail (từ /catalog/products/:slug có variants)
+ * thành CatalogProduct dùng ở FE.
+ */
+function mapProductDetail(p: any): CatalogProduct {
+  const variants: any[] = p.variants ?? [];
+  const activeVariant = variants.find((v) => v.isActive !== false) ?? variants[0];
+  const price = activeVariant?.price ?? 0;
+  const category: CatalogProduct["category"] = CATEGORY_MAP[p.categoryId] ?? "ingredient";
+
+  return {
+    id: p.id ?? p._id,
+    productRefId: activeVariant?.sku ?? p.slug.toUpperCase(),
+    slug: p.slug,
+    name: p.name,
+    category,
+    fulfillmentType: activeVariant?.fulfillmentType ?? "STANDARD",
+    price,
+    b2bPrice: price,
+    unit: UNIT_MAP[category] ?? "bao",
+    stockSnapshot: variants.reduce((sum: number, v: any) => sum + (v.availableQty ?? 0), 0),
+    imageUrl: p.images?.[0] ?? "/images/product-placeholder.svg",
+    updatedAt: p.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+/**
+ * Map một product từ list API (không có variants) — dùng giá trị mặc định trống/0.
+ */
+function mapProductListItem(p: any): CatalogProduct {
+  const category: CatalogProduct["category"] = CATEGORY_MAP[p.categoryId] ?? "ingredient";
+
+  return {
+    id: p.id ?? p._id,
+    productRefId: p.slug.toUpperCase(),
+    slug: p.slug,
+    name: p.name,
+    category,
+    fulfillmentType: "STANDARD",
+    price: 0,
+    b2bPrice: 0,
+    unit: UNIT_MAP[category] ?? "bao",
+    stockSnapshot: 0,
+    imageUrl: p.images?.[0] ?? "/images/product-placeholder.svg",
+    updatedAt: p.updatedAt ?? new Date().toISOString(),
+  };
+}
+
+const emptyCatalogResponse: ApiListResponse<CatalogProduct> = {
+  data: [],
+  meta: { pagination: { page: 1, pageSize: 0, total: 0, totalPages: 0 } },
+};
+
+/**
+ * Lấy danh sách sản phẩm từ BE. Vì list API không trả về variants/giá,
+ * mình sẽ enrichment bằng cách gọi detail cho từng slug song song.
+ * Nếu detail thất bại, dùng mapProductListItem.
+ */
 export async function listCatalogProducts() {
   try {
-    const res = await publicApiFetch<ApiListResponse<CatalogProduct>>(
-      "/catalog/products",
-    );
-    if (!res || !res.data || res.data.length === 0) {
+    const rawProducts = await publicApiFetch<any[]>("/catalog/products");
+    if (!rawProducts || !Array.isArray(rawProducts) || rawProducts.length === 0) {
       return emptyCatalogResponse;
     }
-    return res;
-  } catch {
+
+    // Enrich each product with variant/price via detail endpoint
+    const enriched = await Promise.all(
+      rawProducts.map(async (p) => {
+        try {
+          const detail = await publicApiFetch<any>(
+            `/catalog/products/${encodeURIComponent(p.slug)}`,
+          );
+          return detail ? mapProductDetail(detail) : mapProductListItem(p);
+        } catch {
+          return mapProductListItem(p);
+        }
+      }),
+    );
+
+    return {
+      data: enriched,
+      meta: {
+        pagination: {
+          page: 1,
+          pageSize: enriched.length,
+          total: enriched.length,
+          totalPages: 1,
+        },
+      },
+    };
+  } catch (error) {
+    console.error("listCatalogProducts: BE error:", error);
     return emptyCatalogResponse;
   }
 }
 
+/**
+ * Lấy chi tiết sản phẩm theo slug từ BE — có đầy đủ variants và giá.
+ */
 export async function getCatalogProductBySlug(slug: string) {
   try {
-    const product = await publicApiFetch<CatalogProduct>(
+    const p = await publicApiFetch<any>(
       `/catalog/products/${encodeURIComponent(slug)}`,
     );
-    if (!product) {
-      return fallbackCatalogProducts.find(p => p.slug === slug) || null;
-    }
-    return product;
-  } catch {
-    return fallbackCatalogProducts.find(p => p.slug === slug) || null;
+    if (!p) return null;
+    return mapProductDetail(p);
+  } catch (error) {
+    console.error(`getCatalogProductBySlug(${slug}): BE error:`, error);
+    return null;
   }
 }

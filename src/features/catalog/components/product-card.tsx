@@ -13,6 +13,7 @@ const categoryCopy: Record<CatalogProduct["category"], string> = {
   ingredient: "Nguyên liệu",
   plain_cup: "Ly chưa in",
   printed_cup: "Ly đã in",
+  custom_print: "Ly in theo yêu cầu",
 };
 
 function getVendorName(product: CatalogProduct) {

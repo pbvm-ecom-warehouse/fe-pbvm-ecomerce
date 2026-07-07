@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
+import { useAuthStore } from "@/stores/auth-store";
+import { createDesign } from "../services/design.service";
 import type {
   CupMaterialType,
   CupSize,
@@ -119,7 +121,14 @@ export function CupDesignerPage() {
     setSelectedLayerId(null);
   }
 
-  function addToCart() {
+  const [isSavingDesign, setIsSavingDesign] = useState(false);
+  const user = useAuthStore((state) => state.user);
+
+  async function addToCart() {
+    if (!user) {
+      toast.error("Vui lòng đăng nhập để lưu thiết kế ly in và thêm vào giỏ.");
+      return;
+    }
     if (layers.length === 0) {
       toast.error(
         "Hãy thêm text, import logo hoặc generate hình trước khi đặt in.",
@@ -127,21 +136,40 @@ export function CupDesignerPage() {
       return;
     }
 
-    const designFile = createDesignSnapshot({
-      name: `PBVM custom cup ${size}`,
-      previewDataUrl: artworkTextureUrl,
-      artwork,
-    });
-    const product = createCustomCupProduct({ size, price });
+    setIsSavingDesign(true);
+    try {
+      const designFile = createDesignSnapshot({
+        name: `PBVM custom cup ${size}`,
+        previewDataUrl: artworkTextureUrl,
+        artwork,
+      });
 
-    addCustomPrintItem({
-      product,
-      quantity,
-      designId: designFile.designId,
-      designFile,
-    });
+      const savedDesign = await createDesign({
+        name: designFile.name,
+        // BE lưu URL/data URL — gửi preview image làm artwork file
+        file: designFile.previewDataUrl || "data:image/png;base64,",
+        thumbnail: designFile.previewDataUrl,
+      });
 
-    toast.success("Đã thêm ly in vào giỏ hàng. COD sẽ bị tắt cho đơn này.");
+      const product = createCustomCupProduct({ size, price });
+
+      addCustomPrintItem({
+        product,
+        quantity,
+        designId: savedDesign.id,
+        designFile: {
+          ...designFile,
+          designId: savedDesign.id,
+        },
+      });
+
+      toast.success("Đã thêm ly in vào giỏ hàng. COD sẽ bị tắt cho đơn này.");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Không thể lưu bản thiết kế lên máy chủ.");
+    } finally {
+      setIsSavingDesign(false);
+    }
   }
 
   return (
@@ -396,8 +424,9 @@ export function CupDesignerPage() {
                   type="button"
                   className="h-11 w-full rounded-md bg-primary font-black text-white hover:bg-[#2FA36E]"
                   onClick={addToCart}
+                  disabled={isSavingDesign}
                 >
-                  Thêm vào giỏ custom print
+                  {isSavingDesign ? "Đang lưu..." : "Thêm vào giỏ custom print"}
                 </Button>
                 <p className="text-[10px] font-medium text-muted-foreground">
                   Đơn ly in không áp dụng COD. File 2D snapshot sẽ đi theo

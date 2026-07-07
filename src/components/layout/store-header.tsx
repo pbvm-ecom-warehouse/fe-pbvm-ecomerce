@@ -17,7 +17,6 @@ import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/utils/format-currency";
 import {
   listCatalogProducts,
-  fallbackCatalogProducts,
 } from "@/features/catalog/services/catalog.service";
 import type { CatalogProduct } from "@/types/api";
 import {
@@ -45,11 +44,11 @@ export function StoreHeader() {
         if (res && res.data && res.data.length > 0) {
           setAllProducts(res.data);
         } else {
-          setAllProducts(fallbackCatalogProducts);
+          setAllProducts([]);
         }
       })
       .catch(() => {
-        setAllProducts(fallbackCatalogProducts);
+        setAllProducts([]);
       });
   }, []);
 

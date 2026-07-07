@@ -15,6 +15,7 @@ import { Logo } from "@/components/ui/logo";
 import { loginSchema, type LoginInput } from "@/features/auth/schemas/login.schema";
 import { login, getMe } from "@/features/auth/services/auth.service";
 import { useAuthStore } from "@/stores/auth-store";
+import { useCartStore } from "@/stores/cart-store";
 import { env } from "@/lib/env";
 
 const GoogleIcon = () => (
@@ -29,6 +30,7 @@ const GoogleIcon = () => (
 export default function LoginPage() {
   const router = useRouter();
   const setUser = useAuthStore((state) => state.setUser);
+  const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
   const [showPassword, setShowPassword] = useState(false);
 
   const {
@@ -57,6 +59,8 @@ export default function LoginPage() {
         phone: me.phone,
         avatar: me.avatar,
       });
+      // Đồng bộ giỏ hàng từ server về local sau khi đăng nhập
+      fetchAndSyncCart().catch(console.error);
       toast.success("Đăng nhập thành công!");
       router.push("/");
     } catch (error: any) {
