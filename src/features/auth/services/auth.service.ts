@@ -69,12 +69,11 @@ export async function changePassword(input: any) {
   return unwrapApiData(response.data);
 }
 
+/**
+ * Profile update — BE chưa có endpoint này.
+ * Chỉ trả về dữ liệu input để cập nhật client-side state.
+ */
 export async function updateProfile(input: { name?: string; phone?: string; avatar?: string; customerType?: string }) {
-  try {
-    const response = await apiClient.patch<ApiEnvelope<any> | any>("/auth/profile", input);
-    return unwrapApiData(response.data);
-  } catch (err: any) {
-    console.warn("Backend profile update failed. Falling back to client-side emulation.", err);
-    return input;
-  }
+  // TODO: Kết nối khi BE implement PATCH /auth/profile
+  return input;
 }

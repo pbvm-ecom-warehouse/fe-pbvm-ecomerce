@@ -80,7 +80,7 @@ export type CatalogProduct = {
   productRefId: string;
   slug: string;
   name: string;
-  category: "ingredient" | "plain_cup" | "printed_cup";
+  category: "ingredient" | "plain_cup" | "printed_cup" | "custom_print";
   fulfillmentType?: FulfillmentType;
   price: number;
   b2bPrice: number;
@@ -93,6 +93,7 @@ export type CatalogProduct = {
 export type CartItem = {
   cartItemId: string;
   productId: string;
+  productRefId?: string;
   name: string;
   slug: string;
   price: number;

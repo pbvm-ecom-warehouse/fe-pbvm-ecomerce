@@ -27,7 +27,7 @@ function getProductThumbnail(name: string): string {
     return "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?auto=format&fit=crop&w=120&h=120&q=80";
   }
   if (lowercase.includes("ly") || lowercase.includes("nhựa") || lowercase.includes("cốc")) {
-    return "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=120&h=120&q=80";
+    return "/images/clear_cups.png";
   }
   return "https://images.unsplash.com/photo-1574316071802-0d684efa7bf5?auto=format&fit=crop&w=120&h=120&q=80";
 }
@@ -37,115 +37,100 @@ export default async function HomePage() {
   const featuredProducts = products.data.slice(0, 8);
 
 
-  const deals = [
-    {
-      title: "Bột sữa Indo Kievit Vana Blanca (Bao 25kg)",
-      price: 1450000,
-      oldPrice: 1650000,
-      rating: 4.8,
-      vendor: "Kievit Indo",
+  const getVendorName = (product: CatalogProduct) => {
+    if (product.slug.includes("kievit")) return "Kievit Indo";
+    if (product.slug.includes("tra-den") || product.slug.includes("phuc-long")) return "Phúc Long";
+    if (product.slug.includes("gia-uy")) return "Gia Uy";
+    if (product.slug.includes("maulin")) return "Maulin";
+    if (product.slug.includes("ly-nhua") || product.slug.includes("pet") || product.slug.includes("pp")) return "PBVM Plastic";
+    return "PBVM Supplier";
+  };
+
+  const categoryCopy: Record<CatalogProduct["category"], string> = {
+    ingredient: "Nguyên liệu",
+    plain_cup: "Ly chưa in",
+    printed_cup: "Ly đã in",
+    custom_print: "Ly in theo yêu cầu",
+  };
+
+  // Sort products to prioritize those with active discounts, falling back to other catalog products
+  const sortedProductsForDeals = [...products.data].sort((a, b) => {
+    const discountA = a.price - a.b2bPrice;
+    const discountB = b.price - b.b2bPrice;
+    return discountB - discountA;
+  });
+
+  const deals = sortedProductsForDeals.slice(0, 4).map((p) => {
+    const hasDiscount = p.price > p.b2bPrice;
+    const finalPrice = p.b2bPrice;
+    const oldPrice = hasDiscount ? p.price : Math.round(p.b2bPrice * 1.15);
+
+    let dealImage = p.imageUrl || "/images/product-placeholder.svg";
+    if (dealImage === "/images/product-placeholder.svg") {
+      if (p.category === "printed_cup") dealImage = "/images/printed_cups.png";
+      else if (p.category === "plain_cup") dealImage = "/images/clear_cups.png";
+      else dealImage = "/images/boba_ingredients.png";
+    }
+
+    return {
+      title: p.name,
+      price: finalPrice,
+      oldPrice: oldPrice,
+      rating: 4.5 + (p.name.length % 5) / 10,
+      vendor: getVendorName(p),
       days: "02",
       hours: "14",
       mins: "20",
       secs: "45",
-      image: "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=400&q=80",
-      category: "Bột sữa",
-      slug: "bot-sua-indo-kievit-vana-blanca-25kg",
-    },
-    {
-      title: "Thùng 1000 Ly nhựa PP 500ml dày dặn",
-      price: 380000,
-      oldPrice: 450000,
-      rating: 4.6,
-      vendor: "PBVM Plastic",
-      days: "03",
-      hours: "08",
-      mins: "12",
-      secs: "10",
-      image: "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=400&q=80",
-      category: "Ly chưa in",
-      slug: "ly-nhua-pp-500ml-thung-1000",
-    },
-    {
-      title: "Hồng trà đặc biệt Phúc Long (Bao 1kg)",
-      price: 120000,
-      oldPrice: 150000,
-      rating: 4.7,
-      vendor: "Phúc Long",
-      days: "01",
-      hours: "18",
-      mins: "45",
-      secs: "00",
-      image: "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?auto=format&fit=crop&w=400&q=80",
-      category: "Trà lá",
-      slug: "tra-den-co-thu-bao-1kg",
-    },
-    {
-      title: "Trân châu đen Gia Uy túi 3kg dai giòn sần sật",
-      price: 65000,
-      oldPrice: 75000,
-      rating: 4.5,
-      vendor: "Gia Uy",
-      days: "04",
-      hours: "11",
-      mins: "30",
-      secs: "15",
-      image: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=400&q=80",
-      category: "Nguyên liệu",
-      slug: "tran-chau-den-gia-uy-3kg",
-    },
-  ];
+      image: dealImage,
+      category: categoryCopy[p.category] || "Nguyên liệu",
+      slug: p.slug,
+      product: p,
+    };
+  });
 
-  const getDealProduct = (slug: string, fallbackDeal: any) => {
-    const realProduct = products.data.find((p) => p.slug === slug);
-    if (realProduct) return realProduct;
-    return {
-      id: slug,
-      productRefId: "DEAL-REF",
-      slug: slug,
-      name: fallbackDeal.title,
-      category: "ingredient",
-      price: fallbackDeal.oldPrice,
-      b2bPrice: fallbackDeal.price,
-      unit: "bao",
-      stockSnapshot: 100,
-      imageUrl: fallbackDeal.image,
-      updatedAt: new Date().toISOString(),
-    } as CatalogProduct;
+  const getColItems = (startIndex: number) => {
+    if (products.data.length === 0) return [];
+    
+    const items: CatalogProduct[] = [];
+    for (let i = 0; i < 3; i++) {
+      const productIndex = (startIndex + i) % products.data.length;
+      const p = products.data[productIndex];
+      if (i > 0 && products.data.length < 3 && items.includes(p)) {
+        break;
+      }
+      items.push(p);
+    }
+    
+    return items.map((p) => {
+      const hasDiscount = p.price > p.b2bPrice;
+      const finalPrice = p.b2bPrice;
+      const oldPrice = hasDiscount ? p.price : 0;
+      
+      return {
+        name: p.name,
+        price: formatCurrency(finalPrice),
+        oldPrice: oldPrice > 0 ? formatCurrency(oldPrice) : "",
+      };
+    });
   };
 
   const listCols = [
     {
       title: "Bán chạy nhất",
-      items: [
-        { name: "Bột kem béo Kievit Indo", price: "1.450.000 đ", oldPrice: "1.650.000 đ" },
-        { name: "Hồng trà đặc biệt L1 (1kg)", price: "120.000 đ", oldPrice: "" },
-        { name: "Ly PET 700ml dày (50 cái)", price: "28.000 đ", oldPrice: "32.000 đ" },
-      ],
+      items: getColItems(0),
     },
     {
       title: "Đang là xu hướng",
-      items: [
-        { name: "Trà Xanh Thái Nguyên ướp nhài", price: "185.000 đ", oldPrice: "" },
-        { name: "Trân châu đen Gia Uy (Bao 3kg)", price: "65.000 đ", oldPrice: "75.000 đ" },
-        { name: "Nước đường Hàn Quốc (Thùng 25kg)", price: "480.000 đ", oldPrice: "520.000 đ" },
-      ],
+      items: getColItems(3),
     },
     {
       title: "Mới cập nhật",
-      items: [
-        { name: "Ly nhựa PP nút tim 500ml", price: "45.000 đ", oldPrice: "" },
-        { name: "Trà Ô Long Tứ Quý hảo hạng", price: "240.000 đ", oldPrice: "270.000 đ" },
-        { name: "Siro Đường Đen Đài Loan 2.5kg", price: "195.000 đ", oldPrice: "" },
-      ],
+      items: getColItems(6),
     },
     {
       title: "Đánh giá cao",
-      items: [
-        { name: "Đường nước High Fructose thùng", price: "420.000 đ", oldPrice: "" },
-        { name: "Trà Đen Cổ Thụ chuyên trà sữa", price: "320.000 đ", oldPrice: "360.000 đ" },
-        { name: "Màng dập cốc nhựa cuộn 2000 ly", price: "115.000 đ", oldPrice: "135.000 đ" },
-      ],
+      items: getColItems(9),
     },
   ];
 
@@ -204,9 +189,10 @@ export default async function HomePage() {
             {/* Tile 1: Ly nhựa đã in ấn (md:col-span-2 md:row-span-2) */}
             <div className="md:col-span-2 md:row-span-2 relative group overflow-hidden rounded-2xl border border-[#E2EDE8] dark:border-[#2C332F]/60 flex flex-col justify-between p-6 shadow-sm hover:shadow-lg transition-all duration-300">
               <Image
-                src="https://images.unsplash.com/photo-1517256064527-09c53b2d0bc6?auto=format&fit=crop&w=800&q=80"
+                src="/images/printed_cups.png"
                 alt="Ly nhựa đã in ấn"
                 fill
+                sizes="(max-width: 768px) 100vw, 66vw"
                 className="object-cover absolute inset-0 group-hover:scale-102 transition-transform duration-500"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent z-10" />
@@ -227,12 +213,13 @@ export default async function HomePage() {
 
             {/* Tile 2: Nguyên liệu trà sữa (md:col-span-1 md:row-span-1) */}
             <div className="md:col-span-1 md:row-span-1 bg-[#DEF9EC]/60 dark:bg-[#1b3d2f]/30 relative group overflow-hidden rounded-2xl border border-[#E2EDE8] dark:border-[#2C332F]/60 flex flex-col justify-between p-5 shadow-sm hover:shadow-lg transition-all duration-300">
-              <div className="absolute right-0 bottom-0 w-1/2 h-full opacity-80 group-hover:scale-105 transition-transform duration-300">
+              <div className="absolute right-0 bottom-0 w-1/2 h-full opacity-90 group-hover:scale-105 transition-transform duration-300">
                 <Image
-                  src="https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=300&q=80"
+                  src="/images/boba_ingredients.png"
                   alt="Nguyên liệu trà sữa"
                   fill
-                  className="object-contain object-right-bottom p-2"
+                  sizes="(max-width: 768px) 50vw, 33vw"
+                  className="object-cover rounded-xl p-1"
                 />
               </div>
               <div className="z-10 max-w-[60%] flex flex-col h-full justify-between">
@@ -248,12 +235,13 @@ export default async function HomePage() {
 
             {/* Tile 3: Ly nhựa chưa in (md:col-span-1 md:row-span-1) */}
             <div className="md:col-span-1 md:row-span-1 bg-[#DEF9EC]/75 dark:bg-[#1b3d2f]/40 relative group overflow-hidden rounded-2xl border border-[#E2EDE8] dark:border-[#2C332F]/60 flex flex-col justify-between p-5 shadow-sm hover:shadow-lg transition-all duration-300">
-              <div className="absolute right-0 bottom-0 w-1/2 h-full opacity-80 group-hover:scale-105 transition-transform duration-300">
+              <div className="absolute right-0 bottom-0 w-1/2 h-full opacity-90 group-hover:scale-105 transition-transform duration-300">
                 <Image
-                  src="https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=300&q=80"
+                  src="/images/clear_cups.png"
                   alt="Ly nhựa chưa in"
                   fill
-                  className="object-contain object-right-bottom p-2"
+                  sizes="(max-width: 768px) 50vw, 33vw"
+                  className="object-cover rounded-xl p-1"
                 />
               </div>
               <div className="z-10 max-w-[60%] flex flex-col h-full justify-between">
@@ -300,6 +288,7 @@ export default async function HomePage() {
                     src={deal.image}
                     alt={deal.title}
                     fill
+                    sizes="(max-width: 768px) 100vw, 25vw"
                     className="object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
@@ -337,7 +326,7 @@ export default async function HomePage() {
 
                     <AddToCartButton
                       className="h-8 rounded-lg bg-[#DEF9EC] dark:bg-[#1b3d2f] hover:bg-[#3BB77E] hover:text-white text-[#3BB77E] dark:text-[#4ade80] font-bold text-xs transition-all duration-200 px-3 cursor-pointer border-0 shadow-none active:scale-[0.98]"
-                      product={getDealProduct(deal.slug, deal)}
+                      product={deal.product}
                     />
                   </div>
                 </div>

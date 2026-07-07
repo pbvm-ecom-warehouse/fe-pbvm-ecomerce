@@ -210,6 +210,12 @@ export function CheckoutForm() {
               designFile: item.designFile,
             })),
           });
+          if (order.paymentUrl) {
+            toast.success("Đang chuyển hướng sang cổng thanh toán...");
+            clearCart();
+            window.location.href = order.paymentUrl;
+            return;
+          }
           setSubmittedOrder({
             orderId: order.orderId,
             offline: order.offline,

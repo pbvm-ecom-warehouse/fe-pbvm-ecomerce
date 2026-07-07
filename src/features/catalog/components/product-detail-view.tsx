@@ -35,6 +35,7 @@ const categoryCopy: Record<CatalogProduct["category"], string> = {
   ingredient: "Nguyên liệu",
   plain_cup: "Ly chưa in",
   printed_cup: "Ly đã in",
+  custom_print: "Ly in theo yêu cầu",
 };
 
 function getVendorName(product: CatalogProduct) {
@@ -52,16 +53,16 @@ function getProductImages(product: CatalogProduct): string[] {
   if (product.category === "ingredient") {
     return [
       mainImage,
+      "/images/boba_ingredients.png",
       "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?auto=format&fit=crop&w=400&h=400&q=80",
-      "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=400&h=400&q=80",
-      "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=400&h=400&q=80",
+      "https://images.unsplash.com/photo-1556881286-fc6915169721?auto=format&fit=crop&w=400&h=400&q=80",
     ];
   } else {
     return [
       mainImage,
-      "https://images.unsplash.com/photo-1611080626919-7cf5a9dbab5b?auto=format&fit=crop&w=400&h=400&q=80",
-      "https://images.unsplash.com/photo-1517256064527-09c53b2d0bc6?auto=format&fit=crop&w=400&h=400&q=80",
-      "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=400&h=400&q=80",
+      "/images/printed_cups.png",
+      "/images/clear_cups.png",
+      "https://images.unsplash.com/photo-1541658016709-82535e94bc69?auto=format&fit=crop&w=400&h=400&q=80",
     ];
   }
 }
