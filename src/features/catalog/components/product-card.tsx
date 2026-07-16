@@ -95,7 +95,7 @@ export function ProductCard({
 
       {/* Image Container */}
       <Link href={`/products/${product.slug}`} className="block">
-        <div className="relative aspect-square w-full flex items-center justify-center p-5 bg-transparent mt-3">
+        <div className="relative aspect-square w-full flex items-center justify-center p-3.5 bg-transparent mt-2">
           <div className="relative w-full h-full">
             <Image
               src={imageSrc}
@@ -103,41 +103,24 @@ export function ProductCard({
               fill
               priority={priority}
               sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-              className="object-contain transition-transform duration-500 group-hover:scale-105"
+              className="object-contain transition-transform duration-500 group-hover:scale-105 mix-blend-multiply dark:mix-blend-normal"
             />
           </div>
         </div>
       </Link>
 
       {/* Card Info Section */}
-      <div className="flex flex-1 flex-col p-5 pt-1">
+      <div className="flex flex-1 flex-col p-4 pt-1.5">
         <span className="text-[11px] font-medium text-muted-foreground/80 dark:text-zinc-400">
           {categoryCopy[product.category]}
         </span>
 
-        <h3 className="line-clamp-2 text-sm font-bold text-[#253D4E] dark:text-zinc-100 mt-1 min-h-[40px] leading-tight">
+        <h3 className="line-clamp-2 text-sm font-bold text-[#253D4E] dark:text-zinc-100 mt-1 min-h-[36px] leading-tight">
           <Link href={`/products/${product.slug}`} className="hover:text-[#3BB77E] transition-colors">
             {product.name}
           </Link>
         </h3>
 
-        {/* Rating Stars & Count */}
-        <div className="flex items-center gap-1 my-1.5">
-          <div className="flex items-center gap-0.5">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={cn(
-                  "size-3",
-                  hasReviews 
-                    ? "fill-[#FDC040] text-[#FDC040]" 
-                    : "fill-gray-200 text-gray-200 dark:fill-zinc-700 dark:text-zinc-700"
-                )}
-              />
-            ))}
-          </div>
-          <span className="text-[10px] text-muted-foreground font-semibold ml-1">({reviews})</span>
-        </div>
 
         {/* Vendor */}
         <div className="text-[11px] text-muted-foreground/80 dark:text-zinc-400">
@@ -145,7 +128,7 @@ export function ProductCard({
         </div>
 
         {/* Footer: Price & Actions */}
-        <div className="flex items-center justify-between mt-4 pt-1">
+        <div className="flex items-center justify-between mt-2.5 pt-0.5">
           <div className="flex flex-col">
             <span className="text-base font-extrabold text-[#3BB77E] dark:text-[#3BB77E]">
               {formatCurrency(product.b2bPrice)}

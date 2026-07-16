@@ -49,22 +49,7 @@ function getVendorName(product: CatalogProduct) {
 
 function getProductImages(product: CatalogProduct): string[] {
   const mainImage = product.imageUrl || "/images/product-placeholder.svg";
-  
-  if (product.category === "ingredient") {
-    return [
-      mainImage,
-      "/images/boba_ingredients.png",
-      "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?auto=format&fit=crop&w=400&h=400&q=80",
-      "https://images.unsplash.com/photo-1556881286-fc6915169721?auto=format&fit=crop&w=400&h=400&q=80",
-    ];
-  } else {
-    return [
-      mainImage,
-      "/images/printed_cups.png",
-      "/images/clear_cups.png",
-      "https://images.unsplash.com/photo-1541658016709-82535e94bc69?auto=format&fit=crop&w=400&h=400&q=80",
-    ];
-  }
+  return [mainImage];
 }
 
 function getProductSizes(product: CatalogProduct): string[] {
@@ -145,7 +130,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                   alt={product.name}
                   fill
                   priority
-                  className="object-contain transition-transform duration-300 group-hover:scale-105"
+                  className="object-contain transition-transform duration-300 group-hover:scale-105 mix-blend-multiply dark:mix-blend-normal"
                 />
               </div>
               
@@ -170,7 +155,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                         : "border-[#E2EDE8] hover:border-[#3BB77E]/50"
                     )}
                   >
-                    <img src={img} alt={`Thumb ${idx}`} className="w-full h-full object-contain" />
+                    <img src={img} alt={`Thumb ${idx}`} className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal" />
                   </button>
                 );
               })}
@@ -191,20 +176,6 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
               {product.name}
             </h1>
 
-            {/* Rating Row */}
-            <div className="flex items-center gap-1.5 mt-2 mb-4">
-              <div className="flex items-center gap-0.5">
-                {[...Array(5)].map((_, i) => (
-                  <Star
-                    key={i}
-                    className="size-3.5 fill-[#FDC040] text-[#FDC040]"
-                  />
-                ))}
-              </div>
-              <span className="text-xs text-muted-foreground font-semibold">
-                ({reviews} đánh giá từ chuỗi quán)
-              </span>
-            </div>
 
             {/* Price Block (Large) */}
             <div className="flex items-end gap-3 mt-1 pb-4 border-b border-gray-100 dark:border-zinc-800">
@@ -386,17 +357,6 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
             >
               Nhà cung cấp
             </button>
-            <button
-              onClick={() => setActiveTab("reviews")}
-              className={cn(
-                "px-5 py-2.5 text-xs md:text-sm font-extrabold rounded-full transition-all border cursor-pointer",
-                activeTab === "reviews"
-                  ? "bg-[#DEF9EC] text-[#3BB77E] border-[#BCE3C9]"
-                  : "bg-transparent text-muted-foreground border-transparent hover:text-[#3BB77E] hover:border-gray-200"
-              )}
-            >
-              Đánh giá ({reviews})
-            </button>
           </div>
 
           {/* Active Tab Content Display */}
@@ -477,49 +437,6 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
               </div>
             )}
 
-            {activeTab === "reviews" && (
-              <div className="space-y-4 text-xs md:text-sm">
-                <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-zinc-800">
-                  <h4 className="font-extrabold text-[#253D4E] dark:text-zinc-200 text-sm">
-                    Đánh giá từ khách hàng B2B ({reviews})
-                  </h4>
-                  <div className="flex items-center gap-1">
-                    <span className="font-black text-[#253D4E] dark:text-zinc-200 text-base">{rating}</span>
-                    <span className="text-muted-foreground text-xs">/ 5.0</span>
-                  </div>
-                </div>
-
-                <div className="space-y-4 divide-y divide-gray-100 dark:divide-zinc-800">
-                  <div className="pt-4 first:pt-0 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-extrabold text-[#253D4E] dark:text-zinc-200">Chuỗi trà sữa Solstice Coffee</span>
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="size-3 fill-[#FDC040] text-[#FDC040]" />
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground dark:text-zinc-400">
-                      &ldquo;In ấn logo sắc nét chuẩn màu sắc thương hiệu. Ly PP cứng cáp, nắp dập chắc chắn không lo tràn rỉ khi ship hàng. Rất hài lòng với tồn kho realtime đặt hàng không lo đứt chuỗi.&rdquo;
-                    </p>
-                  </div>
-
-                  <div className="pt-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-extrabold text-[#253D4E] dark:text-zinc-200">Đại lý Bloom MilkTea</span>
-                      <div className="flex items-center gap-0.5">
-                        {[...Array(5)].map((_, i) => (
-                          <Star key={i} className="size-3 fill-[#FDC040] text-[#FDC040]" />
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground dark:text-zinc-400">
-                      &ldquo;Nguyên liệu trà lá và trân châu chất lượng chuẩn, độ nở dai ngon sần sật rất tốt. Giá sỉ B2B cực mềm so với mua lẻ ngoài chợ.&rdquo;
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
