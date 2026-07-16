@@ -426,7 +426,7 @@ export function CupDesignerPage() {
                   onClick={addToCart}
                   disabled={isSavingDesign}
                 >
-                  {isSavingDesign ? "Đang lưu..." : "Thêm vào giỏ custom print"}
+                  {isSavingDesign ? "Đang lưu..." : "Thêm vào giỏ hàng"}
                 </Button>
                 <p className="text-[10px] font-medium text-muted-foreground">
                   Đơn ly in không áp dụng COD. File 2D snapshot sẽ đi theo

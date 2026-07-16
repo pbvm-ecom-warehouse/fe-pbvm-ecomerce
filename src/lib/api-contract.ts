@@ -35,6 +35,10 @@ function trimTrailingSlash(value: string) {
 }
 
 export function getApiBaseUrl(baseUrl: string) {
+  if (typeof window !== "undefined" && !process.env.VITEST) {
+    return "/api/shop";
+  }
+
   const normalized = trimTrailingSlash(baseUrl);
 
   if (normalized.endsWith(API_PREFIX)) {
@@ -45,6 +49,11 @@ export function getApiBaseUrl(baseUrl: string) {
 }
 
 export function buildApiUrl(baseUrl: string, path: string) {
+  if (typeof window !== "undefined" && !process.env.VITEST) {
+    const cleanPath = path.replace(/^\/+/, "");
+    return `/api/shop/${cleanPath}`;
+  }
+
   const base = `${getApiBaseUrl(baseUrl)}/`;
   const normalizedPath = path.replace(/^\/+/, "");
   return new URL(normalizedPath, base).toString();

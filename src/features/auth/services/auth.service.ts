@@ -77,3 +77,27 @@ export async function updateProfile(input: { name?: string; phone?: string; avat
   // TODO: Kết nối khi BE implement PATCH /auth/profile
   return input;
 }
+
+export async function loginWithGoogle() {
+  const { auth, googleProvider, isFirebaseConfigured } = await import("@/lib/firebase");
+
+  if (!isFirebaseConfigured || !auth) {
+    return { isMock: true };
+  }
+
+  const { signInWithPopup } = await import("firebase/auth");
+  const result = await signInWithPopup(auth, googleProvider);
+  const idToken = await result.user.getIdToken();
+
+  type LoginResponse = { accessToken: string; refreshToken: string };
+  const response = await apiClient.post<ApiEnvelope<LoginResponse> | LoginResponse>(
+    "/auth/google-login",
+    { idToken },
+  );
+  const data = unwrapApiData(response.data);
+
+  setAuthTokens(data);
+  setTenantId("demo-tenant");
+
+  return data;
+}

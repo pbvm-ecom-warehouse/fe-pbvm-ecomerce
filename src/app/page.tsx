@@ -53,17 +53,14 @@ export default async function HomePage() {
     custom_print: "Ly in theo yêu cầu",
   };
 
-  // Sort products to prioritize those with active discounts, falling back to other catalog products
-  const sortedProductsForDeals = [...products.data].sort((a, b) => {
-    const discountA = a.price - a.b2bPrice;
-    const discountB = b.price - b.b2bPrice;
-    return discountB - discountA;
-  });
+  // Filter products to only include those with active discounts
+  const productsWithDiscounts = products.data.filter(
+    (p) => p.price > p.b2bPrice,
+  );
 
-  const deals = sortedProductsForDeals.slice(0, 4).map((p) => {
-    const hasDiscount = p.price > p.b2bPrice;
+  const deals = productsWithDiscounts.slice(0, 4).map((p) => {
     const finalPrice = p.b2bPrice;
-    const oldPrice = hasDiscount ? p.price : Math.round(p.b2bPrice * 1.15);
+    const oldPrice = p.price;
 
     let dealImage = p.imageUrl || "/images/product-placeholder.svg";
     if (dealImage === "/images/product-placeholder.svg") {
@@ -76,7 +73,6 @@ export default async function HomePage() {
       title: p.name,
       price: finalPrice,
       oldPrice: oldPrice,
-      rating: 4.5 + (p.name.length % 5) / 10,
       vendor: getVendorName(p),
       days: "02",
       hours: "14",
@@ -89,20 +85,36 @@ export default async function HomePage() {
     };
   });
 
-  const getColItems = (startIndex: number) => {
+  const getProductScore = (id: string) => {
+    let hash = 0;
+    for (let i = 0; i < id.length; i++) {
+      hash = id.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const salesCount = Math.abs(hash) % 1000;
+    const rating = 4.0 + (Math.abs(hash) % 11) / 10;
+    return { salesCount, rating };
+  };
+
+  const getColItems = (type: "bestseller" | "trending" | "new" | "toprated") => {
     if (products.data.length === 0) return [];
     
-    const items: CatalogProduct[] = [];
-    for (let i = 0; i < 3; i++) {
-      const productIndex = (startIndex + i) % products.data.length;
-      const p = products.data[productIndex];
-      if (i > 0 && products.data.length < 3 && items.includes(p)) {
-        break;
+    let sorted = [...products.data];
+
+    if (type === "bestseller") {
+      sorted.sort((a, b) => getProductScore(b.id).salesCount - getProductScore(a.id).salesCount);
+    } else if (type === "trending") {
+      sorted.sort((a, b) => getProductScore(b.id).salesCount - getProductScore(a.id).salesCount);
+      if (sorted.length > 1) {
+        const first = sorted.shift()!;
+        sorted.push(first);
       }
-      items.push(p);
+    } else if (type === "new") {
+      sorted.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    } else if (type === "toprated") {
+      sorted.sort((a, b) => getProductScore(b.id).rating - getProductScore(a.id).rating);
     }
-    
-    return items.map((p) => {
+
+    return sorted.slice(0, 3).map((p) => {
       const hasDiscount = p.price > p.b2bPrice;
       const finalPrice = p.b2bPrice;
       const oldPrice = hasDiscount ? p.price : 0;
@@ -111,6 +123,7 @@ export default async function HomePage() {
         name: p.name,
         price: formatCurrency(finalPrice),
         oldPrice: oldPrice > 0 ? formatCurrency(oldPrice) : "",
+        imageUrl: p.imageUrl,
       };
     });
   };
@@ -118,19 +131,19 @@ export default async function HomePage() {
   const listCols = [
     {
       title: "Bán chạy nhất",
-      items: getColItems(0),
+      items: getColItems("bestseller"),
     },
     {
       title: "Đang là xu hướng",
-      items: getColItems(3),
+      items: getColItems("trending"),
     },
     {
       title: "Mới cập nhật",
-      items: getColItems(6),
+      items: getColItems("new"),
     },
     {
       title: "Đánh giá cao",
-      items: getColItems(9),
+      items: getColItems("toprated"),
     },
   ];
 
@@ -361,9 +374,9 @@ export default async function HomePage() {
                       {/* Image Thumbnail */}
                       <div className="relative size-12 rounded-lg overflow-hidden shrink-0 bg-[#F0F6F3] dark:bg-[#162D21] border border-[#E2EDE8] dark:border-[#2C332F]">
                         <img
-                          src={getProductThumbnail(item.name)}
+                          src={item.imageUrl || "/images/product-placeholder.svg"}
                           alt={item.name}
-                          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300"
+                          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300 mix-blend-multiply dark:mix-blend-normal"
                         />
                       </div>
                       {/* Text details */}

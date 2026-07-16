@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
 import { loginSchema, type LoginInput } from "@/features/auth/schemas/login.schema";
-import { login, getMe } from "@/features/auth/services/auth.service";
+import { login, getMe, loginWithGoogle } from "@/features/auth/services/auth.service";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCartStore } from "@/stores/cart-store";
 import { env } from "@/lib/env";
@@ -32,6 +32,44 @@ export default function LoginPage() {
   const setUser = useAuthStore((state) => state.setUser);
   const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
   const [showPassword, setShowPassword] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true);
+    try {
+      const data: any = await loginWithGoogle();
+      
+      if (data && data.isMock) {
+        toast.info("Firebase chưa cấu hình trong .env. Đang tự động đăng nhập tài khoản B2B demo...");
+        await onSubmit({
+          email: "customer@ecom.com",
+          password: "CustomerPass123!",
+          tenantId: "demo-tenant",
+        });
+        return;
+      }
+
+      const me = await getMe();
+      setUser({
+        id: me.id,
+        name: me.name || me.email,
+        email: me.email,
+        type: "B2B",
+        tenantId: "demo-tenant",
+        phone: me.phone,
+        avatar: me.avatar,
+      });
+      fetchAndSyncCart().catch(console.error);
+      toast.success("Đăng nhập bằng Google thành công!");
+      router.push("/");
+    } catch (error: any) {
+      console.error(error);
+      const errorMsg = error.response?.data?.message || "Đăng nhập Google thất bại.";
+      toast.error(errorMsg);
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
   const {
     register,
@@ -92,10 +130,12 @@ export default function LoginPage() {
         <Button
           type="button"
           variant="outline"
+          onClick={handleGoogleLogin}
+          disabled={isGoogleLoading || isSubmitting}
           className="w-full h-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-600 transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-[0.99]"
         >
           <GoogleIcon />
-          Tiếp tục với Google
+          {isGoogleLoading ? "Đang liên kết..." : "Tiếp tục với Google"}
         </Button>
 
         {/* Custom text divider */}

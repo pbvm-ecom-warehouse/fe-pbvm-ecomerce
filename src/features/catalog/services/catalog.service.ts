@@ -122,6 +122,28 @@ const UNIT_MAP: Record<CatalogProduct["category"], string> = {
   custom_print: "cái",
 };
 
+function getValidImageUrl(img: string | undefined): string {
+  if (!img) return "/images/product-placeholder.svg";
+  const lowercase = img.toLowerCase().trim();
+  if (
+    lowercase === "string" ||
+    lowercase === "undefined" ||
+    lowercase === "null" ||
+    lowercase === ""
+  ) {
+    return "/images/product-placeholder.svg";
+  }
+  if (
+    img.startsWith("http://") ||
+    img.startsWith("https://") ||
+    img.startsWith("/") ||
+    img.startsWith("data:")
+  ) {
+    return img;
+  }
+  return "/images/product-placeholder.svg";
+}
+
 /**
  * Map một product detail (từ /catalog/products/:slug có variants)
  * thành CatalogProduct dùng ở FE.
@@ -143,7 +165,7 @@ function mapProductDetail(p: any): CatalogProduct {
     b2bPrice: price,
     unit: UNIT_MAP[category] ?? "bao",
     stockSnapshot: variants.reduce((sum: number, v: any) => sum + (v.availableQty ?? 0), 0),
-    imageUrl: p.images?.[0] ?? "/images/product-placeholder.svg",
+    imageUrl: getValidImageUrl(p.images?.[0]),
     updatedAt: p.updatedAt ?? new Date().toISOString(),
   };
 }
@@ -165,7 +187,7 @@ function mapProductListItem(p: any): CatalogProduct {
     b2bPrice: 0,
     unit: UNIT_MAP[category] ?? "bao",
     stockSnapshot: 0,
-    imageUrl: p.images?.[0] ?? "/images/product-placeholder.svg",
+    imageUrl: getValidImageUrl(p.images?.[0]),
     updatedAt: p.updatedAt ?? new Date().toISOString(),
   };
 }
