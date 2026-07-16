@@ -82,7 +82,7 @@ export async function loginWithGoogle() {
   const { auth, googleProvider, isFirebaseConfigured } = await import("@/lib/firebase");
 
   if (!isFirebaseConfigured || !auth) {
-    return { isMock: true };
+    throw new Error("Cấu hình Firebase chưa được thiết lập. Vui lòng thêm biến môi trường NEXT_PUBLIC_FIREBASE_API_KEY và NEXT_PUBLIC_FIREBASE_APP_ID.");
   }
 
   const { signInWithPopup } = await import("firebase/auth");

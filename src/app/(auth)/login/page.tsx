@@ -37,17 +37,7 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
     try {
-      const data: any = await loginWithGoogle();
-      
-      if (data && data.isMock) {
-        toast.info("Firebase chưa cấu hình trong .env. Đang tự động đăng nhập tài khoản B2B demo...");
-        await onSubmit({
-          email: "customer@ecom.com",
-          password: "CustomerPass123!",
-          tenantId: "demo-tenant",
-        });
-        return;
-      }
+      await loginWithGoogle();
 
       const me = await getMe();
       setUser({
@@ -64,7 +54,7 @@ export default function LoginPage() {
       router.push("/");
     } catch (error: any) {
       console.error(error);
-      const errorMsg = error.response?.data?.message || "Đăng nhập Google thất bại.";
+      const errorMsg = error.message || error.response?.data?.message || "Đăng nhập Google thất bại.";
       toast.error(errorMsg);
     } finally {
       setIsGoogleLoading(false);
