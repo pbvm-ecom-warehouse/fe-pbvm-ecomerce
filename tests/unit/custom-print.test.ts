@@ -59,9 +59,7 @@ describe("custom print checkout contract", () => {
     expect(cartRequiresOnlinePayment([customPrintItem])).toBe(true);
     expect(isPaymentAllowedForCart("COD", [customPrintItem])).toBe(false);
     expect(getPaymentOptionsForCart([customPrintItem]).map((item) => item.value)).toEqual([
-      "VNPAY",
-      "MOMO",
-      "ZALOPAY",
+      "PAYOS",
     ]);
   });
 

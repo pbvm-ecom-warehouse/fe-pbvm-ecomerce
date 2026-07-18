@@ -5,7 +5,7 @@ export const checkoutSchema = z.object({
   customerType: z.enum(["B2B", "B2C"]),
   phone: z.string().regex(/^(0|\+84)[0-9]{9,10}$/, "Số điện thoại chưa hợp lệ"),
   address: z.string().min(10, "Nhập địa chỉ giao hàng chi tiết"),
-  paymentProvider: z.enum(["COD", "VNPAY", "MOMO", "ZALOPAY"]),
+  paymentProvider: z.enum(["COD", "PAYOS"]),
   note: z.string().max(300).optional(),
   shippingMethod: z.string().optional(),
   reqVAT: z.boolean().optional(),

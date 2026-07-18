@@ -10,7 +10,7 @@ describe("checkout schema", () => {
         customerType: "B2B",
         phone: "0900000000",
         address: "123 Nguyen Van Linh, Quan 7, TP.HCM",
-        paymentProvider: "VNPAY",
+        paymentProvider: "PAYOS",
       }).success,
     ).toBe(true);
   });

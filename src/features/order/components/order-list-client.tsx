@@ -159,7 +159,7 @@ export function OrderListClient({
                       </span>
                       <span className="flex items-center gap-1">
                         <CreditCard size={12} />
-                        {order.paymentMethod === "ONLINE" ? "Cổng VNPay" : "Tiền mặt (COD)"}
+                        {order.paymentMethod === "ONLINE" ? "Cổng PayOS" : "Tiền mặt (COD)"}
                       </span>
                       {order.warehouseName && (
                         <span className="flex items-center gap-1">

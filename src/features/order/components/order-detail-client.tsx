@@ -86,11 +86,11 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
     try {
       setIsRepaying(true);
       const payUrlRes = await apiClient.get<any>(
-        `/payment/vnpay/create-url/${orderId || order._id}`,
+        `/payment/payos/create-url/${orderId || order._id}`,
       );
       const payUrlData = unwrapApiData(payUrlRes.data);
       if (payUrlData.payUrl) {
-        toast.success("Đang chuyển hướng sang cổng thanh toán VNPay...");
+        toast.success("Đang chuyển hướng sang cổng thanh toán PayOS...");
         window.location.href = payUrlData.payUrl;
       } else {
         toast.error("Không tạo được link thanh toán.");
@@ -417,7 +417,7 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
                     <p className="font-bold text-slate-700">Phương thức thanh toán đã chọn</p>
                     <p>
                       {order.paymentMethod === "ONLINE" 
-                        ? "Thanh toán trực tuyến qua cổng VNPay (Sandbox)" 
+                        ? "Thanh toán trực tuyến qua cổng PayOS" 
                         : "Thanh toán mặt cho nhà xe/chành xe (COD) khi nhận hàng"}
                     </p>
                   </div>
@@ -442,7 +442,7 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
                       className="bg-primary hover:bg-[#2F9A68] text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-xs text-xs cursor-pointer select-none"
                     >
                       <ExternalLink className="size-4" />
-                      {isRepaying ? "Đang tạo URL..." : "Thanh toán ngay (VNPay)"}
+                      {isRepaying ? "Đang tạo URL..." : "Thanh toán ngay (PayOS)"}
                     </Button>
                   )}
 

@@ -167,17 +167,18 @@ export async function createOrder(payload: CreateOrderPayload) {
     const orderData = unwrapApiData(checkoutResponse.data);
     const orderId = orderData.id || orderData._id;
 
-    // 3. If online payment, generate VNPay URL
+    // 3. If online payment, generate PayOS URL
     let paymentUrl: string | undefined = undefined;
     if (paymentMethod === "ONLINE") {
       try {
         const payUrlRes = await apiClient.get<any>(
-          `/payment/vnpay/create-url/${orderId}`,
+          `/payment/payos/create-url/${orderId}`,
         );
         const payUrlData = unwrapApiData(payUrlRes.data);
         paymentUrl = payUrlData.payUrl;
       } catch (payErr) {
-        console.error("Failed to create VNPay URL, showing manual payment:", payErr);
+        console.error("Failed to create PayOS URL:", payErr);
+        throw payErr;
       }
     }
 
