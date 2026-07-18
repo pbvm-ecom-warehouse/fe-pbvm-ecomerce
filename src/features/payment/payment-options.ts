@@ -1,10 +1,8 @@
 import type { CartItem } from "@/types/api";
 
 export const paymentOptions = [
-  { value: "COD", label: "Thanh toán khi nhận hàng" },
-  { value: "VNPAY", label: "VNPay" },
-  { value: "MOMO", label: "MoMo" },
-  { value: "ZALOPAY", label: "ZaloPay" },
+  { value: "COD", label: "Thanh toán khi nhận hàng (COD)" },
+  { value: "PAYOS", label: "Thanh toán online (PayOS)" },
 ] as const;
 
 export type PaymentProvider = (typeof paymentOptions)[number]["value"];

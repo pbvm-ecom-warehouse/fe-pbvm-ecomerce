@@ -63,9 +63,8 @@ const footerColumns = [
   {
     title: "Thanh toán",
     links: [
-      { href: "/checkout", label: "VNPay / MoMo / ZaloPay" },
+      { href: "/checkout", label: "Thanh toán online (PayOS)" },
       { href: "/checkout", label: "COD cho hàng sẵn" },
-      { href: "/design-cup", label: "Online cho ly custom" },
     ],
   },
 ];

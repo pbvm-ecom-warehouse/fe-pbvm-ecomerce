@@ -148,7 +148,7 @@ export function CheckoutForm() {
     try {
       toast.success("Đang tạo link thanh toán mới...");
       const payUrlRes = await apiClient.get<any>(
-        `/payment/vnpay/create-url/${pendingOrderId}`,
+        `/payment/payos/create-url/${pendingOrderId}`,
       );
       const payUrlData = unwrapApiData(payUrlRes.data);
       if (payUrlData.payUrl) {
@@ -231,15 +231,7 @@ export function CheckoutForm() {
     }
   }, [user, router]);
 
-  if (!user) {
-    return (
-      <div className="flex min-h-[300px] flex-col items-center justify-center text-center space-y-4">
-        <div className="text-sm font-semibold text-slate-400 animate-pulse">
-          Đang chuyển hướng sang trang đăng nhập...
-        </div>
-      </div>
-    );
-  }
+
 
   const {
     register,
@@ -253,13 +245,14 @@ export function CheckoutForm() {
       customerName: user?.name || "",
       phone: user?.phone || "",
       customerType: user?.customerType || "B2B",
-      paymentProvider: "VNPAY",
+      paymentProvider: "PAYOS",
       shippingMethod: "TRUCK",
     },
   });
 
   // Fetch saved addresses on mount
   useEffect(() => {
+    if (!user) return;
     const loadAddresses = async () => {
       try {
         setIsLoadingAddresses(true);
@@ -281,7 +274,7 @@ export function CheckoutForm() {
     };
     loadAddresses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   const applyAddress = (addr: AddressResponse) => {
     setValue("customerName", addr.recipientName);
@@ -361,6 +354,16 @@ export function CheckoutForm() {
     }
   }, [user, setValue]);
   const selectedPayment = useWatch({ control, name: "paymentProvider" });
+
+  if (!user) {
+    return (
+      <div className="flex min-h-[300px] flex-col items-center justify-center text-center space-y-4">
+        <div className="text-sm font-semibold text-slate-400 animate-pulse">
+          Đang chuyển hướng sang trang đăng nhập...
+        </div>
+      </div>
+    );
+  }
 
   const handleOrderFinish = () => {
     clearSelectedItems();
