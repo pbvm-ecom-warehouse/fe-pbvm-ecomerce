@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -27,7 +27,7 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/";
@@ -245,7 +245,7 @@ export default function LoginPage() {
           {isSubmitting ? "Đang xử lý..." : "Đăng nhập"}
         </Button>
 
-        {/* Footer link */}
+         {/* Footer link */}
         <p className="text-center text-xs text-[#78858F] font-semibold pt-2">
           Chưa đăng ký?{" "}
           <Link href="/register" className="font-bold text-[#3BB77E] hover:underline">
@@ -254,5 +254,17 @@ export default function LoginPage() {
         </p>
       </form>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-64 items-center justify-center">
+        <div className="size-8 rounded-full border-2 border-emerald-200 border-t-emerald-600 animate-spin" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

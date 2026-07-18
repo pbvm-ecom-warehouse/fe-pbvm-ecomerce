@@ -1,10 +1,11 @@
 "use client";
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { Suspense } from "react";
 import { OrderListClient } from "@/features/order/components/order-list-client";
 import { OrderDetailClient } from "@/features/order/components/order-detail-client";
 
-export default function OrdersPage() {
+function OrdersContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -48,6 +49,18 @@ export default function OrdersPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function OrdersPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-64 items-center justify-center">
+        <div className="size-8 rounded-full border-2 border-emerald-200 border-t-emerald-600 animate-spin" />
+      </div>
+    }>
+      <OrdersContent />
+    </Suspense>
   );
 }
 
