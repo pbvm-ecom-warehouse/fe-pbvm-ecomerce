@@ -22,6 +22,7 @@ import {
   hasCustomPrintItems,
 } from "@/features/cart/utils/cart";
 import { useCartStore } from "@/stores/cart-store";
+import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/utils/format-currency";
 import {
   Dialog,
@@ -36,11 +37,18 @@ const freeShippingThreshold = 5_000_000;
 
 export function CartPageClient() {
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
+  const user = useAuthStore((state) => state.user);
   const items = useCartStore((state) => state.items);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
-  const totals = calculateCartTotals(items);
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+  const toggleSelectItem = useCartStore((state) => state.toggleSelectItem);
+  const toggleSelectAll = useCartStore((state) => state.toggleSelectAll);
+
+  // Filter selected items for calculations
+  const selectedItems = items.filter((item) => item.selected !== false);
+  const totals = calculateCartTotals(selectedItems);
+  const totalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
+
   const progressPercent = Math.min(
     (totals.subtotal / freeShippingThreshold) * 100,
     100,
@@ -49,97 +57,93 @@ export function CartPageClient() {
     freeShippingThreshold - totals.subtotal,
     0,
   );
-  const hasCustomPrint = hasCustomPrintItems(items);
-
+  const hasCustomPrint = hasCustomPrintItems(selectedItems);
 
   return (
-    <div className="grid items-start gap-8 lg:grid-cols-[1fr_370px]">
-      <div className="space-y-5">
-        {items.length > 0 ? (
-          <Card className="rounded-2xl border-border bg-white p-0 shadow-sm">
-            <CardContent className="space-y-3 p-5">
-              <div className="flex items-center justify-between gap-4 text-xs">
-                <span className="inline-flex items-center gap-1.5 font-black uppercase tracking-[0.14em] text-primary">
-                  <Info className="size-4" />
-                  Ưu đãi giao hàng sỉ
-                </span>
-                <span className="font-bold text-foreground">
-                  {remainingForFreeShipping === 0
-                    ? "Đã đạt miễn phí"
-                    : `Cần thêm ${formatCurrency(remainingForFreeShipping)}`}
-                </span>
-              </div>
-              <div className="h-2.5 overflow-hidden rounded-full border border-border bg-muted/40">
-                <div
-                  className="h-full rounded-full bg-primary transition-all"
-                  style={{ width: `${progressPercent}%` }}
+    <div className="w-full">
+      <Card className="overflow-hidden rounded-2xl border-border bg-white p-0 shadow-sm">
+        <CardHeader className="border-b border-border/70 bg-muted/40 px-6 py-4 flex flex-row items-center justify-between gap-4 flex-wrap">
+          <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.14em] text-primary">
+            <ShoppingBag className="size-4" />
+            Sản phẩm trong giỏ ({items.length})
+          </CardTitle>
+          {items.length > 0 && (
+            <div className="flex items-center gap-6">
+              {/* Check all */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={items.every((item) => item.selected !== false)}
+                  onChange={(e) => toggleSelectAll(e.target.checked)}
+                  className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer transition-all accent-primary"
                 />
+                <span className="text-xs font-bold text-muted-foreground select-none">Chọn tất cả</span>
               </div>
-              <p className="text-xs leading-5 text-muted-foreground">
-                Đơn từ {formatCurrency(freeShippingThreshold)} được miễn phí
-                giao chành xe theo chính sách tạm tính hiện tại.
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card className="overflow-hidden rounded-2xl border-border bg-white p-0 shadow-sm">
-          <CardHeader className="border-b border-border/70 bg-muted/40 px-6 py-4">
-            <CardTitle className="flex items-center justify-between gap-4 text-sm font-black uppercase tracking-[0.14em] text-primary">
-              <span>Sản phẩm trong giỏ ({totalItems})</span>
-              {items.length > 0 ? (
-                <Link
-                  href="/products"
-                  className="text-xs normal-case tracking-normal hover:underline"
-                >
-                  Thêm sản phẩm
-                </Link>
-              ) : null}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            {items.length === 0 ? (
-              <div className="flex flex-col items-center gap-4 py-14 text-center">
-                <div className="flex size-14 items-center justify-center rounded-full bg-muted/40 text-muted-foreground">
-                  <ShoppingBag className="size-7" />
-                </div>
-                <div>
-                  <h2 className="text-base font-black">
-                    Chưa có sản phẩm
-                  </h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Quay lại catalog để chọn nguyên liệu, ly in sẵn hoặc tự
-                    thiết kế ly custom.
-                  </p>
-                </div>
-                <Button
-                  asChild
-                  className="h-11 rounded-xl bg-primary px-5 font-bold text-white hover:bg-[#2FA36E]"
-                >
-                  <Link href="/products">Khám phá sản phẩm</Link>
-                </Button>
+              <Link
+                href="/products"
+                className="text-xs font-bold text-primary hover:underline"
+              >
+                Thêm sản phẩm
+              </Link>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent className="p-6 divide-y divide-border/60">
+          {items.length === 0 ? (
+            <div className="flex flex-col items-center gap-4 py-14 text-center">
+              <div className="flex size-14 items-center justify-center rounded-full bg-muted/40 text-muted-foreground">
+                <ShoppingBag className="size-7" />
               </div>
-            ) : (
-              items.map((item) => (
+              <div>
+                <h2 className="text-base font-black">
+                  Chưa có sản phẩm
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Quay lại catalog để chọn nguyên liệu, ly in sẵn hoặc tự
+                  thiết kế ly custom.
+                </p>
+              </div>
+              <Button
+                asChild
+                className="h-11 rounded-xl bg-primary px-5 font-bold text-white hover:bg-[#2FA36E]"
+              >
+                <Link href="/products">Khám phá sản phẩm</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-6 pb-6">
+              {items.map((item) => (
                 <div
                   key={item.cartItemId}
-                  className="grid gap-4 py-5 first:pt-0 last:pb-0 sm:grid-cols-[100px_1fr_auto] items-start"
+                  className="grid gap-4 first:pt-0 sm:grid-cols-[auto_100px_1fr_auto] items-start"
                 >
+                  {/* Selection Checkbox */}
+                  <div className="pt-8">
+                    <input
+                      type="checkbox"
+                      checked={item.selected !== false}
+                      onChange={() => toggleSelectItem(item.cartItemId)}
+                      className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer transition-all accent-primary"
+                    />
+                  </div>
+
                   {/* Thumbnail */}
                   <div className="relative aspect-square w-full rounded-xl border border-border bg-muted/40 flex items-center justify-center p-2">
                     {item.imageUrl && item.imageUrl.startsWith("data:") ? (
-                      <Image
+                      <img
                         src={item.imageUrl}
                         alt={item.name}
                         className="h-full w-full object-contain p-1"
                       />
                     ) : item.imageUrl ? (
-                      <Image
-                        src={item.imageUrl}
-                        alt={item.name}
-                        fill
-                        className="object-cover p-1"
-                      />
+                      <div className="relative w-full h-full">
+                        <Image
+                          src={item.imageUrl}
+                          alt={item.name}
+                          fill
+                          className="object-cover p-1"
+                        />
+                      </div>
                     ) : (
                       <span className="text-[10px] text-muted-foreground">No image</span>
                     )}
@@ -216,72 +220,105 @@ export function CartPageClient() {
                     </Button>
                   </div>
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              ))}
+            </div>
+          )}
 
-      <aside className="space-y-4 lg:sticky lg:top-36">
-        <Card className="overflow-hidden rounded-2xl border-border bg-white p-0 shadow-sm">
-          <CardHeader className="border-b border-border/70 bg-muted/40 px-6 py-4">
-            <CardTitle className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-primary">
-              <FileText className="size-4" />
-              Hóa đơn tạm tính
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 p-6 text-sm">
-            <div className="space-y-2.5">
-              <div className="flex justify-between gap-4 text-muted-foreground">
-                <span>Hàng hóa</span>
-                <span className="font-bold text-foreground">
-                  {formatCurrency(totals.subtotal)}
-                </span>
+          {items.length > 0 && (
+            <div className="pt-6 space-y-6">
+              {/* Progress bar / Free shipping bar */}
+              <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-4 text-xs">
+                  <span className="inline-flex items-center gap-1.5 font-black uppercase tracking-[0.14em] text-primary">
+                    <Info className="size-4" />
+                    Ưu đãi giao hàng sỉ
+                  </span>
+                  <span className="font-bold text-foreground">
+                    {remainingForFreeShipping === 0
+                      ? "Đã đạt miễn phí"
+                      : `Cần thêm ${formatCurrency(remainingForFreeShipping)}`}
+                  </span>
+                </div>
+                <div className="h-2.5 overflow-hidden rounded-full border border-border bg-white">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+                <p className="text-[11px] leading-5 text-muted-foreground">
+                  Đơn từ {formatCurrency(freeShippingThreshold)} được miễn phí
+                  giao chành xe theo chính sách tạm tính hiện tại.
+                </p>
               </div>
-              <div className="flex justify-between gap-4 text-muted-foreground">
-                <span>Giao hàng</span>
-                <span className="font-bold text-foreground">
-                  {totals.shippingFee === 0
-                    ? "Miễn phí"
-                    : formatCurrency(totals.shippingFee)}
-                </span>
+
+              {/* Summary detail layout */}
+              <div className="space-y-4 pt-2">
+                {/* Custom cup and trust guidelines */}
+                <div className="text-xs text-muted-foreground space-y-3 w-full">
+                  {hasCustomPrint ? (
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 leading-5">
+                      Giỏ có ly in custom nên checkout chỉ hiển thị các phương thức
+                      thanh toán online, không dùng COD.
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Calculation breakdown and Checkout CTA */}
+                <div className="rounded-xl border border-border bg-muted/10 p-5 space-y-4 w-full">
+                  <div className="text-xs font-black uppercase tracking-wider text-muted-foreground pb-2 border-b border-border">
+                    Chi tiết thanh toán ({totalItems} sản phẩm được chọn)
+                  </div>
+                  <div className="space-y-2.5 text-xs">
+                    <div className="flex justify-between gap-4 text-muted-foreground">
+                      <span>Tạm tính</span>
+                      <span className="font-bold text-foreground">
+                        {formatCurrency(totals.subtotal)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between gap-4 text-muted-foreground">
+                      <span>Phí giao hàng</span>
+                      <span className="font-bold text-foreground">
+                        {totals.shippingFee === 0
+                          ? "Miễn phí"
+                          : formatCurrency(totals.shippingFee)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-baseline justify-between gap-4 border-t border-border pt-4">
+                    <span className="font-black text-primary text-sm">Tổng cộng</span>
+                    <span className="text-xl font-black text-primary">
+                      {formatCurrency(totals.grandTotal)}
+                    </span>
+                  </div>
+
+                  <Button
+                    asChild
+                    className="h-12 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#2FA36E] text-xs flex items-center justify-center gap-1.5"
+                    disabled={selectedItems.length === 0}
+                  >
+                    {selectedItems.length > 0 ? (
+                      user ? (
+                        <Link href="/checkout">
+                          Tiến hành thanh toán ({selectedItems.length})
+                          <ArrowRight className="size-4" />
+                        </Link>
+                      ) : (
+                        <Link href="/login?redirect=/checkout">
+                          Đăng nhập để thanh toán ({selectedItems.length})
+                          <ArrowRight className="size-4" />
+                        </Link>
+                      )
+                    ) : (
+                      <span className="cursor-not-allowed text-white/50">Chọn sản phẩm để thanh toán</span>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
-
-            <div className="flex items-baseline justify-between gap-4 border-t border-border pt-4">
-              <span className="font-black text-primary">Tổng</span>
-              <span className="text-xl font-black text-primary">
-                {formatCurrency(totals.grandTotal)}
-              </span>
-            </div>
-
-            {hasCustomPrint ? (
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
-                Giỏ có ly in custom nên checkout chỉ hiển thị các phương thức
-                thanh toán online, không dùng COD.
-              </div>
-            ) : null}
-
-            <Button
-              asChild
-              className="h-12 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#2FA36E]"
-              disabled={items.length === 0}
-            >
-              <Link href="/checkout">
-                Tiến hành thanh toán
-                <ArrowRight data-icon="inline-end" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/40 p-4 text-xs leading-5 text-muted-foreground">
-          <ShieldCheck className="mt-0.5 size-5 shrink-0 text-primary" />
-          <span>
-            Ly custom được lưu kèm mã thiết kế và file mẫu để xưởng in xử lý.
-          </span>
-        </div>
-      </aside>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Confirmation Dialog for Item Deletion */}
       <Dialog open={deletingItemId !== null} onOpenChange={(open) => !open && setDeletingItemId(null)}>

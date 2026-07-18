@@ -1,4 +1,4 @@
-import { OrderDetailClient } from "@/features/order/components/order-detail-client";
+import { redirect } from "next/navigation";
 
 export default async function OrderDetailPage({
   params,
@@ -6,10 +6,6 @@ export default async function OrderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-
-  return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-6">
-      <OrderDetailClient orderId={id} />
-    </main>
-  );
+  redirect(`/orders?id=${id}`);
 }
+

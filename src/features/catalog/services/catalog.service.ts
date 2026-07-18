@@ -216,8 +216,18 @@ export async function listCatalogProducts() {
           const detail = await publicApiFetch<any>(
             `/catalog/products/${encodeURIComponent(p.slug)}`,
           );
+          
+          // Log pricing details for debug
+          console.log(`[API Price Log] Product: ${p.name} | Slug: ${p.slug}`);
+          if (detail?.variants) {
+            detail.variants.forEach((v: any) => {
+              console.log(`  -> Variant SKU: ${v.sku} | Price: ${v.price} | Available: ${v.availableQty}`);
+            });
+          }
+
           return detail ? mapProductDetail(detail) : mapProductListItem(p);
-        } catch {
+        } catch (err) {
+          console.error(`[API Price Log Error] Failed to fetch details for ${p.slug}:`, err);
           return mapProductListItem(p);
         }
       }),
@@ -249,6 +259,15 @@ export async function getCatalogProductBySlug(slug: string) {
       `/catalog/products/${encodeURIComponent(slug)}`,
     );
     if (!p) return null;
+
+    // Log pricing details for debug
+    console.log(`[API Price Log] Detail for ${slug}:`);
+    if (p.variants) {
+      p.variants.forEach((v: any) => {
+        console.log(`  -> Variant SKU: ${v.sku} | Price: ${v.price} | Fulfillment: ${v.fulfillmentType}`);
+      });
+    }
+
     return mapProductDetail(p);
   } catch (error) {
     console.error(`getCatalogProductBySlug(${slug}): BE error:`, error);

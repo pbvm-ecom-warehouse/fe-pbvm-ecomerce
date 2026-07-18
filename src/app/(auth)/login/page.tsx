@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -29,6 +29,8 @@ const GoogleIcon = () => (
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirect = searchParams.get("redirect") || "/";
   const setUser = useAuthStore((state) => state.setUser);
   const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
   const [showPassword, setShowPassword] = useState(false);
@@ -40,19 +42,40 @@ export default function LoginPage() {
       await loginWithGoogle();
 
       const me = await getMe();
+      if (me.type === "admin") {
+        setUser({
+          id: me.id,
+          name: me.name || me.email,
+          email: me.email,
+          type: "admin",
+          customerType: "B2B",
+          tenantId: "demo-tenant",
+          phone: me.phone,
+          avatar: me.avatar,
+        });
+        toast.success("Đăng nhập tài khoản quản trị bằng Google thành công!");
+        router.push("/admin/catalog/products");
+        return;
+      }
+
       setUser({
         id: me.id,
         name: me.name || me.email,
         email: me.email,
-        type: "B2B",
+        type: "customer",
+        customerType: "B2B",
         tenantId: "demo-tenant",
         phone: me.phone,
         avatar: me.avatar,
       });
       fetchAndSyncCart().catch(console.error);
       toast.success("Đăng nhập bằng Google thành công!");
-      router.push("/");
+      router.push(redirect);
     } catch (error: any) {
+      if (error?.code === "auth/popup-closed-by-user" || error?.message?.includes("popup-closed-by-user") || error?.message?.includes("cancelled-popup-request")) {
+        toast.info("Đã hủy quá trình đăng nhập bằng Google.");
+        return;
+      }
       console.error(error);
       const errorMsg = error.message || error.response?.data?.message || "Đăng nhập Google thất bại.";
       toast.error(errorMsg);
@@ -78,11 +101,29 @@ export default function LoginPage() {
     try {
       await login(data);
       const me = await getMe();
+
+      if (me.type === "admin") {
+        setUser({
+          id: me.id,
+          name: me.name || me.email,
+          email: me.email,
+          type: "admin",
+          customerType: "B2B",
+          tenantId: data.tenantId,
+          phone: me.phone,
+          avatar: me.avatar,
+        });
+        toast.success("Đăng nhập tài khoản quản trị thành công!");
+        router.push("/admin/catalog/products");
+        return;
+      }
+
       setUser({
         id: me.id,
         name: me.name || me.email,
         email: me.email,
-        type: "B2B",
+        type: "customer",
+        customerType: "B2B",
         tenantId: data.tenantId,
         phone: me.phone,
         avatar: me.avatar,
@@ -90,7 +131,7 @@ export default function LoginPage() {
       // Đồng bộ giỏ hàng từ server về local sau khi đăng nhập
       fetchAndSyncCart().catch(console.error);
       toast.success("Đăng nhập thành công!");
-      router.push("/");
+      router.push(redirect);
     } catch (error: any) {
       console.error(error);
       const errorMsg = error.response?.data?.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại.";

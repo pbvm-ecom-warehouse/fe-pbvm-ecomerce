@@ -1,6 +1,7 @@
 import { apiClient } from "@/lib/api-client";
 import { type ApiEnvelope, unwrapApiData } from "@/lib/api-contract";
 import type { CartItem } from "@/types/api";
+import { useCartStore } from "@/stores/cart-store";
 
 import type { CheckoutInput } from "../schemas/checkout.schema";
 
@@ -51,6 +52,40 @@ export async function addAddress(address: {
   return unwrapApiData(response.data);
 }
 
+export async function deleteAddress(id: string): Promise<AddressResponse[]> {
+  const response = await apiClient.delete<ApiEnvelope<AddressResponse[]> | AddressResponse[]>(
+    `/auth/addresses/${id}`,
+  );
+  return unwrapApiData(response.data);
+}
+
+export async function setDefaultAddress(id: string): Promise<AddressResponse[]> {
+  const response = await apiClient.post<ApiEnvelope<AddressResponse[]> | AddressResponse[]>(
+    `/auth/addresses/${id}/default`,
+  );
+  return unwrapApiData(response.data);
+}
+
+export async function updateAddress(
+  id: string,
+  address: Partial<{
+    label: string;
+    recipientName: string;
+    phone: string;
+    line: string;
+    ward: string;
+    district: string;
+    province: string;
+    isDefault?: boolean;
+  }>
+): Promise<AddressResponse[]> {
+  const response = await apiClient.patch<ApiEnvelope<AddressResponse[]> | AddressResponse[]>(
+    `/auth/addresses/${id}`,
+    address,
+  );
+  return unwrapApiData(response.data);
+}
+
 export function mapCartItemsToCheckoutItems(items: CartItem[]) {
   return items.map((item) => ({
     productId: item.productId,
@@ -69,6 +104,13 @@ export async function createOrder(payload: CreateOrderPayload) {
   };
 
   try {
+    // Ensure the cart is synchronized to the server
+    try {
+      await useCartStore.getState().fetchAndSyncCart();
+    } catch (syncErr) {
+      console.error("Failed to sync cart before checkout:", syncErr);
+    }
+
     // 1. Fetch user's saved addresses
     const addresses = await getAddresses();
     let addressId = "";

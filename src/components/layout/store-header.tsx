@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/ui/logo";
 import { shopRoutes } from "@/constants/routes";
-import { countCartItems } from "@/features/cart/utils/cart";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
 import { useAuthStore } from "@/stores/auth-store";
@@ -31,14 +30,16 @@ const AUTH_PATHS = ["/login", "/register"];
 export function StoreHeader() {
   const pathname = usePathname();
   const items = useCartStore((state) => state.items);
-  const itemCount = countCartItems(items);
+  const itemCount = items.length;
   const user = useAuthStore((state) => state.user);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const [allProducts, setAllProducts] = useState<CatalogProduct[]>([]);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     listCatalogProducts()
       .then((res) => {
         if (res && res.data && res.data.length > 0) {
@@ -63,7 +64,7 @@ export function StoreHeader() {
     );
   }, [searchQuery, allProducts]);
 
-  if (AUTH_PATHS.includes(pathname)) {
+  if (!mounted || !pathname || AUTH_PATHS.includes(pathname) || pathname.startsWith("/admin")) {
     return null;
   }
 
@@ -135,20 +136,45 @@ export function StoreHeader() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            asChild
-            variant="ghost"
-            className="hidden h-11 gap-2 rounded-xl px-3 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-primary md:inline-flex"
-          >
-            <Link href="/account" className="flex items-center gap-2">
-              {user?.avatar ? (
-                <img src={user.avatar} alt={user.name} className="size-5 rounded-full object-cover border border-primary/20 shrink-0" />
-              ) : (
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className="h-11 gap-2 rounded-xl px-3 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-primary inline-flex cursor-pointer"
+                >
+                  {user.avatar ? (
+                    <img src={user.avatar} alt={user.name} className="size-5 rounded-full object-cover border border-primary/20 shrink-0" />
+                  ) : (
+                    <UserRound className="size-5 shrink-0" />
+                  )}
+                  <span className="truncate max-w-[90px]">{user.name}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-48 bg-[#FAF8F6] border border-[#E9E3DD] rounded-xl shadow-md p-1.5 z-40">
+                <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
+                  <Link href="/account">Trang cá nhân</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
+                  <Link href="/account/designs">Thiết kế của tôi</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
+                  <Link href="/orders">Đơn hàng của tôi</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button
+              asChild
+              variant="ghost"
+              className="h-11 gap-2 rounded-xl px-3 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-primary inline-flex cursor-pointer"
+            >
+              <Link href="/login" className="flex items-center gap-2">
                 <UserRound className="size-5 shrink-0" />
-              )}
-              <span className="truncate max-w-[90px]">{user ? user.name : "Tài khoản"}</span>
-            </Link>
-          </Button>
+                <span>Đăng nhập</span>
+              </Link>
+            </Button>
+          )}
           <Button
             asChild
             className="h-11 rounded-xl bg-primary px-3 font-bold text-white hover:bg-[#2F9A68]"
@@ -248,8 +274,8 @@ export function StoreHeader() {
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              {/* Giới thiệu & Đơn hàng */}
-              {shopRoutes.slice(2).map((route) => {
+              {/* Giới thiệu */}
+              {shopRoutes.slice(2, 3).map((route) => {
                 const active = pathname === route.href;
                 return (
                   <Button

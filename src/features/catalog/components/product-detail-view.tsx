@@ -53,10 +53,19 @@ function getProductImages(product: CatalogProduct): string[] {
 }
 
 function getProductSizes(product: CatalogProduct): string[] {
-  if (product.category === "printed_cup" || product.category === "plain_cup") {
-    return ["360ml", "500ml", "700ml", "1000ml"];
+  const nameLower = product.name.toLowerCase();
+  if (
+    product.category === "printed_cup" ||
+    product.category === "plain_cup" ||
+    product.category === "custom_print" ||
+    product.slug.includes("ly-") ||
+    nameLower.includes("ly nhựa") ||
+    nameLower.includes("ly giấy") ||
+    nameLower.startsWith("ly ")
+  ) {
+    return ["350ml", "500ml", "700ml", "1000ml"];
   }
-  
+
   const unit = product.unit.toLowerCase();
   if (unit.includes("bao") || unit.includes("túi") || unit.includes("kg")) {
     if (product.slug.includes("kievit")) {
@@ -64,7 +73,7 @@ function getProductSizes(product: CatalogProduct): string[] {
     }
     return ["500g", "1kg", "2kg", "3kg", "5kg"];
   }
-  
+
   return ["Chai 1L", "Can 2.5kg", "Thùng"];
 }
 
@@ -82,7 +91,7 @@ function getProductRating(id: string) {
 export function ProductDetailView({ product }: { product: CatalogProduct }) {
   const isCustomPrint = product.fulfillmentType === "CUSTOM_PRINT";
   const hasSalePrice = product.price > product.b2bPrice;
-  
+
   const images = useMemo(() => getProductImages(product), [product]);
   const sizes = useMemo(() => getProductSizes(product), [product]);
   const { rating, reviews } = useMemo(() => getProductRating(product.id), [product.id]);
@@ -133,9 +142,9 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                   className="object-contain transition-transform duration-300 group-hover:scale-105 mix-blend-multiply dark:mix-blend-normal"
                 />
               </div>
-              
+
               {/* Absolute search zoom icon */}
-              <button className="absolute right-4 top-4 size-8 flex items-center justify-center rounded-full bg-white border border-[#E2EDE8] text-gray-400 hover:text-[#3BB77E] shadow-sm active:scale-95 transition-all">
+              <button suppressHydrationWarning className="absolute right-4 top-4 size-8 flex items-center justify-center rounded-full bg-white border border-[#E2EDE8] text-gray-400 hover:text-[#3BB77E] shadow-sm active:scale-95 transition-all">
                 <Search className="size-4" />
               </button>
             </div>
@@ -146,6 +155,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                 const isActive = img === activeImage;
                 return (
                   <button
+                    suppressHydrationWarning
                     key={idx}
                     onClick={() => setActiveImage(img)}
                     className={cn(
@@ -189,7 +199,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                   {formatCurrency(product.b2bPrice)}
                 </span>
               </div>
-              
+
               {hasSalePrice && (
                 <div className="flex flex-col mb-0.5">
                   <span className="text-[10px] font-bold text-[#FD6E6E] bg-[#FEEFEA] px-2 py-0.5 rounded uppercase self-start mb-0.5">
@@ -225,6 +235,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                   const isActive = size === selectedSize;
                   return (
                     <button
+                      suppressHydrationWarning
                       key={size}
                       onClick={() => setSelectedSize(size)}
                       className={cn(
@@ -246,6 +257,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
               {/* Custom Spin quantity box */}
               <div className="flex items-center border border-[#E2EDE8] dark:border-zinc-700 rounded-lg overflow-hidden h-11 w-20 bg-white dark:bg-zinc-800 shrink-0">
                 <input
+                  suppressHydrationWarning
                   type="number"
                   aria-label="Số lượng"
                   className="w-full text-center outline-none text-sm font-bold bg-transparent border-0"
@@ -254,12 +266,14 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                 />
                 <div className="flex flex-col border-l border-[#E2EDE8] dark:border-zinc-700 h-full justify-between w-6">
                   <button
+                    suppressHydrationWarning
                     className="px-1 text-[8px] hover:bg-zinc-100 dark:hover:bg-zinc-700 flex-1 border-b border-[#E2EDE8] dark:border-zinc-700 flex items-center justify-center cursor-pointer border-0 bg-transparent font-extrabold"
                     onClick={() => setQuantity((q) => q + 1)}
                   >
                     ▲
                   </button>
                   <button
+                    suppressHydrationWarning
                     className="px-1 text-[8px] hover:bg-zinc-100 dark:hover:bg-zinc-700 flex-1 flex items-center justify-center cursor-pointer border-0 bg-transparent font-extrabold"
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   >
@@ -325,6 +339,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
           {/* Tab buttons menu */}
           <div className="flex items-center gap-3 border-b border-gray-100 dark:border-zinc-800 pb-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
+              suppressHydrationWarning
               onClick={() => setActiveTab("desc")}
               className={cn(
                 "px-5 py-2.5 text-xs md:text-sm font-extrabold rounded-full transition-all border cursor-pointer",
@@ -336,6 +351,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
               Mô tả sản phẩm
             </button>
             <button
+              suppressHydrationWarning
               onClick={() => setActiveTab("specs")}
               className={cn(
                 "px-5 py-2.5 text-xs md:text-sm font-extrabold rounded-full transition-all border cursor-pointer",
@@ -347,6 +363,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
               Thông số chi tiết
             </button>
             <button
+              suppressHydrationWarning
               onClick={() => setActiveTab("vendor")}
               className={cn(
                 "px-5 py-2.5 text-xs md:text-sm font-extrabold rounded-full transition-all border cursor-pointer",
@@ -369,7 +386,7 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                 <p>
                   Đối với các sản phẩm bao bì ly nhựa PP/PET, PBVM cam kết bề mặt nhẵn mịn, độ dày đồng đều chuẩn ly cứng và bền bỉ trong quá trình bảo quản hay giao hàng. Công nghệ in offset cho phép các chi tiết in ấn chính xác, không nhòe lệch, giữ đúng tỷ lệ thiết kế logo thương hiệu của bạn.
                 </p>
-                
+
                 <h4 className="font-extrabold text-[#253D4E] dark:text-zinc-200 text-sm pt-2">Đặc điểm nổi bật:</h4>
                 <ul className="list-disc pl-5 space-y-1.5">
                   <li>Nguồn gốc rõ ràng: Đầy đủ giấy tờ hải quan, kiểm định chất lượng và ATVSTP.</li>
