@@ -4,6 +4,7 @@ import { Quicksand } from "next/font/google";
 import { ScrollToTop } from "@/components/layout/scroll-to-top";
 import { StoreFooter } from "@/components/layout/store-footer";
 import { StoreHeader } from "@/components/layout/store-header";
+import { StorefrontAdminRedirectGuard } from "@/components/layout/storefront-admin-redirect-guard";
 import { AppProviders } from "@/providers/app-providers";
 
 import "./globals.css";
@@ -31,11 +32,13 @@ export default function RootLayout({
       <body className={`${quicksand.className} min-h-screen bg-background text-foreground antialiased flex flex-col justify-between`}>
         <AppProviders>
           <ScrollToTop />
-          <div className="flex min-h-screen flex-col">
-            <StoreHeader />
-            <div className="flex-1">{children}</div>
-            <StoreFooter />
-          </div>
+          <StorefrontAdminRedirectGuard>
+            <div className="flex min-h-screen flex-col">
+              <StoreHeader />
+              <div className="flex-1">{children}</div>
+              <StoreFooter />
+            </div>
+          </StorefrontAdminRedirectGuard>
         </AppProviders>
       </body>
     </html>

@@ -14,7 +14,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
 import { registerSchema } from "@/features/auth/schemas/login.schema";
-import { register as registerApi } from "@/features/auth/services/auth.service";
+import { register as registerApi, loginWithGoogle, getMe } from "@/features/auth/services/auth.service";
+import { useAuthStore } from "@/stores/auth-store";
+import { useCartStore } from "@/stores/cart-store";
 import { env } from "@/lib/env";
 
 // Extend registerSchema with confirmPassword validation
@@ -38,8 +40,59 @@ const GoogleIcon = () => (
 
 export default function RegisterPage() {
   const router = useRouter();
+  const setUser = useAuthStore((state) => state.setUser);
+  const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
+  const handleGoogleRegister = async () => {
+    setIsGoogleLoading(true);
+    try {
+      await loginWithGoogle();
+      const me = await getMe();
+
+      if (me.type === "admin") {
+        setUser({
+          id: me.id,
+          name: me.name || me.email,
+          email: me.email,
+          type: "admin",
+          customerType: "B2B",
+          tenantId: "demo-tenant",
+          phone: me.phone,
+          avatar: me.avatar,
+        });
+        toast.success("Đăng ký & đăng nhập tài khoản quản trị bằng Google thành công!");
+        router.push("/admin/catalog/products");
+        return;
+      }
+
+      setUser({
+        id: me.id,
+        name: me.name || me.email,
+        email: me.email,
+        type: "customer",
+        customerType: "B2B",
+        tenantId: "demo-tenant",
+        phone: me.phone,
+        avatar: me.avatar,
+      });
+      fetchAndSyncCart().catch(console.error);
+      toast.success("Đăng ký và đăng nhập bằng Google thành công!");
+      router.push("/");
+    } catch (error: any) {
+      if (error?.code === "auth/popup-closed-by-user" || error?.message?.includes("popup-closed-by-user") || error?.message?.includes("cancelled-popup-request")) {
+        toast.info("Đã hủy quá trình đăng ký bằng Google.");
+        return;
+      }
+      console.error(error);
+      const errorMsg = error.message || error.response?.data?.message || "Đăng ký bằng Google thất bại.";
+      toast.error(errorMsg);
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
 
   const {
     register,
@@ -93,10 +146,12 @@ export default function RegisterPage() {
         <Button
           type="button"
           variant="outline"
-          className="w-full h-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-600 transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-[0.99]"
+          onClick={handleGoogleRegister}
+          disabled={isGoogleLoading}
+          className="w-full h-11 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-bold text-slate-600 transition-all flex items-center justify-center cursor-pointer shadow-sm active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <GoogleIcon />
-          Đăng ký với Google
+          {isGoogleLoading ? "Đang xử lý..." : "Đăng ký với Google"}
         </Button>
 
         {/* Custom text divider */}

@@ -25,10 +25,15 @@ type CartState = {
   removeItem: (cartItemId: string) => void;
   clearCart: () => void;
   fetchAndSyncCart: () => Promise<void>;
+  restoreItems: (items: CartItem[]) => Promise<void>;
+  toggleSelectItem: (cartItemId: string) => void;
+  toggleSelectAll: (selected: boolean) => void;
+  clearSelectedItems: () => void;
 };
 
 function isLoggedIn() {
-  return Boolean(useAuthStore.getState().user);
+  const user = useAuthStore.getState().user;
+  return Boolean(user && user.type !== "admin");
 }
 
 export const useCartStore = create<CartState>()(
@@ -97,6 +102,7 @@ export const useCartStore = create<CartState>()(
               sku,
               quantity,
               designId,
+              designFile: JSON.stringify(designFile),
             }).catch(console.error);
           }
         }),
@@ -132,14 +138,83 @@ export const useCartStore = create<CartState>()(
           }
         }),
 
+      restoreItems: async (newItems) => {
+        set((state) => {
+          state.items = newItems;
+        });
+        if (isLoggedIn()) {
+          try {
+            await clearBackendCart();
+            for (const item of newItems) {
+              const sku = item.productRefId || item.productId;
+              await addCartItem({
+                sku,
+                quantity: item.quantity,
+                designId: item.designId,
+                designFile: item.designFile ? JSON.stringify(item.designFile) : undefined,
+              });
+            }
+          } catch (err) {
+            console.error("Failed to restore backend cart:", err);
+          }
+        }
+      },
+
+      toggleSelectItem: (cartItemId) =>
+        set((state) => {
+          const item = state.items.find((i) => i.cartItemId === cartItemId);
+          if (item) {
+            item.selected = item.selected === false ? true : false;
+          }
+        }),
+
+      toggleSelectAll: (selected) =>
+        set((state) => {
+          state.items.forEach((item) => {
+            item.selected = selected;
+          });
+        }),
+
+      clearSelectedItems: () =>
+        set((state) => {
+          const unselected = state.items.filter((i) => i.selected === false);
+          const selected = state.items.filter((i) => i.selected !== false);
+          state.items = unselected;
+          if (isLoggedIn() && selected.length > 0) {
+            for (const item of selected) {
+              const sku = item.productRefId || item.productId;
+              removeCartItem(sku).catch(console.error);
+            }
+          }
+        }),
+
       fetchAndSyncCart: async () => {
         if (!isLoggedIn()) return;
         try {
+          const localItems = useCartStore.getState().items;
           const backendCart = await getCart();
-          if (!backendCart?.items?.length) return;
+
+          // Upload any local items to server if they are not already in the server cart
+          if (localItems.length > 0) {
+            for (const item of localItems) {
+              const sku = item.productRefId || item.productId;
+              const existsOnBackend = backendCart?.items?.some((bi) => bi.sku === sku);
+              if (!existsOnBackend) {
+                await addCartItem({
+                  sku,
+                  quantity: item.quantity,
+                  designId: item.designId,
+                  designFile: item.designFile ? JSON.stringify(item.designFile) : undefined,
+                }).catch(console.error);
+              }
+            }
+          }
+
+          const updatedCart = await getCart();
+          if (!updatedCart?.items?.length) return;
 
           set((state) => {
-            state.items = backendCart.items.map((item) => {
+            state.items = updatedCart.items.map((item) => {
               const isCustom = item.isPrintItem;
               let designFileSnapshot: DesignFileSnapshot | undefined = undefined;
               if (item.designFile) {

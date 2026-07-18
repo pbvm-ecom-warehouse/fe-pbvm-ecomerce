@@ -58,7 +58,7 @@ function createLayerId(prefix: string) {
 }
 
 function getImageLayerCount(layers: DesignArtworkLayer[]) {
-  return layers.filter((layer) => layer.type === "image").length;
+  return layers.filter((l) => l.type === "image").length;
 }
 
 function useLoadedImages(layers: DesignArtworkLayer[]) {
@@ -66,8 +66,8 @@ function useLoadedImages(layers: DesignArtworkLayer[]) {
   const signature = useMemo(
     () =>
       layers
-        .filter((layer): layer is DesignImageLayer => layer.type === "image")
-        .map((layer) => `${layer.id}:${layer.src}`)
+        .filter((l): l is DesignImageLayer => l.type === "image")
+        .map((l) => `${l.id}:${l.src}`)
         .join("|"),
     [layers],
   );
@@ -75,25 +75,17 @@ function useLoadedImages(layers: DesignArtworkLayer[]) {
   useEffect(() => {
     let cancelled = false;
     const imageLayers = layers.filter(
-      (layer): layer is DesignImageLayer => layer.type === "image",
+      (l): l is DesignImageLayer => l.type === "image",
     );
-
     imageLayers.forEach((layer) => {
-      const image = new window.Image();
-      image.crossOrigin = "anonymous";
-      image.onload = () => {
-        if (cancelled) {
-          return;
-        }
-
-        setImages((current) => ({ ...current, [layer.id]: image }));
+      const img = new window.Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        if (!cancelled) setImages((cur) => ({ ...cur, [layer.id]: img }));
       };
-      image.src = layer.src;
+      img.src = layer.src;
     });
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [layers, signature]);
 
   return images;
@@ -115,6 +107,7 @@ export function ArtworkEditor2D({
   const [activeStroke, setActiveStroke] = useState<number[] | null>(null);
   const [textValue, setTextValue] = useState("TEA HOUSE");
   const [aiPrompt, setAiPrompt] = useState("Tea House Classic");
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const contentLayerRef = useRef<Konva.Layer | null>(null);
@@ -123,105 +116,65 @@ export function ArtworkEditor2D({
   const dimensions = getArtboardDimensions(size, printHeightPercent);
   const imageLayerCount = getImageLayerCount(layers);
 
+  // Sync transformer to selected layer
   useEffect(() => {
     const transformer = transformerRef.current;
     const stage = stageRef.current;
-
-    if (!transformer || !stage) {
-      return;
-    }
-
-    const selectedNode = selectedLayerId
-      ? stage.findOne(`#${selectedLayerId}`)
-      : null;
+    if (!transformer || !stage) return;
+    const selectedNode = selectedLayerId ? stage.findOne(`#${selectedLayerId}`) : null;
     transformer.nodes(selectedNode ? [selectedNode] : []);
     transformer.getLayer()?.batchDraw();
   }, [selectedLayerId, layers]);
 
+  // Export texture on every layer change (debounced)
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
+    const id = window.setTimeout(() => {
       const layer = contentLayerRef.current;
-
-      if (!layer) {
-        return;
-      }
-
+      if (!layer) return;
       const dataUrl = layer.toDataURL({
         x: dimensions.printArea.x,
         y: dimensions.printArea.y,
         width: dimensions.printArea.width,
         height: dimensions.printArea.height,
-        pixelRatio: 2,
+        pixelRatio: 1,
       });
-
       onTextureChange(dataUrl);
     }, 300);
-
-    return () => window.clearTimeout(timeoutId);
+    return () => window.clearTimeout(id);
   }, [dimensions.printArea, layers, activeStroke, onTextureChange]);
 
+  /* ── Helpers ── */
   function getPointer() {
-    const stage = stageRef.current;
-    const pointer = stage?.getPointerPosition();
-
-    if (!pointer) {
-      return null;
-    }
-
-    return [pointer.x, pointer.y];
+    const pointer = stageRef.current?.getPointerPosition();
+    return pointer ? [pointer.x, pointer.y] : null;
   }
 
   function updateLayer(layerId: string, patch: Partial<DesignArtworkLayer>) {
     onLayersChange(
-      layers.map((layer) =>
-        layer.id === layerId
-          ? ({ ...layer, ...patch } as DesignArtworkLayer)
-          : layer,
+      layers.map((l) =>
+        l.id === layerId ? ({ ...l, ...patch } as DesignArtworkLayer) : l,
       ),
     );
   }
 
-  function handleStagePointerDown(
-    event: Konva.KonvaEventObject<MouseEvent | TouchEvent>,
-  ) {
-    const clickedStage = event.target === event.target.getStage();
-
+  /* ── Stage events ── */
+  function handleStagePointerDown(event: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
     if (tool === "select") {
-      if (clickedStage) {
-        onSelectedLayerChange(null);
-      }
+      if (event.target === event.target.getStage()) onSelectedLayerChange(null);
       return;
     }
-
     const pointer = getPointer();
-    if (!pointer) {
-      return;
-    }
-
-    setActiveStroke(pointer);
+    if (pointer) setActiveStroke(pointer);
   }
 
   function handleStagePointerMove() {
-    if (tool !== "brush" || !activeStroke) {
-      return;
-    }
-
+    if (tool !== "brush" || !activeStroke) return;
     const pointer = getPointer();
-    if (!pointer) {
-      return;
-    }
-
-    setActiveStroke((current) =>
-      current ? [...current, ...pointer] : current,
-    );
+    if (pointer) setActiveStroke((cur) => (cur ? [...cur, ...pointer] : cur));
   }
 
   function handleStagePointerUp() {
-    if (!activeStroke || activeStroke.length < 4) {
-      setActiveStroke(null);
-      return;
-    }
-
+    if (!activeStroke || activeStroke.length < 4) { setActiveStroke(null); return; }
     const brushLayer: DesignBrushLayer = {
       id: createLayerId("brush"),
       type: "brush",
@@ -229,18 +182,14 @@ export function ArtworkEditor2D({
       color: brushColor,
       size: brushSize,
     };
-
     onLayersChange([...layers, brushLayer]);
     setActiveStroke(null);
   }
 
+  /* ── Layer add helpers ── */
   function addTextLayer() {
     const text = textValue.trim();
-
-    if (!text) {
-      return;
-    }
-
+    if (!text) return;
     const textLayer: DesignTextLayer = {
       id: createLayerId("text"),
       type: "text",
@@ -251,21 +200,13 @@ export function ArtworkEditor2D({
       fontSize: 38,
       rotation: 0,
     };
-
     onLayersChange([...layers, textLayer]);
     onSelectedLayerChange(textLayer.id);
     setTool("select");
   }
 
-  function addImageLayer(
-    src: string,
-    source: DesignImageLayer["source"],
-    prompt?: string,
-  ) {
-    if (imageLayerCount >= MAX_IMAGE_LAYERS) {
-      return;
-    }
-
+  function addImageLayer(src: string, source: DesignImageLayer["source"], prompt?: string) {
+    if (imageLayerCount >= MAX_IMAGE_LAYERS) return;
     const imageLayer: DesignImageLayer = {
       id: createLayerId(source),
       type: "image",
@@ -278,67 +219,42 @@ export function ArtworkEditor2D({
       source,
       prompt,
     };
-
     onLayersChange([...layers, imageLayer]);
     onSelectedLayerChange(imageLayer.id);
     setTool("select");
   }
 
   function handleImport(file: File | undefined) {
-    if (!file || imageLayerCount >= MAX_IMAGE_LAYERS) {
-      return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      return;
-    }
-
+    if (!file || imageLayerCount >= MAX_IMAGE_LAYERS || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onload = () => {
-      if (typeof reader.result === "string") {
-        addImageLayer(reader.result, "upload");
-      }
+      if (typeof reader.result === "string") addImageLayer(reader.result, "upload");
     };
     reader.readAsDataURL(file);
   }
 
   function handleGenerateArtwork() {
-    if (imageLayerCount >= MAX_IMAGE_LAYERS) {
-      return;
-    }
-
-    const dataUrl = generateArtworkDataUrl(aiPrompt);
-    addImageLayer(dataUrl, "ai", aiPrompt);
+    if (imageLayerCount >= MAX_IMAGE_LAYERS) return;
+    addImageLayer(generateArtworkDataUrl(aiPrompt), "ai", aiPrompt);
   }
 
   function undoLastStroke() {
-    const lastBrushIndex = [...layers]
-      .map((layer, index) => ({ layer, index }))
+    const idx = [...layers]
+      .map((l, i) => ({ l, i }))
       .reverse()
-      .find(({ layer }) => layer.type === "brush")?.index;
-
-    if (lastBrushIndex === undefined) {
-      return;
-    }
-
-    onLayersChange(layers.filter((_, index) => index !== lastBrushIndex));
+      .find(({ l }) => l.type === "brush")?.i;
+    if (idx !== undefined) onLayersChange(layers.filter((_, i) => i !== idx));
   }
 
   function deleteSelectedLayer() {
-    if (!selectedLayerId) {
-      return;
-    }
-
-    onLayersChange(layers.filter((layer) => layer.id !== selectedLayerId));
+    if (!selectedLayerId) return;
+    onLayersChange(layers.filter((l) => l.id !== selectedLayerId));
     onSelectedLayerChange(null);
   }
 
   function exportPng() {
     const layer = contentLayerRef.current;
-    if (!layer) {
-      return;
-    }
-
+    if (!layer) return;
     const dataUrl = layer.toDataURL({
       x: dimensions.printArea.x,
       y: dimensions.printArea.y,
@@ -346,372 +262,356 @@ export function ArtworkEditor2D({
       height: dimensions.printArea.height,
       pixelRatio: 2,
     });
-
     const link = document.createElement("a");
     link.download = `pbvm-cup-design-${size.toLowerCase()}@2x.png`;
     link.href = dataUrl;
     link.click();
   }
 
+  /* ─── Render ─── */
   return (
-    <section className="rounded-lg border border-border bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+    <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+
+      {/* ── Primary toolbar ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-white px-4 py-2.5">
         <div>
-          <h2 className="text-sm font-black uppercase text-[#253D4E]">
-            2D print artboard
-          </h2>
-          <p className="text-[11px] font-medium text-muted-foreground">
-            {dimensions.width} x {dimensions.printArea.height}px content
+          <h2 className="text-[11px] font-black uppercase tracking-wide text-[#253D4E]">2D Print Artboard</h2>
+          <p className="text-[10px] text-muted-foreground font-medium">
+            {dimensions.width} × {dimensions.printArea.height}px content area
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Mode toggles */}
+          <button
             type="button"
-            size="sm"
-            variant={tool === "select" ? "default" : "outline"}
-            className="h-9 gap-1.5 rounded-md text-xs"
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-bold transition-all",
+              tool === "select"
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
+            )}
             onClick={() => setTool("select")}
           >
-            <MousePointer2 className="size-3.5" />
-            Chọn
-          </Button>
-          <Button
+            <MousePointer2 className="size-3.5" /> Chọn
+          </button>
+          <button
             type="button"
-            size="sm"
-            variant={tool === "brush" ? "default" : "outline"}
-            className="h-9 gap-1.5 rounded-md text-xs"
+            className={cn(
+              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-bold transition-all",
+              tool === "brush"
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
+            )}
             onClick={() => setTool("brush")}
           >
-            <Paintbrush className="size-3.5" />
-            Vẽ tay
-          </Button>
-          <Button
+            <Paintbrush className="size-3.5" /> Vẽ tay
+          </button>
+
+          <div className="h-5 w-px bg-border mx-1" />
+
+          {/* Import image */}
+          <button
             type="button"
-            size="sm"
-            variant="outline"
-            className="h-9 gap-1.5 rounded-md text-xs"
             disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
+            className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-xs font-bold text-[#253D4E] hover:bg-muted transition disabled:opacity-40"
             onClick={() => fileInputRef.current?.click()}
           >
             <ImagePlus className="size-3.5" />
-            Import ({imageLayerCount}/2)
+            Hình ({imageLayerCount}/{MAX_IMAGE_LAYERS})
+          </button>
+
+          {/* Export PNG */}
+          <button
+            type="button"
+            className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-xs font-bold text-[#253D4E] hover:bg-muted transition"
+            onClick={exportPng}
+          >
+            <Download className="size-3.5" /> Export PNG
+          </button>
+        </div>
+      </div>
+
+      {/* ── Contextual secondary toolbar ── */}
+      <div className="flex flex-wrap items-end gap-4 border-b border-border bg-muted/20 px-4 py-2.5">
+        {/* Brush controls (always visible, slightly dimmed when not in brush mode) */}
+        <div className={cn("flex items-center gap-2 transition-opacity", tool !== "brush" && "opacity-50")}>
+          <Paintbrush className="size-3.5 text-primary shrink-0" />
+          <Label className="text-[10px] font-bold text-muted-foreground shrink-0">Vẽ tay</Label>
+          <input
+            type="color"
+            aria-label="Màu nét vẽ"
+            value={brushColor}
+            onChange={(e) => setBrushColor(e.target.value)}
+            className="h-6 w-9 cursor-pointer rounded border border-border bg-white p-0.5"
+          />
+          <div className="flex items-center gap-1">
+            {BRUSH_SIZES.map((bs) => (
+              <button
+                key={bs}
+                type="button"
+                aria-label={`Brush size ${bs}`}
+                className={cn(
+                  "h-7 w-8 rounded border text-[10px] font-black transition-all",
+                  brushSize === bs
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-white text-[#253D4E] hover:bg-muted",
+                )}
+                onClick={() => setBrushSize(bs)}
+              >
+                {bs}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="h-5 w-px bg-border hidden sm:block" />
+
+        {/* Text tool */}
+        <div className="flex items-center gap-2">
+          <Type className="size-3.5 text-primary shrink-0" />
+          <Label htmlFor="editor-text" className="text-[10px] font-bold text-muted-foreground shrink-0">
+            Text
+          </Label>
+          <div className="flex gap-1">
+            <Input
+              id="editor-text"
+              value={textValue}
+              onChange={(e) => setTextValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && addTextLayer()}
+              className="h-7 w-32 rounded-md bg-white text-[10px]"
+            />
+            <Button
+              type="button"
+              aria-label="Thêm text layer"
+              size="icon"
+              variant="outline"
+              className="h-7 w-7 rounded-md"
+              onClick={addTextLayer}
+            >
+              <Type className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="h-5 w-px bg-border hidden sm:block" />
+
+        {/* AI Generate */}
+        <div className="flex items-center gap-2">
+          <Sparkles className="size-3.5 text-primary shrink-0" />
+          <Label htmlFor="editor-ai" className="text-[10px] font-bold text-muted-foreground shrink-0">
+            AI
+          </Label>
+          <div className="flex gap-1">
+            <Input
+              id="editor-ai"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleGenerateArtwork()}
+              disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
+              className="h-7 w-36 rounded-md bg-white text-[10px]"
+            />
+            <Button
+              type="button"
+              aria-label="Generate hình AI"
+              size="icon"
+              variant="outline"
+              className="h-7 w-7 rounded-md"
+              disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
+              onClick={handleGenerateArtwork}
+            >
+              <Sparkles className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Actions */}
+        <div className="flex items-center gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-7 gap-1 rounded-md px-2.5 text-[10px] font-bold"
+            onClick={undoLastStroke}
+          >
+            <RotateCcw className="size-3" /> Undo
           </Button>
           <Button
             type="button"
-            size="sm"
             variant="outline"
-            className="h-9 gap-1.5 rounded-md text-xs"
-            onClick={exportPng}
+            className="h-7 gap-1 rounded-md px-2.5 text-[10px] font-bold text-rose-600 border-rose-200 hover:bg-rose-50"
+            disabled={!selectedLayerId}
+            onClick={deleteSelectedLayer}
           >
-            <Download className="size-3.5" />
-            Export PNG
+            <Trash2 className="size-3" /> Xóa layer
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 p-4 min-[2200px]:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="overflow-auto rounded-lg border border-border bg-[linear-gradient(#eee_1px,transparent_1px),linear-gradient(90deg,#eee_1px,transparent_1px)] bg-[size:24px_24px] p-4">
-          <Stage
-            ref={stageRef}
-            width={dimensions.width}
-            height={dimensions.height}
-            className="mx-auto rounded-lg bg-white shadow-sm"
-            onMouseDown={handleStagePointerDown}
-            onMouseMove={handleStagePointerMove}
-            onMouseUp={handleStagePointerUp}
-            onTouchStart={handleStagePointerDown}
-            onTouchMove={handleStagePointerMove}
-            onTouchEnd={handleStagePointerUp}
-          >
-            <Layer>
-              <Rect
-                x={24}
-                y={24}
-                width={dimensions.width - 48}
-                height={dimensions.height - 48}
-                cornerRadius={28}
-                fill={cupColor}
-                stroke="#D7C4B7"
-                strokeWidth={1}
-              />
-              <Rect
-                x={dimensions.printArea.x}
-                y={dimensions.printArea.y}
-                width={dimensions.printArea.width}
-                height={dimensions.printArea.height}
-                cornerRadius={14}
-                fill="rgba(255,255,255,0.55)"
-                stroke="#253D4E"
-                strokeWidth={2}
-                dash={[8, 7]}
-              />
-              <Text
-                x={dimensions.printArea.x + 16}
-                y={dimensions.printArea.y + 16}
-                text="PRINT AREA"
-                fill="#253D4E"
-                fontSize={14}
-                fontStyle="bold"
-              />
-            </Layer>
+      {/* ── Canvas ── */}
+      <div className="overflow-auto bg-[linear-gradient(#e5e5e5_1px,transparent_1px),linear-gradient(90deg,#e5e5e5_1px,transparent_1px)] bg-[size:20px_20px] p-4">
+        <Stage
+          ref={stageRef}
+          width={dimensions.width}
+          height={dimensions.height}
+          className="mx-auto rounded-xl bg-white shadow-md"
+          onMouseDown={handleStagePointerDown}
+          onMouseMove={handleStagePointerMove}
+          onMouseUp={handleStagePointerUp}
+          onTouchStart={handleStagePointerDown}
+          onTouchMove={handleStagePointerMove}
+          onTouchEnd={handleStagePointerUp}
+        >
+          {/* Background layer: cup silhouette + print area dashes */}
+          <Layer>
+            <Rect
+              x={24}
+              y={24}
+              width={dimensions.width - 48}
+              height={dimensions.height - 48}
+              cornerRadius={28}
+              fill={cupColor}
+              stroke="#D7C4B7"
+              strokeWidth={1}
+            />
+            <Rect
+              x={dimensions.printArea.x}
+              y={dimensions.printArea.y}
+              width={dimensions.printArea.width}
+              height={dimensions.printArea.height}
+              cornerRadius={14}
+              fill="rgba(255,255,255,0.55)"
+              stroke="#253D4E"
+              strokeWidth={2}
+              dash={[8, 7]}
+            />
+            <Text
+              x={dimensions.printArea.x + 16}
+              y={dimensions.printArea.y + 16}
+              text="PRINT AREA"
+              fill="#253D4E"
+              fontSize={13}
+              fontStyle="bold"
+            />
+          </Layer>
 
-            <Layer ref={contentLayerRef}>
-              {layers.map((layer) => {
-                if (layer.type === "brush") {
-                  return (
-                    <Line
-                      key={layer.id}
-                      points={layer.points}
-                      stroke={layer.color}
-                      strokeWidth={layer.size}
-                      lineCap="round"
-                      lineJoin="round"
-                      tension={0.45}
-                    />
-                  );
-                }
+          {/* Content layer: user artwork */}
+          <Layer ref={contentLayerRef}>
+            {layers.map((layer) => {
+              if (layer.type === "brush") {
+                return (
+                  <Line
+                    key={layer.id}
+                    points={layer.points}
+                    stroke={layer.color}
+                    strokeWidth={layer.size}
+                    lineCap="round"
+                    lineJoin="round"
+                    tension={0.45}
+                  />
+                );
+              }
 
-                if (layer.type === "text") {
-                  return (
-                    <Text
-                      key={layer.id}
-                      id={layer.id}
-                      draggable={tool === "select"}
-                      x={layer.x}
-                      y={layer.y}
-                      text={layer.text}
-                      fill={layer.color}
-                      fontSize={layer.fontSize}
-                      fontStyle="800"
-                      rotation={layer.rotation ?? 0}
-                      onClick={() => onSelectedLayerChange(layer.id)}
-                      onTap={() => onSelectedLayerChange(layer.id)}
-                      onDragEnd={(event) =>
-                        updateLayer(layer.id, {
-                          x: event.target.x(),
-                          y: event.target.y(),
-                        })
-                      }
-                      onTransformEnd={(event) => {
-                        const node = event.target;
-                        updateLayer(layer.id, {
-                          x: node.x(),
-                          y: node.y(),
-                          rotation: node.rotation(),
-                          fontSize: Math.max(
-                            14,
-                            Math.round(layer.fontSize * node.scaleX()),
-                          ),
-                        });
-                        node.scaleX(1);
-                        node.scaleY(1);
-                      }}
-                    />
-                  );
-                }
-
-                const image = images[layer.id];
-
-                return image ? (
-                  <KonvaImage
+              if (layer.type === "text") {
+                return (
+                  <Text
                     key={layer.id}
                     id={layer.id}
-                    image={image}
                     draggable={tool === "select"}
                     x={layer.x}
                     y={layer.y}
-                    width={layer.width}
-                    height={layer.height}
+                    text={layer.text}
+                    fill={layer.color}
+                    fontSize={layer.fontSize}
+                    fontStyle="800"
                     rotation={layer.rotation ?? 0}
                     onClick={() => onSelectedLayerChange(layer.id)}
                     onTap={() => onSelectedLayerChange(layer.id)}
-                    onDragEnd={(event) =>
-                      updateLayer(layer.id, {
-                        x: event.target.x(),
-                        y: event.target.y(),
-                      })
+                    onDragEnd={(e) =>
+                      updateLayer(layer.id, { x: e.target.x(), y: e.target.y() })
                     }
-                    onTransformEnd={(event) => {
-                      const node = event.target;
+                    onTransformEnd={(e) => {
+                      const node = e.target;
                       updateLayer(layer.id, {
                         x: node.x(),
                         y: node.y(),
                         rotation: node.rotation(),
-                        width: Math.max(36, node.width() * node.scaleX()),
-                        height: Math.max(36, node.height() * node.scaleY()),
+                        fontSize: Math.max(14, Math.round(layer.fontSize * node.scaleX())),
                       });
                       node.scaleX(1);
                       node.scaleY(1);
                     }}
                   />
-                ) : null;
-              })}
+                );
+              }
 
-              {activeStroke ? (
-                <Line
-                  points={activeStroke}
-                  stroke={brushColor}
-                  strokeWidth={brushSize}
-                  lineCap="round"
-                  lineJoin="round"
-                  tension={0.45}
+              const img = images[layer.id];
+              return img ? (
+                <KonvaImage
+                  key={layer.id}
+                  id={layer.id}
+                  image={img}
+                  draggable={tool === "select"}
+                  x={layer.x}
+                  y={layer.y}
+                  width={layer.width}
+                  height={layer.height}
+                  rotation={layer.rotation ?? 0}
+                  onClick={() => onSelectedLayerChange(layer.id)}
+                  onTap={() => onSelectedLayerChange(layer.id)}
+                  onDragEnd={(e) =>
+                    updateLayer(layer.id, { x: e.target.x(), y: e.target.y() })
+                  }
+                  onTransformEnd={(e) => {
+                    const node = e.target;
+                    updateLayer(layer.id, {
+                      x: node.x(),
+                      y: node.y(),
+                      rotation: node.rotation(),
+                      width: Math.max(36, node.width() * node.scaleX()),
+                      height: Math.max(36, node.height() * node.scaleY()),
+                    });
+                    node.scaleX(1);
+                    node.scaleY(1);
+                  }}
                 />
-              ) : null}
+              ) : null;
+            })}
 
-              <Transformer
-                ref={transformerRef}
-                rotateEnabled
-                anchorSize={8}
-                borderStroke="#3BB77E"
-                anchorFill="#FFFFFF"
-                anchorStroke="#3BB77E"
+            {/* Live brush stroke */}
+            {activeStroke ? (
+              <Line
+                points={activeStroke}
+                stroke={brushColor}
+                strokeWidth={brushSize}
+                lineCap="round"
+                lineJoin="round"
+                tension={0.45}
               />
-            </Layer>
-          </Stage>
-        </div>
+            ) : null}
 
-        <aside className="overflow-hidden rounded-lg border border-border bg-white">
-          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
-            <h3 className="text-xs font-black uppercase text-[#253D4E]">
-              Công cụ thiết kế
-            </h3>
-            <span className="rounded-md border border-border bg-white px-2 py-1 text-[10px] font-black text-primary">
-              {layers.length} layer
-            </span>
-          </div>
-
-          <div className="grid xl:grid-cols-[230px_minmax(0,1fr)_minmax(0,1fr)_146px]">
-            <div className="border-b border-border p-3 xl:border-r xl:border-b-0">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Paintbrush className="size-3.5 text-primary" />
-                  <Label className="text-[11px] font-bold text-[#253D4E]">
-                    Vẽ tay
-                  </Label>
-                </div>
-                <input
-                  id="brush-color"
-                  type="color"
-                  aria-label="Màu nét vẽ"
-                  value={brushColor}
-                  onChange={(event) => setBrushColor(event.target.value)}
-                  className="h-7 w-12 rounded-md border border-border bg-white p-1"
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {BRUSH_SIZES.map((sizeOption) => (
-                  <button
-                    key={sizeOption}
-                    type="button"
-                    aria-label={`Brush size ${sizeOption}`}
-                    className={cn(
-                      "h-8 w-9 rounded-md border text-xs font-bold transition",
-                      brushSize === sizeOption
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
-                    )}
-                    onClick={() => setBrushSize(sizeOption)}
-                  >
-                    {sizeOption}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="min-w-0 border-b border-border p-3 xl:border-r xl:border-b-0">
-              <div className="mb-2 flex items-center gap-2">
-                <Type className="size-3.5 text-primary" />
-                <Label
-                  htmlFor="design-text"
-                  className="text-[11px] font-bold text-[#253D4E]"
-                >
-                  Text/logo
-                </Label>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  id="design-text"
-                  value={textValue}
-                  onChange={(event) => setTextValue(event.target.value)}
-                  className="h-9 min-w-0 rounded-md bg-muted/40 text-xs"
-                />
-                <Button
-                  type="button"
-                  aria-label="Thêm text"
-                  size="icon"
-                  variant="outline"
-                  className="h-9 w-9 rounded-md"
-                  onClick={addTextLayer}
-                >
-                  <Type className="size-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="min-w-0 border-b border-border p-3 xl:border-r xl:border-b-0">
-              <div className="mb-2 flex items-center gap-2">
-                <Sparkles className="size-3.5 text-primary" />
-                <Label
-                  htmlFor="ai-prompt"
-                  className="text-[11px] font-bold text-[#253D4E]"
-                >
-                  Generate hình
-                </Label>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  id="ai-prompt"
-                  value={aiPrompt}
-                  onChange={(event) => setAiPrompt(event.target.value)}
-                  className="h-9 min-w-0 rounded-md bg-muted/40 text-xs"
-                />
-                <Button
-                  type="button"
-                  aria-label="Generate hình"
-                  size="icon"
-                  variant="outline"
-                  className="h-9 w-9 rounded-md"
-                  disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
-                  onClick={handleGenerateArtwork}
-                >
-                  <Sparkles className="size-4" />
-                </Button>
-              </div>
-            </div>
-
-            <div className="grid gap-2 bg-muted/30 p-3">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 gap-1.5 rounded-md text-xs"
-                onClick={undoLastStroke}
-              >
-                <RotateCcw className="size-3.5" />
-                Undo
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-9 gap-1.5 rounded-md text-xs"
-                disabled={!selectedLayerId}
-                onClick={deleteSelectedLayer}
-              >
-                <Trash2 className="size-3.5" />
-                Xóa layer
-              </Button>
-            </div>
-          </div>
-        </aside>
+            <Transformer
+              ref={transformerRef}
+              rotateEnabled
+              anchorSize={8}
+              borderStroke="#3BB77E"
+              anchorFill="#FFFFFF"
+              anchorStroke="#3BB77E"
+            />
+          </Layer>
+        </Stage>
       </div>
 
+      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={(event) => {
-          handleImport(event.target.files?.[0]);
-          event.target.value = "";
+        onChange={(e) => {
+          handleImport(e.target.files?.[0]);
+          e.target.value = "";
         }}
       />
     </section>

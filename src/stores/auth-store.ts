@@ -1,13 +1,12 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-import type { CustomerType } from "@/types/api";
-
-type CustomerSession = {
+export type CustomerSession = {
   id: string;
   name: string;
   email?: string;
-  type: CustomerType;
+  type: "customer" | "admin";
+  customerType?: "B2B" | "B2C";
   tenantId: string;
   phone?: string;
   avatar?: string;

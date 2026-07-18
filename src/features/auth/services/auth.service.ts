@@ -7,6 +7,8 @@ import {
   setTenantId,
 } from "@/lib/auth-token";
 import { useAuthStore } from "@/stores/auth-store";
+import { auth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
+import { signInWithPopup } from "firebase/auth";
 
 import type { LoginInput, RegisterInput } from "../schemas/login.schema";
 
@@ -79,13 +81,10 @@ export async function updateProfile(input: { name?: string; phone?: string; avat
 }
 
 export async function loginWithGoogle() {
-  const { auth, googleProvider, isFirebaseConfigured } = await import("@/lib/firebase");
-
   if (!isFirebaseConfigured || !auth) {
     throw new Error("Cấu hình Firebase chưa được thiết lập. Vui lòng thêm biến môi trường NEXT_PUBLIC_FIREBASE_API_KEY và NEXT_PUBLIC_FIREBASE_APP_ID.");
   }
 
-  const { signInWithPopup } = await import("firebase/auth");
   const result = await signInWithPopup(auth, googleProvider);
   const idToken = await result.user.getIdToken();
 

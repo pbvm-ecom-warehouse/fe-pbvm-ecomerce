@@ -22,7 +22,7 @@ type RefreshResponse = {
 
 export const apiClient = axios.create({
   baseURL: getApiBaseUrl(env.NEXT_PUBLIC_ECOMMERCE_API_URL),
-  timeout: 15_000,
+  timeout: 60_000,
   headers: {
     "Content-Type": "application/json",
     "X-Tenant-ID": env.NEXT_PUBLIC_DEFAULT_TENANT_ID,
@@ -31,7 +31,7 @@ export const apiClient = axios.create({
 
 const refreshClient = axios.create({
   baseURL: getApiBaseUrl(env.NEXT_PUBLIC_ECOMMERCE_API_URL),
-  timeout: 15_000,
+  timeout: 60_000,
   headers: {
     "Content-Type": "application/json",
     "X-Tenant-ID": env.NEXT_PUBLIC_DEFAULT_TENANT_ID,

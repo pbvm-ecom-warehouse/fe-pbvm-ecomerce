@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -71,38 +72,20 @@ const footerColumns = [
 
 export function StoreFooter() {
   const pathname = usePathname();
-  const isAuthPage = pathname && ["/login", "/register"].includes(pathname);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isAuthPage = !mounted || !pathname || ["/login", "/register"].includes(pathname) || pathname.startsWith("/admin");
   
   if (isAuthPage) {
     return null;
   }
 
   return (
-    <footer className="border-t border-border bg-muted text-foreground">
-      <div className="mx-auto max-w-7xl px-4 py-8 lg:px-8">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {valueProps.map((prop) => {
-            const Icon = prop.icon;
-
-            return (
-              <div
-                key={prop.title}
-                className="flex items-start gap-3 rounded-2xl border border-border bg-white p-4 shadow-sm"
-              >
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Icon className="size-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black">{prop.title}</h3>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {prop.desc}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
+    <footer className="w-full border-t border-border bg-muted text-foreground">
+      <div className="mx-auto w-full max-w-7xl px-4 py-8 lg:px-8">
         <div className="mt-10 grid gap-8 border-t border-border pt-10 md:grid-cols-[1.3fr_2fr]">
           <div className="space-y-4">
             <Link href="/" className="flex w-fit items-center gap-3">

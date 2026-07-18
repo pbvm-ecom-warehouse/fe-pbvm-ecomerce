@@ -90,6 +90,17 @@ export type CatalogProduct = {
   updatedAt: string;
 };
 
+export type ProductVariant = {
+  id: string;
+  sku: string;
+  productId: string;
+  attributes: Record<string, string>;
+  price: number;
+  availableQty: number;
+  fulfillmentType: FulfillmentType;
+  isActive: boolean;
+};
+
 export type CartItem = {
   cartItemId: string;
   productId: string;
@@ -103,6 +114,7 @@ export type CartItem = {
   fulfillmentType: FulfillmentType;
   designId?: string;
   designFile?: DesignFileSnapshot;
+  selected?: boolean;
 };
 
 export type OrderStatus =

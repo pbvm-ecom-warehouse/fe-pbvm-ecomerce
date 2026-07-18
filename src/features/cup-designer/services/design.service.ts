@@ -24,18 +24,17 @@ export async function createDesign(input: {
   /** data URL hoặc URL thumbnail preview */
   thumbnail?: string;
 }) {
-  const response = await apiClient.post<DesignResponse>("/designs", {
+  const response = await apiClient.post<any>("/designs", {
     name: input.name,
     file: input.file,
     thumbnail: input.thumbnail ?? input.file,
   });
-  // BE trả về plainToInstance — không phải envelope
-  return response.data;
+  return unwrapApiData(response.data);
 }
 
 export async function listMyDesigns(): Promise<DesignResponse[]> {
-  const response = await apiClient.get<DesignResponse[]>("/designs");
-  return response.data;
+  const response = await apiClient.get<any>("/designs");
+  return unwrapApiData(response.data);
 }
 
 export async function deleteDesign(id: string) {
