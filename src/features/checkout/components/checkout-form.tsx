@@ -161,6 +161,9 @@ export function CheckoutForm() {
     }
   };
 
+  const user = useAuthStore((state) => state.user);
+  const router = useRouter();
+
   const handleRestoreCart = async () => {
     if (!pendingOrderId || !pendingOrder) return;
     try {
@@ -168,7 +171,7 @@ export function CheckoutForm() {
       toast.loading("Đang khôi phục giỏ hàng...");
       
       // Hủy đơn hàng cũ trên hệ thống
-      await cancelOrder(pendingOrderId, "Khách hàng quay lại chỉnh sửa giỏ hàng");
+      await cancelOrder(pendingOrderId, "Khách hàng hủy thanh toán và quay lại chỉnh sửa giỏ hàng");
 
       // Khôi phục các item vào store giỏ hàng
       const cartItems = pendingOrder.items.map((item: any) => {
@@ -207,6 +210,7 @@ export function CheckoutForm() {
       setPendingOrder(null);
       toast.dismiss();
       toast.success("Đã khôi phục giỏ hàng thành công!");
+      router.push("/cart");
     } catch (err) {
       toast.dismiss();
       toast.error("Không thể khôi phục giỏ hàng");
@@ -220,9 +224,6 @@ export function CheckoutForm() {
     setPendingOrderId(null);
     setPendingOrder(null);
   };
-
-  const user = useAuthStore((state) => state.user);
-  const router = useRouter();
 
   useEffect(() => {
     if (!user) {
@@ -583,7 +584,7 @@ export function CheckoutForm() {
           if (order.paymentUrl) {
             toast.success("Đang chuyển hướng sang cổng thanh toán...");
             if (typeof window !== "undefined") {
-              sessionStorage.setItem("lastCreatedOrderId", order.orderId);
+              sessionStorage.setItem("lastCreatedOrderId", order.id || order.orderId);
             }
             clearSelectedItems();
             window.location.href = order.paymentUrl;

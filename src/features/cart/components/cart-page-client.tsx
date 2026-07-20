@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   ArrowRight,
   FileText,
@@ -24,6 +25,7 @@ import {
 import { useCartStore } from "@/stores/cart-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/utils/format-currency";
+import { getOrder, cancelOrder } from "@/features/order/services/order.service";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +45,90 @@ export function CartPageClient() {
   const removeItem = useCartStore((state) => state.removeItem);
   const toggleSelectItem = useCartStore((state) => state.toggleSelectItem);
   const toggleSelectAll = useCartStore((state) => state.toggleSelectAll);
+  const restoreItems = useCartStore((state) => state.restoreItems);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const isCanceledParam = params.get("cancel") === "true" || params.get("canceled") === "true";
+    const savedOrderId = sessionStorage.getItem("lastCreatedOrderId");
+
+    if (isCanceledParam || savedOrderId) {
+      const processCanceledOrder = async () => {
+        if (savedOrderId) {
+          if (!/^[0-9a-fA-F]{24}$/.test(savedOrderId)) {
+            sessionStorage.removeItem("lastCreatedOrderId");
+            if (isCanceledParam) {
+              toast.info("Bạn đã hủy thanh toán đơn hàng.");
+            }
+          } else {
+            try {
+              toast.loading("Đang khôi phục sản phẩm vào giỏ hàng...", { id: "restore-cart" });
+              const order = (await getOrder(savedOrderId)) as any;
+            if (
+              order &&
+              order.paymentStatus === "UNPAID" &&
+              order.orderStatus === "PLACED"
+            ) {
+              await cancelOrder(savedOrderId, "Khách hàng hủy thanh toán và quay về giỏ hàng");
+              const cartItems = order.items.map((item: any) => {
+                const isCustom = item.isPrintItem;
+                let designFileSnapshot: any = undefined;
+                if (item.designFile) {
+                  try {
+                    designFileSnapshot = typeof item.designFile === "string"
+                      ? JSON.parse(item.designFile)
+                      : item.designFile;
+                  } catch {
+                    // ignore
+                  }
+                }
+                return {
+                  cartItemId: isCustom
+                    ? `custom:${item.sku}:${item.designId || ""}:${Date.now()}`
+                    : `standard:${item.sku}`,
+                  productId: item.sku,
+                  productRefId: item.sku,
+                  name: item.name || item.sku,
+                  slug: item.sku,
+                  price: item.unitPrice,
+                  quantity: item.quantity,
+                  unit: "cái",
+                  imageUrl: designFileSnapshot?.previewDataUrl || "/images/product-placeholder.svg",
+                  fulfillmentType: isCustom ? "CUSTOM_PRINT" : "STANDARD",
+                  designId: item.designId ?? undefined,
+                  designFile: designFileSnapshot,
+                };
+              });
+              await restoreItems(cartItems);
+              toast.success("Đã hủy thanh toán. Các sản phẩm của bạn đã được khôi phục vào giỏ hàng!", { id: "restore-cart" });
+            } else {
+              toast.dismiss("restore-cart");
+            }
+          } catch (err) {
+            console.error("Failed to restore canceled order to cart:", err);
+            toast.dismiss("restore-cart");
+          } finally {
+            sessionStorage.removeItem("lastCreatedOrderId");
+          }
+        }
+      } else if (isCanceledParam) {
+          toast.info("Bạn đã hủy thanh toán đơn hàng.");
+        }
+
+        if (isCanceledParam) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("cancel");
+          url.searchParams.delete("canceled");
+          url.searchParams.delete("orderCode");
+          window.history.replaceState({}, "", url.toString());
+        }
+      };
+
+      processCanceledOrder();
+    }
+  }, [restoreItems]);
 
   // Filter selected items for calculations
   const selectedItems = items.filter((item) => item.selected !== false);
