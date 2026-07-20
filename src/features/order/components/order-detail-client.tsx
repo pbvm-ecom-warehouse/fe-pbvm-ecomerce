@@ -3,6 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { 
   ArrowLeft, 
@@ -33,6 +34,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getOrder, cancelOrder } from "@/features/order/services/order.service";
+import { useCartStore } from "@/stores/cart-store";
 import { formatCurrency } from "@/utils/format-currency";
 import { formatDateTime } from "@/utils/format-date";
 import { apiClient } from "@/lib/api-client";
@@ -40,6 +42,8 @@ import { unwrapApiData } from "@/lib/api-contract";
 
 export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack?: () => void }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const restoreItems = useCartStore((state) => state.restoreItems);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isRepaying, setIsRepaying] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
@@ -69,12 +73,51 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
       const reason = selectedReason === "Lý do khác"
         ? (cancelReasonText.trim() || "Lý do khác")
         : selectedReason;
+
+      const isUnpaidOnline = order?.paymentStatus === "UNPAID" && order?.paymentMethod === "ONLINE";
       await cancelOrder(orderId, reason);
-      toast.success("Đã hủy đơn hàng thành công!");
-      setShowCancelDialog(false);
-      setSelectedReason("Tôi muốn đổi phương thức thanh toán");
-      setCancelReasonText("");
-      queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
+
+      if (isUnpaidOnline && order?.items?.length) {
+        const cartItems = order.items.map((item: any) => {
+          const isCustom = item.isPrintItem;
+          let designFileSnapshot: any = undefined;
+          if (item.designFile) {
+            try {
+              designFileSnapshot = typeof item.designFile === 'string'
+                ? JSON.parse(item.designFile)
+                : item.designFile;
+            } catch {
+              // ignore
+            }
+          }
+          return {
+            cartItemId: isCustom
+              ? `custom:${item.sku}:${item.designId || ""}:${Date.now()}`
+              : `standard:${item.sku}`,
+            productId: item.sku,
+            productRefId: item.sku,
+            name: item.name || item.sku,
+            slug: item.sku,
+            price: item.unitPrice,
+            quantity: item.quantity,
+            unit: "cái",
+            imageUrl: designFileSnapshot?.previewDataUrl || "/images/product-placeholder.svg",
+            fulfillmentType: isCustom ? "CUSTOM_PRINT" : "STANDARD",
+            designId: item.designId ?? undefined,
+            designFile: designFileSnapshot,
+          };
+        });
+        await restoreItems(cartItems);
+        toast.success("Đã hủy thanh toán và chuyển các sản phẩm về giỏ hàng!");
+        setShowCancelDialog(false);
+        router.push("/cart");
+      } else {
+        toast.success("Đã hủy đơn hàng thành công!");
+        setShowCancelDialog(false);
+        setSelectedReason("Tôi muốn đổi phương thức thanh toán");
+        setCancelReasonText("");
+        queryClient.invalidateQueries({ queryKey: ["orders", orderId] });
+      }
     } catch (err: any) {
       toast.error(`Hủy đơn hàng thất bại: ${err.message}`);
     } finally {

@@ -183,6 +183,7 @@ export async function createOrder(payload: CreateOrderPayload) {
     }
 
     return {
+      id: orderId,
       orderId: orderData.code || orderId,
       paymentUrl,
       offline: false,
