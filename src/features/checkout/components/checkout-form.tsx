@@ -59,6 +59,11 @@ import { apiClient } from "@/lib/api-client";
 import { unwrapApiData } from "@/lib/api-contract";
 
 export function CheckoutForm() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const rawItems = useCartStore((state) => state.items);
   const items = rawItems.filter((item) => item.selected !== false);
   const clearSelectedItems = useCartStore((state) => state.clearSelectedItems);
@@ -226,11 +231,11 @@ export function CheckoutForm() {
   };
 
   useEffect(() => {
-    if (!user) {
+    if (mounted && !user) {
       toast.error("Vui lòng đăng nhập để thực hiện thanh toán!");
       router.push("/login?redirect=/checkout");
     }
-  }, [user, router]);
+  }, [mounted, user, router]);
 
 
 
@@ -355,11 +360,6 @@ export function CheckoutForm() {
     }
   }, [user, setValue]);
   const selectedPayment = useWatch({ control, name: "paymentProvider" });
-
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   if (!mounted) {
     return (
