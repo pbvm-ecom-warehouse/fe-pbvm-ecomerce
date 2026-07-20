@@ -356,6 +356,22 @@ export function CheckoutForm() {
   }, [user, setValue]);
   const selectedPayment = useWatch({ control, name: "paymentProvider" });
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-[300px] flex-col items-center justify-center text-center space-y-3">
+        <div className="size-8 rounded-full border-2 border-emerald-200 border-t-emerald-600 animate-spin" />
+        <div className="text-sm font-medium text-muted-foreground">
+          Đang kiểm tra thông tin thanh toán...
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="flex min-h-[300px] flex-col items-center justify-center text-center space-y-4">
