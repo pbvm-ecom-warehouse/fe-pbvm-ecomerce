@@ -150,7 +150,7 @@ function LoginForm() {
           Đăng nhập tài khoản
         </h1>
         <p className="text-xs text-[#78858F] font-semibold mt-1 max-w-[280px]">
-          Theo dõi tình hình kinh doanh và quản lý đơn hàng B2B
+          Theo dõi tình hình đơn hàng và quản lý tài khoản
         </p>
       </div>
 

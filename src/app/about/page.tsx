@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Award, Clock, Cpu, Layers, Paintbrush, ShieldCheck, Sparkles, Target, Users } from "lucide-react";
+import { Award, ChevronDown, Clock, Cpu, Layers, Paintbrush, ShieldCheck, Sparkles, Target, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,7 @@ import {
 export default function AboutPage() {
   const stats = [
     { value: "5Tr+", label: "Ly in đã xuất xưởng", description: "Bao gồm ly nhựa PP, PET, ly giấy và màng dập cốc" },
-    { value: "500+", label: "Chuỗi cửa hàng đồng hành", description: "Cung cấp sỉ trọn gói cho các thương hiệu F&B Việt Nam" },
+    { value: "500+", label: "Chuỗi cửa hàng đồng hành", description: "Cung cấp trọn gói cho các thương hiệu F&B Việt Nam" },
     { value: "99.8%", label: "Giao hàng đúng hẹn", description: "Quy trình vận hành logistics tối ưu qua chành xe & nội thành" },
     { value: "24/7", label: "Tự phục vụ thiết kế 3D", description: "Thiết kế logo trực quan, xoay 360 độ trực tuyến miễn phí" },
   ];
@@ -23,12 +23,12 @@ export default function AboutPage() {
   const pillars = [
     {
       title: "Tầm nhìn chiến lược",
-      text: "Trở thành người bạn đồng hành số 1 của các thương hiệu trà sữa và cà phê tại Việt Nam, số hóa chuỗi cung ứng bao bì và nguyên liệu sỉ để giúp các doanh nghiệp F&B tối ưu hóa vận hành từ khâu thiết kế đến giao nhận.",
+      text: "Trở thành người bạn đồng hành số 1 của các thương hiệu trà sữa và cà phê tại Việt Nam, số hóa chuỗi cung ứng bao bì và nguyên liệu để giúp các doanh nghiệp F&B tối ưu hóa vận hành từ khâu thiết kế đến giao nhận.",
       icon: Layers,
     },
     {
       title: "Sứ mệnh cốt lõi",
-      text: "Đơn giản hóa quy trình mua sắm vật tư B2B bằng cách tích hợp dịch vụ thiết kế ly nhựa in logo 3D trực quan và quản lý tồn kho theo thời gian thực (WMS), mang lại trải nghiệm minh bạch, nhanh chóng và chuẩn xác.",
+      text: "Đơn giản hóa quy trình mua sắm vật tư bằng cách tích hợp dịch vụ thiết kế ly nhựa in logo 3D trực quan và quản lý tồn kho theo thời gian thực (WMS), mang lại trải nghiệm minh bạch, nhanh chóng và chuẩn xác.",
       icon: Target,
     },
   ];
@@ -69,7 +69,7 @@ export default function AboutPage() {
               </div>
 
               <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-[1.1] text-[#253D4E] dark:text-zinc-100">
-                Giải pháp bao bì & nguyên liệu sỉ <span className="text-[#3BB77E] italic">chuẩn hóa cho chuỗi F&B</span>
+                Giải pháp bao bì & nguyên liệu <span className="text-[#3BB77E] italic">chuẩn hóa cho chuỗi F&B</span>
               </h1>
 
               <p className="text-base text-muted-foreground dark:text-zinc-300 leading-relaxed max-w-[58ch]">
@@ -81,9 +81,9 @@ export default function AboutPage() {
               <div className="pt-4 flex flex-wrap gap-4">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button className="bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold px-6 py-3 rounded-xl transition-all active:scale-[0.98] border-0 cursor-pointer flex items-center gap-1.5 h-11 select-none">
-                      Đặt ly
-                      <span className="border-solid border-l-transparent border-r-transparent border-t-current border-t-4 w-0 h-0 ml-0.5" />
+                    <Button className="bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold px-6 py-3 rounded-xl transition-all active:scale-[0.98] border-0 cursor-pointer inline-flex items-center justify-center text-center gap-1.5 h-11 select-none leading-none">
+                      <span>Đặt ly</span>
+                      <ChevronDown className="size-4 shrink-0 opacity-80" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent className="w-48 bg-[#FAF8F6] border border-[#E9E3DD] rounded-xl shadow-md p-1.5 z-40">
@@ -97,7 +97,7 @@ export default function AboutPage() {
                 </DropdownMenu>
 
                 <Button asChild variant="outline" className="border-[#E2EDE8] hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 rounded-xl font-bold px-6 py-3 transition-all cursor-pointer h-11">
-                  <Link href="/products">Xem bảng giá sỉ</Link>
+                  <Link href="/products">Xem bảng giá</Link>
                 </Button>
               </div>
             </div>

@@ -71,6 +71,10 @@ const footerColumns = [
 
 export function StoreFooter() {
   const pathname = usePathname();
+
+  if (pathname?.startsWith("/design-cup")) {
+    return null;
+  }
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);

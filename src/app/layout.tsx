@@ -17,7 +17,7 @@ const quicksand = Quicksand({
 });
 
 export const metadata: Metadata = {
-  title: "PBVM Shop | Bao bì và nguyên liệu B2B",
+  title: "PBVM Shop | Bao bì và nguyên liệu",
   description:
     "Đặt nguyên liệu trà sữa, ly nhựa và ly in custom với catalog đồng bộ WMS.",
 };

@@ -21,7 +21,7 @@ const designFile: DesignFileSnapshot = {
       printHeightPercent: 70,
     },
     cup: {
-      size: "M",
+      size: "500ml",
       style: "straight",
       materialType: "frosted",
       cupColor: "#F8F4EC",

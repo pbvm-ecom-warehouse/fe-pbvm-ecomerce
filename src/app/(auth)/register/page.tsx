@@ -134,7 +134,7 @@ export default function RegisterPage() {
           Đăng ký tài khoản
         </h1>
         <p className="text-xs text-[#78858F] font-semibold mt-1 max-w-[280px]">
-          Nhận bảng giá sỉ linh hoạt và quản lý nhập hàng B2B tối ưu
+          Đặt hàng nhanh chóng và quản lý đơn hàng tối ưu
         </p>
       </div>
 

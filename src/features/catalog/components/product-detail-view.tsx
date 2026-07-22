@@ -27,7 +27,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
-import type { CatalogProduct } from "@/types/api";
+import type { CatalogProduct, ProductVariant } from "@/types/api";
 import { formatCurrency } from "@/utils/format-currency";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +53,37 @@ function getProductImages(product: CatalogProduct): string[] {
 }
 
 function getProductSizes(product: CatalogProduct): string[] {
+  if (product.variants && product.variants.length > 0) {
+    const extracted = product.variants
+      .map((v) => {
+        const sizeAttr =
+          v.attributes?.size ||
+          v.attributes?.capacity ||
+          v.attributes?.["dung tích"];
+        if (sizeAttr) return sizeAttr;
+
+        const text = `${v.sku} ${v.attributes ? JSON.stringify(v.attributes) : ""}`.toLowerCase();
+        if (text.includes("1000")) return "1000ml";
+        if (text.includes("750") || text.includes("700")) return "700ml";
+        if (text.includes("500")) return "500ml";
+        if (text.includes("350")) return "350ml";
+        return null;
+      })
+      .filter((s): s is string => Boolean(s));
+
+    const uniqueSizes = Array.from(new Set(extracted));
+    if (uniqueSizes.length > 0) {
+      return uniqueSizes;
+    }
+  }
+
+  // Parse size from product name if specified
+  const text = `${product.name} ${product.slug}`.toLowerCase();
+  if (text.includes("1000ml") || text.includes("1000 ml")) return ["1000ml"];
+  if (text.includes("700ml") || text.includes("750ml") || text.includes("700 ml")) return ["700ml"];
+  if (text.includes("500ml") || text.includes("500 ml")) return ["500ml"];
+  if (text.includes("350ml") || text.includes("350 ml")) return ["350ml"];
+
   const nameLower = product.name.toLowerCase();
   if (
     product.category === "printed_cup" ||
@@ -88,23 +119,107 @@ function getProductRating(id: string) {
   return { rating, reviews };
 }
 
-export function ProductDetailView({ product }: { product: CatalogProduct }) {
-  const isCustomPrint = product.fulfillmentType === "CUSTOM_PRINT";
-  const hasSalePrice = product.price > product.b2bPrice;
+function getVariantLabel(v: ProductVariant): string {
+  const attrSize =
+    v.attributes?.size ||
+    v.attributes?.capacity ||
+    v.attributes?.["dung tích"];
+  if (attrSize) return attrSize;
 
+  const sku = v.sku.toUpperCase();
+  if (sku.includes("350ML")) return "Ly PP 350ml";
+  if (sku.includes("DEFAULT")) return "Ly nhựa tiêu chuẩn (500ml)";
+  if (sku.includes("PRINTED") || v.fulfillmentType === "CUSTOM_PRINT")
+    return "In logo theo yêu cầu";
+
+  return v.sku;
+}
+
+export function ProductDetailView({ product }: { product: CatalogProduct }) {
   const images = useMemo(() => getProductImages(product), [product]);
   const sizes = useMemo(() => getProductSizes(product), [product]);
   const { rating, reviews } = useMemo(() => getProductRating(product.id), [product.id]);
 
+  const hasVariants = Boolean(product.variants && product.variants.length > 0);
+
   const [activeImage, setActiveImage] = useState(images[0]);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState(sizes[0]);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<"desc" | "specs" | "vendor" | "reviews">("desc");
 
-  // Discount percentage calculation
+  const selectedVariant = useMemo(() => {
+    if (!hasVariants || !product.variants || product.variants.length === 0) return null;
+    return product.variants[selectedVariantIndex] ?? product.variants[0];
+  }, [hasVariants, product.variants, selectedVariantIndex]);
+
+  const activePrice = selectedVariant ? selectedVariant.price : (product.b2bPrice || product.price);
+  const hasSalePrice = product.price > activePrice;
   const discountPercent = hasSalePrice
-    ? Math.round(((product.price - product.b2bPrice) / product.price) * 100)
+    ? Math.round(((product.price - activePrice) / product.price) * 100)
     : 0;
+
+  const isCustomPrint = selectedVariant
+    ? selectedVariant.fulfillmentType === "CUSTOM_PRINT"
+    : product.fulfillmentType === "CUSTOM_PRINT";
+
+  const activeStock = selectedVariant ? (selectedVariant.availableQty ?? 0) : product.stockSnapshot;
+  const isSelectedVariantOutOfStock = activeStock <= 0;
+
+  const activeLabel = selectedVariant
+    ? getVariantLabel(selectedVariant)
+    : (selectedSize || "Tiêu chuẩn");
+
+  const activeProductToAddToCart = useMemo(() => {
+    if (!selectedVariant) return product;
+    return {
+      ...product,
+      price: selectedVariant.price,
+      b2bPrice: selectedVariant.price,
+      productRefId: selectedVariant.sku,
+      stockSnapshot: selectedVariant.availableQty,
+    };
+  }, [product, selectedVariant]);
+
+  const isCupProduct = useMemo(() => {
+    const nameLower = product.name.toLowerCase();
+    return (
+      product.category === "plain_cup" ||
+      product.category === "printed_cup" ||
+      product.category === "custom_print" ||
+      product.slug.includes("ly-") ||
+      nameLower.includes("ly nhựa") ||
+      nameLower.includes("ly giấy") ||
+      nameLower.startsWith("ly ")
+    );
+  }, [product]);
+
+  const inferredMaterial = useMemo(() => {
+    const text = `${product.name} ${product.slug} ${JSON.stringify(selectedVariant?.attributes || {})}`.toLowerCase();
+    if (text.includes("mờ") || text.includes("frosted") || text.includes("pp")) return "frosted";
+    if (text.includes("giấy") || text.includes("paper")) return "paper";
+    if (text.includes("trong") || text.includes("clear") || text.includes("pet")) return "clear";
+    return "frosted";
+  }, [product, selectedVariant]);
+
+  const inferredStyle = useMemo(() => {
+    const text = `${product.name} ${product.slug} ${JSON.stringify(selectedVariant?.attributes || {})}`.toLowerCase();
+    if (text.includes("bầu") || text.includes("u-shape") || text.includes("đáy u")) return "u_shape";
+    if (text.includes("tim") || text.includes("heart")) return "heart";
+    if (text.includes("mug")) return "mug";
+    return "straight";
+  }, [product, selectedVariant]);
+
+  const categoryLabel = useMemo(() => {
+    if (product.category === "plain_cup") return "Ly nhựa chưa in";
+    if (product.category === "printed_cup") return "Ly nhựa đã in";
+    if (product.category === "custom_print") return "Ly in theo yêu cầu";
+    if (isCupProduct) return "Ly nhựa & Bao bì";
+    return categoryCopy[product.category] || "Bao bì / Nguyên liệu";
+  }, [product.category, isCupProduct]);
+
+  const activeSku = selectedVariant?.sku || product.productRefId;
+  const displayStock = selectedVariant ? selectedVariant.availableQty : product.stockSnapshot;
 
   return (
     <main className="min-h-screen bg-white text-foreground">
@@ -186,17 +301,11 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
               {product.name}
             </h1>
 
-
             {/* Price Block (Large) */}
             <div className="flex items-end gap-3 mt-1 pb-4 border-b border-gray-100 dark:border-zinc-800">
               <div className="flex flex-col">
-                {hasSalePrice && (
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-[#FD6E6E] mb-0.5">
-                    Giá sỉ B2B
-                  </div>
-                )}
                 <span className="text-3xl font-black text-[#3BB77E] leading-none">
-                  {formatCurrency(product.b2bPrice)}
+                  {formatCurrency(activePrice)}
                 </span>
               </div>
 
@@ -225,56 +334,92 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
               )}
             </p>
 
-            {/* Sizing / Weights Row */}
+            {/* Sizing / Variant Row */}
             <div className="mt-6 space-y-2">
               <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                Trọng lượng / Dung tích sỉ
+                {hasVariants ? "Phân loại sản phẩm / Variant" : "Trọng lượng / Dung tích"}
               </div>
               <div className="flex items-center gap-2.5 flex-wrap">
-                {sizes.map((size) => {
-                  const isActive = size === selectedSize;
-                  return (
-                    <button
-                      suppressHydrationWarning
-                      key={size}
-                      onClick={() => setSelectedSize(size)}
-                      className={cn(
-                        "text-xs font-bold px-4 py-2 rounded-lg border transition-all cursor-pointer",
-                        isActive
-                          ? "bg-[#3BB77E] border-[#3BB77E] text-white"
-                          : "bg-[#F2F3F4] dark:bg-zinc-800 border-[#F2F3F4] dark:border-zinc-800 text-[#7E7E7E] dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                      )}
-                    >
-                      {size}
-                    </button>
-                  );
-                })}
+                {hasVariants && product.variants ? (
+                  product.variants.map((v, idx) => {
+                    const isActive = idx === selectedVariantIndex;
+                    const label = getVariantLabel(v);
+
+                    return (
+                      <button
+                        suppressHydrationWarning
+                        key={v.id || v.sku || idx}
+                        onClick={() => setSelectedVariantIndex(idx)}
+                        className={cn(
+                          "text-xs font-bold px-4 py-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-center",
+                          isActive
+                            ? "bg-[#3BB77E] border-[#3BB77E] text-white shadow-xs"
+                            : "bg-[#F2F3F4] dark:bg-zinc-800 border-[#F2F3F4] dark:border-zinc-800 text-[#253D4E] dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                        )}
+                      >
+                        <span>{label}</span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  sizes.map((size) => {
+                    const isActive = size === selectedSize;
+                    return (
+                      <button
+                        suppressHydrationWarning
+                        key={size}
+                        onClick={() => setSelectedSize(size)}
+                        className={cn(
+                          "text-xs font-bold px-4 py-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-center",
+                          isActive
+                            ? "bg-[#3BB77E] border-[#3BB77E] text-white shadow-xs"
+                            : "bg-[#F2F3F4] dark:bg-zinc-800 border-[#F2F3F4] dark:border-zinc-800 text-[#7E7E7E] dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                        )}
+                      >
+                        <span>{size}</span>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
 
-            {/* Actions: Quantity Selector & Add Button */}
-            <div className="mt-6 flex flex-wrap items-center gap-4 pb-6 border-b border-gray-100 dark:border-zinc-800">
+            {/* Actions: Quantity Selector & Add Button + Design Button side by side */}
+            <div className="mt-6 flex flex-wrap items-center gap-3 pb-4">
               {/* Custom Spin quantity box */}
-              <div className="flex items-center border border-[#E2EDE8] dark:border-zinc-700 rounded-lg overflow-hidden h-11 w-20 bg-white dark:bg-zinc-800 shrink-0">
+              <div className={cn(
+                "flex items-center border border-[#E2EDE8] dark:border-zinc-700 rounded-lg overflow-hidden h-11 w-20 bg-white dark:bg-zinc-800 shrink-0",
+                isSelectedVariantOutOfStock && "opacity-50 pointer-events-none"
+              )}>
                 <input
                   suppressHydrationWarning
                   type="number"
+                  min={1}
+                  max={activeStock}
                   aria-label="Số lượng"
-                  className="w-full text-center outline-none text-sm font-bold bg-transparent border-0"
-                  value={quantity}
-                  readOnly
+                  disabled={isSelectedVariantOutOfStock}
+                  className="w-full text-center outline-none text-sm font-bold bg-transparent border-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  value={isSelectedVariantOutOfStock ? 0 : quantity}
+                  onChange={(e) => {
+                    const parsed = parseInt(e.target.value, 10);
+                    if (!isNaN(parsed) && parsed >= 1) {
+                      setQuantity(Math.min(activeStock, parsed));
+                    }
+                  }}
                 />
                 <div className="flex flex-col border-l border-[#E2EDE8] dark:border-zinc-700 h-full justify-between w-6">
                   <button
                     suppressHydrationWarning
-                    className="px-1 text-[8px] hover:bg-zinc-100 dark:hover:bg-zinc-700 flex-1 border-b border-[#E2EDE8] dark:border-zinc-700 flex items-center justify-center cursor-pointer border-0 bg-transparent font-extrabold"
-                    onClick={() => setQuantity((q) => q + 1)}
+                    disabled={isSelectedVariantOutOfStock || quantity >= activeStock}
+                    className="px-1 text-[8px] hover:bg-zinc-100 dark:hover:bg-zinc-700 flex-1 border-b border-[#E2EDE8] dark:border-zinc-700 flex items-center justify-center cursor-pointer border-0 bg-transparent font-extrabold disabled:opacity-40"
+                    onClick={() => setQuantity((q) => Math.min(activeStock, q + 1))}
                   >
                     ▲
                   </button>
                   <button
                     suppressHydrationWarning
-                    className="px-1 text-[8px] hover:bg-zinc-100 dark:hover:bg-zinc-700 flex-1 flex items-center justify-center cursor-pointer border-0 bg-transparent font-extrabold"
+                    disabled={isSelectedVariantOutOfStock || quantity <= 1}
+                    className="px-1 text-[8px] hover:bg-zinc-100 dark:hover:bg-zinc-700 flex-1 flex items-center justify-center cursor-pointer border-0 bg-transparent font-extrabold disabled:opacity-40"
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   >
                     ▼
@@ -282,40 +427,57 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                 </div>
               </div>
 
-              {/* Add to Cart Button or Custom Print Button */}
-              <div className="flex-1 min-w-[200px]">
-                {isCustomPrint ? (
+              {/* Add to Cart Button */}
+              <div className="flex-1 min-w-[140px]">
+                <AddToCartButton
+                  className="h-11 w-full bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold rounded-lg flex items-center justify-center gap-2 border-0 cursor-pointer text-sm shadow-none"
+                  product={activeProductToAddToCart}
+                  quantity={isSelectedVariantOutOfStock ? 0 : quantity}
+                  selectedSize={activeLabel}
+                  attributes={selectedVariant?.attributes}
+                  disabled={isSelectedVariantOutOfStock}
+                />
+              </div>
+
+              {/* Nút Thiết kế ly này (Gọn gàng kế bên nút Thêm) */}
+              {isCupProduct && (
+                <div className="shrink-0">
                   <Button
                     asChild
-                    className="h-11 w-full bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold rounded-lg flex items-center justify-center gap-2 border-0 cursor-pointer text-sm shadow-none"
+                    variant="outline"
+                    className="h-11 px-4 border-primary/40 bg-emerald-50 hover:bg-emerald-100/80 text-primary font-bold rounded-lg flex items-center justify-center gap-1.5 text-xs shadow-none transition-all cursor-pointer"
                   >
-                    <Link href={`/design-cup?productId=${product.id}`}>
-                      <Paintbrush className="size-4 mr-1" />
-                      Thiết kế ly 3D ngay
+                    <Link
+                      href={`/design-cup?productId=${product.id}&size=${encodeURIComponent(activeLabel)}&materialType=${encodeURIComponent(inferredMaterial)}&style=${encodeURIComponent(inferredStyle)}`}
+                    >
+                      <Paintbrush className="size-3.5 text-primary shrink-0" />
+                      <span>Thiết kế</span>
                     </Link>
                   </Button>
-                ) : (
-                  <AddToCartButton
-                    className="h-11 w-full bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold rounded-lg flex items-center justify-center gap-2 border-0 cursor-pointer text-sm shadow-none"
-                    product={product}
-                    quantity={quantity}
-                  />
-                )}
-              </div>
+                </div>
+              )}
             </div>
 
+            {/* Banner hết hàng (ĐẶT Ở DƯỚI NÚT BẤM ĐỂ TRÁNH BỊ NHẢY VỊ TRÍ DÒNG NÚT BẤM) */}
+            {isSelectedVariantOutOfStock && (
+              <div className="mb-4 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold animate-in fade-in duration-200">
+                <span className="text-base">⚠️</span>
+                <span>Dung tích <strong>{activeLabel}</strong> hiện đang hết hàng. Vui lòng chọn dung tích khác hoặc tạo mẫu trước.</span>
+              </div>
+            )}
+
             {/* Meta tags detail list */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 mt-6 text-xs text-muted-foreground">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 mt-6 text-xs text-muted-foreground border-t border-gray-100 pt-4">
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-gray-500">Phân loại:</span>
                 <span className="text-[#3BB77E] font-bold hover:underline cursor-pointer">
-                  {categoryCopy[product.category]}
+                  {categoryLabel}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-gray-500">Mã hàng:</span>
                 <span className="text-[#3BB77E] font-bold hover:underline cursor-pointer">
-                  {product.productRefId}
+                  {activeSku}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -326,8 +488,8 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-gray-500">Tồn kho:</span>
-                <span className="text-[#3BB77E] font-bold">
-                  {product.stockSnapshot.toLocaleString("vi-VN")} {product.unit}
+                <span className={cn("font-bold", displayStock <= 0 ? "text-rose-600" : "text-[#3BB77E]")}>
+                  {displayStock <= 0 ? "Hết hàng" : `${displayStock.toLocaleString("vi-VN")} ${product.unit}`}
                 </span>
               </div>
             </div>

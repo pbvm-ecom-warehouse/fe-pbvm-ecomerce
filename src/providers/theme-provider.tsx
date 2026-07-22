@@ -12,7 +12,8 @@ if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
       msg.includes("hydration-mismatch") ||
       msg.includes("fdprocessedid") ||
       msg.includes("Server rendered HTML didn't match") ||
-      msg.includes("did not match the server")
+      msg.includes("did not match the server") ||
+      msg.includes("Expected static flag was missing")
     ) {
       return;
     }

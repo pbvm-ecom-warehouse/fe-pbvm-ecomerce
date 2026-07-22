@@ -34,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCartStore } from "@/stores/cart-store";
+import { CupConfigDetails } from "@/features/cart/components/cup-config-details";
 import { useAuthStore } from "@/stores/auth-store";
 import { calculateCartTotals } from "@/features/cart/utils/cart";
 import {
@@ -174,7 +175,7 @@ export function CheckoutForm() {
     try {
       setIsRestoring(true);
       toast.loading("Đang khôi phục giỏ hàng...");
-      
+
       // Hủy đơn hàng cũ trên hệ thống
       await cancelOrder(pendingOrderId, "Khách hàng hủy thanh toán và quay lại chỉnh sửa giỏ hàng");
 
@@ -206,6 +207,9 @@ export function CheckoutForm() {
           fulfillmentType: isCustom ? "CUSTOM_PRINT" : "STANDARD",
           designId: item.designId ?? undefined,
           designFile: designFileSnapshot,
+          selectedSize: designFileSnapshot?.artwork?.cup?.size,
+          selectedMaterial: designFileSnapshot?.artwork?.cup?.materialType,
+          selectedStyle: designFileSnapshot?.artwork?.cup?.style,
         };
       });
 
@@ -528,7 +532,7 @@ export function CheckoutForm() {
                 Tiếp tục thanh toán Online
                 <ArrowRight className="size-4" />
               </Button>
-              
+
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   onClick={handleRestoreCart}
@@ -601,8 +605,8 @@ export function CheckoutForm() {
             toast.success("Đang chuyển hướng sang cổng thanh toán...");
             if (typeof window !== "undefined") {
               sessionStorage.setItem("lastCreatedOrderId", order.id || order.orderId);
+              sessionStorage.setItem("pendingCartBackup", JSON.stringify(items));
             }
-            clearSelectedItems();
             window.location.href = order.paymentUrl;
             return;
           }
@@ -626,11 +630,18 @@ export function CheckoutForm() {
       })}
     >
       <Card className="overflow-hidden rounded-2xl border-border bg-white p-0 shadow-sm">
-        <CardHeader className="border-b border-border/70 bg-muted/40 px-6 py-4">
+        <CardHeader className="border-b border-border/70 bg-muted/40 px-6 py-4 flex flex-row items-center justify-between gap-4 flex-wrap">
           <CardTitle className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.14em] text-primary">
             <ShoppingBag className="size-4" />
-            Thông Tin Đặt Hàng & Thanh Toán
+            Thông Tin Đặt Hàng &amp; Thanh Toán
           </CardTitle>
+          <Link
+            href="/cart"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-primary transition-colors bg-white px-3.5 py-1.5 rounded-lg border border-slate-200 shadow-2xs"
+          >
+            <ArrowLeft className="size-3.5 text-slate-500" />
+            <span>Quay lại Giỏ hàng</span>
+          </Link>
         </CardHeader>
         <CardContent className="grid gap-6 p-6">
           {hasCustomPrint ? (
@@ -640,30 +651,7 @@ export function CheckoutForm() {
             </div>
           ) : null}
 
-          {/* Nhóm khách */}
-          <div className="grid gap-2">
-            <Label className="text-xs font-black text-primary">
-              Nhóm khách
-            </Label>
-            <Select
-              defaultValue="B2B"
-              onValueChange={(value) =>
-                setValue(
-                  "customerType",
-                  value as CheckoutInput["customerType"],
-                  { shouldValidate: true },
-                )
-              }
-            >
-              <SelectTrigger className="h-11 w-full rounded-xl border-border bg-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="B2B">B2B - shop trà sữa</SelectItem>
-                <SelectItem value="B2C">B2C - khách lẻ</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+
 
           {/* Address picker */}
           <div className="grid gap-2">
@@ -690,16 +678,14 @@ export function CheckoutForm() {
                       key={addr.id}
                       type="button"
                       onClick={() => handleSelectAddress(addr.id)}
-                      className={`w-full flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition-all ${
-                        isSelected
+                      className={`w-full flex items-start gap-3 rounded-xl border-2 p-3.5 text-left transition-all ${isSelected
                           ? "border-primary bg-primary/5"
                           : "border-border bg-white hover:border-primary/40"
-                      }`}
+                        }`}
                     >
                       {/* Radio indicator */}
-                      <div className={`mt-0.5 size-4 shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${
-                        isSelected ? "border-primary" : "border-muted-foreground/40"
-                      }`}>
+                      <div className={`mt-0.5 size-4 shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isSelected ? "border-primary" : "border-muted-foreground/40"
+                        }`}>
                         {isSelected && (
                           <div className="size-2 rounded-full bg-primary" />
                         )}
@@ -726,15 +712,13 @@ export function CheckoutForm() {
                 <button
                   type="button"
                   onClick={() => handleSelectAddress("new")}
-                  className={`w-full flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition-all ${
-                    selectedAddressId === "new"
+                  className={`w-full flex items-center gap-3 rounded-xl border-2 p-3.5 text-left transition-all ${selectedAddressId === "new"
                       ? "border-primary bg-primary/5"
                       : "border-dashed border-border bg-white hover:border-primary/40"
-                  }`}
+                    }`}
                 >
-                  <div className={`mt-0.5 size-4 shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${
-                    selectedAddressId === "new" ? "border-primary" : "border-muted-foreground/40"
-                  }`}>
+                  <div className={`mt-0.5 size-4 shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${selectedAddressId === "new" ? "border-primary" : "border-muted-foreground/40"
+                    }`}>
                     {selectedAddressId === "new" && (
                       <div className="size-2 rounded-full bg-primary" />
                     )}
@@ -910,8 +894,8 @@ export function CheckoutForm() {
                       setValue("paymentProvider", option.value);
                     }}
                     className={`flex items-center gap-3 p-4 rounded-xl border-2 text-left transition-all ${selected
-                        ? "border-primary bg-muted/40 text-primary"
-                        : "border-border bg-white text-muted-foreground hover:border-primary"
+                      ? "border-primary bg-muted/40 text-primary"
+                      : "border-border bg-white text-muted-foreground hover:border-primary"
                       }`}
                   >
                     <div className={`size-9 rounded-lg flex items-center justify-center shrink-0 ${isCod ? "bg-amber-50" : "bg-sky-50"}`}>
@@ -969,13 +953,7 @@ export function CheckoutForm() {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <h4 className="text-xs font-bold text-foreground truncate leading-tight">{item.name}</h4>
-                    {item.fulfillmentType === "CUSTOM_PRINT" && item.designFile ? (
-                      <p className="text-[9px] text-primary font-bold mt-0.5">
-                        CUSTOM_PRINT • Size {item.designFile.artwork.cup.size} • {item.designFile.artwork.layers.length} layers
-                      </p>
-                    ) : (
-                      <p className="text-[9px] text-muted-foreground font-medium mt-0.5">Quy cách tiêu chuẩn • {item.unit}</p>
-                    )}
+                    <CupConfigDetails item={item} />
                     <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground font-medium">
                       <span>{formatCurrency(item.price)} x {item.quantity}</span>
                       <span className="font-bold text-foreground">{formatCurrency(item.price * item.quantity)}</span>
@@ -987,7 +965,7 @@ export function CheckoutForm() {
 
             {/* Voucher/Promotion Code Input */}
             <div className="border-t border-border pt-4 mt-2">
-              <Label className="text-[11px] font-black text-[#253D4E] uppercase tracking-wider mb-1.5 block">Mã giảm giá B2B</Label>
+              <Label className="text-[11px] font-black text-[#253D4E] uppercase tracking-wider mb-1.5 block">Mã giảm giá</Label>
               <div className="flex gap-2">
                 <Input
                   placeholder="Nhập mã voucher (ví dụ B2BSTART)..."
@@ -1059,14 +1037,27 @@ export function CheckoutForm() {
               </div>
             </div>
 
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="h-12 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#2F9A68] mt-2"
-            >
-              {isSubmitting ? "Đang tạo đơn..." : "Xác nhận đặt hàng"}
-              <ArrowRight data-icon="inline-start" />
-            </Button>
+            <div className="space-y-2 pt-2">
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="h-12 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#2F9A68] cursor-pointer shadow-xs"
+              >
+                {isSubmitting ? "Đang tạo đơn..." : "Xác nhận đặt hàng"}
+                <ArrowRight className="size-4 ml-1" />
+              </Button>
+
+              <Button
+                asChild
+                variant="outline"
+                className="h-10 w-full rounded-xl border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Link href="/cart">
+                  <ArrowLeft className="size-3.5" />
+                  <span>Quay lại Giỏ hàng</span>
+                </Link>
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -22,6 +22,7 @@ import {
   calculateCartTotals,
   hasCustomPrintItems,
 } from "@/features/cart/utils/cart";
+import { CupConfigDetails } from "./cup-config-details";
 import { useCartStore } from "@/stores/cart-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/utils/format-currency";
@@ -99,6 +100,9 @@ export function CartPageClient() {
                   fulfillmentType: isCustom ? "CUSTOM_PRINT" : "STANDARD",
                   designId: item.designId ?? undefined,
                   designFile: designFileSnapshot,
+                  selectedSize: designFileSnapshot?.artwork?.cup?.size,
+                  selectedMaterial: designFileSnapshot?.artwork?.cup?.materialType,
+                  selectedStyle: designFileSnapshot?.artwork?.cup?.style,
                 };
               });
               await restoreItems(cartItems);
@@ -249,18 +253,8 @@ export function CartPageClient() {
                       )}
                     </div>
 
-                    {item.fulfillmentType === "CUSTOM_PRINT" && item.designFile && (
-                      <div className="space-y-1 rounded-xl bg-muted/40 p-3 text-[10px] font-semibold text-muted-foreground border border-border max-w-md">
-                        <div className="text-[#253D4E] font-bold uppercase text-[9px] tracking-wider mb-1 flex items-center gap-1">
-                          <span className="size-1.5 rounded-full bg-primary" /> Bản in CUSTOM_PRINT:
-                        </div>
-                        <div>• Design ID: <span className="text-foreground">{item.designId}</span></div>
-                        <div>• Size cốc: <span className="text-foreground">{item.designFile.artwork.cup.size}</span></div>
-                        <div>• Chất liệu: <span className="text-foreground">{item.designFile.artwork.cup.materialType}</span></div>
-                        <div>• Chiều cao in: <span className="text-foreground">{item.designFile.artwork.artboard.printHeightPercent}%</span></div>
-                        <div>• Layers: <span className="text-foreground">{item.designFile.artwork.layers.length}</span></div>
-                      </div>
-                    )}
+                    {/* Configuration Details (Ly in / Ly plain / Nguyên liệu) */}
+                    <CupConfigDetails item={item} />
 
                     <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-muted-foreground">
                       <span>{formatCurrency(item.price)}</span>
@@ -277,9 +271,19 @@ export function CartPageClient() {
                         >
                           <Minus className="size-3" />
                         </button>
-                        <span className="w-10 text-center text-xs font-extrabold text-foreground">
-                          {item.quantity}
-                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          aria-label="Số lượng sản phẩm trong giỏ"
+                          className="w-10 text-center text-xs font-extrabold text-foreground bg-transparent outline-none border-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          value={item.quantity}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            if (!isNaN(val) && val >= 1) {
+                              updateQuantity(item.cartItemId, val);
+                            }
+                          }}
+                        />
                         <button
                           type="button"
                           className="px-2.5 py-1.5 hover:bg-muted text-muted-foreground transition-colors border-l border-border active:scale-95"

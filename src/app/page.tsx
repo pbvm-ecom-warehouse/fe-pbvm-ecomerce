@@ -173,7 +173,7 @@ export default async function HomePage() {
               <span className="text-[#3BB77E] italic">trà sữa của bạn</span>
             </h1>
             <p className="text-base text-zinc-300 leading-relaxed max-w-[55ch]">
-              PBVM cung cấp ly nhựa in logo cao cấp và nguyên liệu trà sữa sỉ trực tiếp cho chuỗi cửa hàng.
+              PBVM cung cấp ly nhựa in logo cao cấp và nguyên liệu trà sữa trực tiếp cho chuỗi cửa hàng.
               Bạn cũng có thể tự thiết kế logo lên ly nhựa trực quan với mô hình 3D tương tác.
             </p>
 

@@ -11,11 +11,15 @@ export function mapOrderToSummary(order: any): OrderSummary & Record<string, any
     ...order,
     id: order.id || order._id,
     // status: Ánh xạ từ orderStatus (đơn hàng)
-    status: order.orderStatus || order.status,
+    status: order.orderStatus || order.status || "PLACED",
+    // paymentStatus: Khởi tạo giá trị mặc định nếu thiếu
+    paymentStatus: order.paymentStatus || "UNPAID",
+    // fulfillmentStatus: Khởi tạo giá trị mặc định nếu thiếu
+    fulfillmentStatus: order.fulfillmentStatus || "NONE",
     // totalAmount: Ánh xạ từ total (tổng tiền)
-    totalAmount: order.total !== undefined ? order.total : order.totalAmount,
+    totalAmount: order.total !== undefined ? order.total : (order.totalAmount ?? 0),
     // createdAt: Ánh xạ từ placedAt hoặc createdAt (ngày đặt)
-    createdAt: order.placedAt || order.createdAt,
+    createdAt: order.placedAt || order.createdAt || order.updatedAt,
     // warehouseName: Ánh xạ từ fulfillWarehouseId (Nếu khác null, trả về "Kho trung tâm")
     warehouseName: order.fulfillWarehouseId ? "Kho trung tâm" : (order.warehouseName || ""),
   };
