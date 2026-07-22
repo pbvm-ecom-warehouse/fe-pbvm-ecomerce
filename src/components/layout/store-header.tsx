@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PhoneCall, Search, ShoppingCart, UserRound } from "lucide-react";
+import { Bell, ChevronDown, PhoneCall, Search, ShoppingCart, UserRound } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +29,10 @@ const AUTH_PATHS = ["/login", "/register"];
 
 export function StoreHeader() {
   const pathname = usePathname();
+
+  if (pathname?.startsWith("/design-cup")) {
+    return null;
+  }
   const items = useCartStore((state) => state.items);
   const itemCount = items.length;
   const user = useAuthStore((state) => state.user);
@@ -121,7 +125,7 @@ export function StoreHeader() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-bold text-foreground truncate">{p.name}</p>
                       <p className="text-[10px] font-black text-primary mt-0.5">
-                        {p.b2bPrice ? `${formatCurrency(p.b2bPrice)} (Sỉ)` : formatCurrency(p.price)} / {p.unit}
+                        {formatCurrency(p.b2bPrice || p.price)} / {p.unit}
                       </p>
                     </div>
                   </Link>
@@ -136,6 +140,19 @@ export function StoreHeader() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
+          {/* Notifications Bell Icon Button */}
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="size-11 rounded-xl text-muted-foreground hover:bg-muted hover:text-primary cursor-pointer relative"
+            title="Thông báo của tôi"
+          >
+            <Link href="/notifications">
+              <Bell className="size-5 shrink-0" />
+            </Link>
+          </Button>
+
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -253,15 +270,15 @@ export function StoreHeader() {
                   <Button
                     variant="ghost"
                     className={cn(
-                      "text-xs font-semibold h-9 px-3 transition-colors gap-1",
+                      "text-xs font-semibold h-9 px-3 transition-colors gap-1 inline-flex items-center justify-center text-center leading-none",
                       "hover:bg-[#DEF9EC] hover:text-[#253D4E]",
                       pathname === "/design-cup"
                         ? "bg-primary text-white font-bold hover:bg-primary hover:text-white"
                         : "text-foreground cursor-pointer"
                     )}
                   >
-                    Đặt ly
-                    <span className="border-solid border-l-transparent border-r-transparent border-t-current border-t-4 w-0 h-0 ml-1" />
+                    <span className="inline-flex items-center justify-center">Đặt ly</span>
+                    <ChevronDown className="size-3.5 shrink-0 opacity-80" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-48 bg-[#FAF8F6] border border-[#E9E3DD] rounded-xl shadow-md p-1.5 z-40">

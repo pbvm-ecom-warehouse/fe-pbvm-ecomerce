@@ -2,7 +2,7 @@ export type CustomerType = "B2B" | "B2C";
 
 export type FulfillmentType = "STANDARD" | "PRINTED_TEMPLATE" | "CUSTOM_PRINT";
 
-export type CupSize = "S" | "M" | "L" | "XL";
+export type CupSize = "350ml" | "500ml" | "700ml" | "1000ml";
 
 export type CupStyle = "straight" | "u_shape" | "heart" | "mug";
 
@@ -88,6 +88,7 @@ export type CatalogProduct = {
   stockSnapshot: number;
   imageUrl: string;
   updatedAt: string;
+  variants?: ProductVariant[];
 };
 
 export type ProductVariant = {
@@ -115,6 +116,10 @@ export type CartItem = {
   designId?: string;
   designFile?: DesignFileSnapshot;
   selected?: boolean;
+  selectedSize?: string;
+  selectedMaterial?: string;
+  selectedStyle?: string;
+  attributes?: Record<string, string>;
 };
 
 export type OrderStatus =

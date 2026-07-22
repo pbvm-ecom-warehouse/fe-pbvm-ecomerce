@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { User, Palette, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -85,19 +86,40 @@ export default function AccountDesignsPage() {
       <Card className="border border-slate-200 rounded-2xl shadow-sm bg-white overflow-hidden w-full">
         {/* Card Header */}
         <CardHeader className="border-b border-slate-100 bg-slate-50/50 p-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-emerald-100 rounded-lg text-primary">
-              <Palette size={20} />
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-emerald-100 rounded-lg text-primary">
+                <Palette size={20} />
+              </div>
+              <div>
+                <CardTitle className="text-base font-bold text-[#253D4E] uppercase tracking-wider">
+                  Thiết kế của tôi
+                </CardTitle>
+              </div>
             </div>
-            <div>
-              <CardTitle className="text-base font-bold text-[#253D4E] uppercase tracking-wider">
-                Thiết kế của tôi
-              </CardTitle>
-              <CardDescription className="text-xs font-semibold text-slate-500">
-                Danh sách các mẫu ly in ấn do bạn tự thiết kế và lưu lại.
-              </CardDescription>
-            </div>
+            {/* Counter X/15 */}
+            {!loadingDesigns && (
+              <span className={cn(
+                "text-[11px] font-black px-3 py-1 rounded-xl",
+                designs.length >= 15
+                  ? "bg-rose-100 text-rose-700"
+                  : designs.length >= 12
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-slate-100 text-slate-600"
+              )}>
+                {designs.length} / 15 mẫu
+              </span>
+            )}
           </div>
+          {/* Banner đầy 15 mẫu */}
+          {!loadingDesigns && designs.length >= 15 && (
+            <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200">
+              <span className="text-rose-600">🚫</span>
+              <p className="text-[11px] font-bold text-rose-700">
+                Bạn đã đạt 15 mẫu thiết kế. Xóa mẫu cũ để tạo thiết kế mới tại trang Thiết kế Ly.
+              </p>
+            </div>
+          )}
         </CardHeader>
 
         <CardContent className="p-6">
@@ -125,7 +147,7 @@ export default function AccountDesignsPage() {
             <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {designs.map((design) => {
                 const handleAddToCart = () => {
-                  const product = createCustomCupProduct({ size: "M", price: 3500 });
+                  const product = createCustomCupProduct({ size: "500ml", price: 3500 });
                   addCustomPrintItem({
                     product,
                     quantity: 100, // minimum custom print order quantity
@@ -137,7 +159,7 @@ export default function AccountDesignsPage() {
                       previewDataUrl: design.thumbnail || design.file,
                       artwork: {
                         artboard: { width: 400, height: 250, printHeightPercent: 60 },
-                        cup: { size: "M" as const, style: "straight" as const, materialType: "clear" as const, cupColor: "#ffffff" },
+                        cup: { size: "500ml" as const, style: "straight" as const, materialType: "clear" as const, cupColor: "#ffffff" },
                         layers: []
                       },
                       exportedAt: new Date().toISOString(),

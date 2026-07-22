@@ -12,9 +12,20 @@ import {
 } from "@/features/cart/services/cart.service";
 import { useAuthStore } from "@/stores/auth-store";
 
+type AddProductOptions = {
+  selectedSize?: string;
+  selectedMaterial?: string;
+  selectedStyle?: string;
+  attributes?: Record<string, string>;
+};
+
 type CartState = {
   items: CartItem[];
-  addProduct: (product: CatalogProduct, quantity?: number) => void;
+  addProduct: (
+    product: CatalogProduct,
+    quantity?: number,
+    options?: AddProductOptions,
+  ) => void;
   addCustomPrintItem: (input: {
     product: CatalogProduct;
     quantity: number;
@@ -41,9 +52,12 @@ export const useCartStore = create<CartState>()(
     immer((set) => ({
       items: [],
 
-      addProduct: (product, quantity = 1) =>
+      addProduct: (product, quantity = 1, options) =>
         set((state) => {
-          const cartItemId = `standard:${product.id}`;
+          if (quantity <= 0 || product.stockSnapshot <= 0) return;
+
+          const sizeKey = options?.selectedSize || options?.attributes?.size || "default";
+          const cartItemId = `standard:${product.id}:${sizeKey}`;
           const existing = state.items.find(
             (item) =>
               item.cartItemId === cartItemId &&
@@ -52,6 +66,11 @@ export const useCartStore = create<CartState>()(
 
           if (existing) {
             existing.quantity += quantity;
+            if (options?.selectedSize) existing.selectedSize = options.selectedSize;
+            if (options?.selectedMaterial) existing.selectedMaterial = options.selectedMaterial;
+            if (options?.selectedStyle) existing.selectedStyle = options.selectedStyle;
+            if (options?.attributes) existing.attributes = { ...existing.attributes, ...options.attributes };
+
             if (isLoggedIn()) {
               const sku = product.productRefId || product.id;
               updateCartItem(sku, existing.quantity).catch(console.error);
@@ -70,6 +89,10 @@ export const useCartStore = create<CartState>()(
             unit: product.unit,
             imageUrl: product.imageUrl,
             fulfillmentType: product.fulfillmentType ?? "STANDARD",
+            selectedSize: options?.selectedSize,
+            selectedMaterial: options?.selectedMaterial,
+            selectedStyle: options?.selectedStyle,
+            attributes: options?.attributes,
           });
 
           if (isLoggedIn()) {
@@ -94,6 +117,9 @@ export const useCartStore = create<CartState>()(
             fulfillmentType: "CUSTOM_PRINT",
             designId,
             designFile,
+            selectedSize: designFile.artwork?.cup?.size,
+            selectedMaterial: designFile.artwork?.cup?.materialType,
+            selectedStyle: designFile.artwork?.cup?.style,
           });
 
           if (isLoggedIn()) {

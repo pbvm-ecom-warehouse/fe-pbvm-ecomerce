@@ -3,7 +3,7 @@
 import { Suspense } from "react";
 import { PaymentCancelContent } from "@/features/payment/components/payment-cancel-content";
 
-export default function PaymentCancelPage() {
+export default function PaymentReturnCancelPage() {
   return (
     <Suspense
       fallback={

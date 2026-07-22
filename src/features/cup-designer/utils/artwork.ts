@@ -6,6 +6,13 @@ import type {
   DesignFileSnapshot,
 } from "@/types/api";
 
+export const CUP_SIZE_LABELS: Record<CupSize, string> = {
+  "350ml": "350ml",
+  "500ml": "500ml",
+  "700ml": "700ml",
+  "1000ml": "1000ml",
+};
+
 export const CUP_SIZE_SPECS: Record<
   CupSize,
   {
@@ -15,28 +22,28 @@ export const CUP_SIZE_SPECS: Record<
     price: number;
   }
 > = {
-  S: {
-    label: "S",
+  "350ml": {
+    label: "350ml",
     circumferenceWidth: 600,
-    printableHeight: 336,
+    printableHeight: 340,
     price: 1_200,
   },
-  M: {
-    label: "M",
-    circumferenceWidth: 690,
-    printableHeight: 386,
+  "500ml": {
+    label: "500ml",
+    circumferenceWidth: 680,
+    printableHeight: 380,
     price: 1_500,
   },
-  L: {
-    label: "L",
-    circumferenceWidth: 780,
-    printableHeight: 437,
+  "700ml": {
+    label: "700ml",
+    circumferenceWidth: 740,
+    printableHeight: 420,
     price: 1_800,
   },
-  XL: {
-    label: "XL",
-    circumferenceWidth: 860,
-    printableHeight: 482,
+  "1000ml": {
+    label: "1000ml",
+    circumferenceWidth: 800,
+    printableHeight: 460,
     price: 2_200,
   },
 };
@@ -57,7 +64,7 @@ export const CUP_MATERIAL_LABELS: Record<CupMaterialType, string> = {
 };
 
 export const DEFAULT_CUP_CONFIG = {
-  size: "M" as CupSize,
+  size: "500ml" as CupSize,
   style: "straight" as CupStyle,
   materialType: "frosted" as CupMaterialType,
   cupColor: "#F8F4EC",
@@ -69,7 +76,7 @@ export function getArtboardDimensions(
   printHeightPercent: number,
 ) {
   const spec = CUP_SIZE_SPECS[size];
-  const height = spec.printableHeight + 96;
+  const height = spec.printableHeight + 70;
   const printHeight = Math.round(
     spec.printableHeight * (printHeightPercent / 100),
   );
@@ -79,9 +86,9 @@ export function getArtboardDimensions(
     height,
     printHeight,
     printArea: {
-      x: 40,
+      x: 32,
       y: Math.round((height - printHeight) / 2),
-      width: spec.circumferenceWidth - 80,
+      width: spec.circumferenceWidth - 64,
       height: printHeight,
     },
   };
@@ -130,7 +137,7 @@ export function createCustomCupProduct({
     id: `custom-cup-${size.toLowerCase()}`,
     productRefId: "CUP_PRINTED",
     slug: "ly-in-theo-thiet-ke",
-    name: `Ly in theo thiết kế size ${size}`,
+    name: `Ly in theo thiết kế dung tích ${size}`,
     category: "printed_cup" as const,
     price,
     b2bPrice: price,

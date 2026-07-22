@@ -17,7 +17,8 @@ import {
   AlertTriangle,
   Clock,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  QrCode
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getOrder, cancelOrder } from "@/features/order/services/order.service";
 import { useCartStore } from "@/stores/cart-store";
+import { CupConfigDetails } from "@/features/cart/components/cup-config-details";
 import { formatCurrency } from "@/utils/format-currency";
 import { formatDateTime } from "@/utils/format-date";
 import { apiClient } from "@/lib/api-client";
@@ -414,18 +416,13 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
                   <div className="space-y-1 min-w-0">
                     <p className="font-extrabold text-sm text-[#253D4E] truncate">{item.name || item.sku}</p>
                     <p className="text-[10px] text-muted-foreground font-bold">SKU: {item.sku}</p>
+                    <CupConfigDetails item={item} />
                     {item.isPrintItem && item.designId && (
                       <div className="mt-1.5 rounded-lg bg-white border border-slate-100 p-2.5 text-[10px] font-semibold text-slate-500 max-w-sm shadow-2xs">
                         <p className="text-primary font-black uppercase text-[9px] mb-1 flex items-center gap-1">
                           <Printer className="size-3" /> Bản in Custom:
                         </p>
                         <p>• Mã thiết kế: <span className="font-mono text-slate-700">{item.designId}</span></p>
-                        {item.designFile?.artwork?.cup && (
-                          <>
-                            <p>• Cup size: <span className="text-slate-700">{item.designFile.artwork.cup.size}</span> | Chất liệu: <span className="text-slate-700">{item.designFile.artwork.cup.materialType}</span></p>
-                            <p>• Chiều cao in: <span className="text-slate-700">{item.designFile.artwork.artboard.printHeightPercent}%</span></p>
-                          </>
-                        )}
                       </div>
                     )}
                   </div>
@@ -482,10 +479,10 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
                     <Button
                       onClick={handleRepay}
                       disabled={isRepaying}
-                      className="bg-primary hover:bg-[#2F9A68] text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-xs text-xs cursor-pointer select-none"
+                      className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md text-xs cursor-pointer select-none"
                     >
-                      <ExternalLink className="size-4" />
-                      {isRepaying ? "Đang tạo URL..." : "Thanh toán ngay (PayOS)"}
+                      <QrCode className="size-4" />
+                      {isRepaying ? "Đang tạo mã QR..." : "Thanh toán ngay (Mã QR PayOS)"}
                     </Button>
                   )}
 

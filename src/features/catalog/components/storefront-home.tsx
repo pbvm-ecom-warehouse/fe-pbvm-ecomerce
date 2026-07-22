@@ -76,7 +76,7 @@ export function StorefrontHome({
                 className="h-12 rounded-xl bg-[#D7C4B7] px-5 text-sm font-bold text-[#1C1816] hover:bg-white"
               >
                 <Link href="/products">
-                  Xem catalog sỉ
+                  Xem catalog sản phẩm
                   <ArrowRight data-icon="inline-end" />
                 </Link>
               </Button>
@@ -98,7 +98,7 @@ export function StorefrontHome({
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <BadgePercent className="size-4 text-[#D7C4B7]" />
-                Giá B2B theo sản phẩm
+                Giá ưu đãi theo sản phẩm
               </span>
             </div>
           </div>
@@ -128,7 +128,7 @@ export function StorefrontHome({
       <section className="mx-auto w-full max-w-7xl px-4 py-10 lg:px-8">
         <div className="mb-5">
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-primary">
-            Danh mục B2B
+            Danh mục nổi bật
           </p>
           <h2 className="mt-2 text-3xl font-black tracking-normal">
             Sản phẩm tuyển chọn

@@ -312,7 +312,7 @@ export default function AccountPage() {
           </div>
           <CardTitle className="text-xl font-bold text-[#253D4E] mb-2">Chưa đăng nhập tài khoản</CardTitle>
           <CardDescription className="text-sm font-medium text-slate-500 mb-6 max-w-md mx-auto">
-            Vui lòng đăng nhập hoặc tạo tài khoản mới để truy cập và quản lý thông tin khách hàng sỉ B2B.
+            Vui lòng đăng nhập hoặc tạo tài khoản mới để truy cập và quản lý thông tin tài khoản.
           </CardDescription>
           <div className="flex justify-center gap-3">
             <Button asChild className="bg-[#3BB77E] hover:bg-[#34a370] rounded-xl px-5 font-bold text-xs h-10 shadow-sm cursor-pointer">
@@ -341,7 +341,7 @@ export default function AccountPage() {
             </div>
             <div>
               <CardTitle className="text-base font-bold text-[#253D4E] uppercase tracking-wider">
-                Quản lý tài khoản sỉ B2B
+                Quản lý tài khoản
               </CardTitle>
               <CardDescription className="text-xs font-semibold text-slate-500">
                 Cập nhật ảnh đại diện, thông tin cá nhân, sổ địa chỉ nhận hàng và bảo mật tài khoản.
@@ -456,15 +456,6 @@ export default function AccountPage() {
 
                   <div className="space-y-1">
                     <span className="text-[10px] font-bold text-[#78858F] uppercase tracking-wider block">
-                      Cơ chế giá áp dụng
-                    </span>
-                    <span className="font-extrabold text-[#3BB77E] bg-[#DEF9EC] px-2 py-0.5 rounded-full text-[10px] inline-block mt-0.5">
-                      {user.customerType === "B2B" ? "Sỉ B2B" : "Lẻ B2C"}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1">
-                    <span className="text-[10px] font-bold text-[#78858F] uppercase tracking-wider block">
                       Mã chi nhánh
                     </span>
                     <span className="text-sm font-bold text-[#253D4E] block mt-0.5">{user.tenantId}</span>
@@ -486,7 +477,7 @@ export default function AccountPage() {
                       />
                     </div>
 
-                    <div className="space-y-1.5 col-span-1">
+                    <div className="space-y-1.5 sm:col-span-2">
                       <Label htmlFor="displayPhone" className="text-xs font-bold text-[#78858F] tracking-wide">
                         Số điện thoại
                       </Label>
@@ -497,36 +488,6 @@ export default function AccountPage() {
                         placeholder="0900000000"
                         className="h-10 w-full rounded-xl border border-slate-200 bg-white px-4 text-xs text-[#253D4E] focus:ring-4 focus:ring-emerald-500/10 focus:border-[#3BB77E] focus:outline-none"
                       />
-                    </div>
-
-                    <div className="space-y-1.5 col-span-1">
-                      <Label className="text-xs font-bold text-[#78858F] tracking-wide block mb-1">
-                        Phân loại khách hàng
-                      </Label>
-                      <div className="grid grid-cols-2 gap-2 h-10 bg-slate-50 border border-slate-100 rounded-xl p-1">
-                        <button
-                          type="button"
-                          onClick={() => setCustomerType("B2B")}
-                          className={`text-xs font-bold rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer ${customerType === "B2B"
-                            ? "bg-white text-primary shadow-xs"
-                            : "text-slate-500 hover:text-slate-700"
-                            }`}
-                        >
-                          {customerType === "B2B" && <Check size={12} />}
-                          Mua sỉ (B2B)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCustomerType("B2C")}
-                          className={`text-xs font-bold rounded-lg flex items-center justify-center gap-1 transition-all cursor-pointer ${customerType === "B2C"
-                            ? "bg-white text-primary shadow-xs"
-                            : "text-slate-500 hover:text-slate-700"
-                            }`}
-                        >
-                          {customerType === "B2C" && <Check size={12} />}
-                          Mua lẻ (B2C)
-                        </button>
-                      </div>
                     </div>
                   </div>
 

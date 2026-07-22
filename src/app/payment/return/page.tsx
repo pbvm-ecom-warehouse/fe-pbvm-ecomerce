@@ -22,6 +22,7 @@ import { getOrder, listOrders } from "@/features/order/services/order.service";
 import { useCartStore } from "@/stores/cart-store";
 import { formatCurrency } from "@/utils/format-currency";
 import { formatDateTime } from "@/utils/format-date";
+import { PaymentCancelContent } from "@/features/payment/components/payment-cancel-content";
 
 function PaymentReturnContent() {
   const searchParams = useSearchParams();
@@ -38,17 +39,24 @@ function PaymentReturnContent() {
   const [order, setOrder] = useState<any>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
 
+  // Determine if payment is cancelled or failed
+  const isCancelled = cancel === "true" || status === "CANCELLED" || code === "CANCELLED";
+
+  if (isCancelled) {
+    return <PaymentCancelContent />;
+  }
+
   // Determine if payment is successful
   // PayOS uses code === "00" or status === "PAID" for successful transactions
   const isSuccess =
-    code === "00" ||
-    status === "PAID" ||
-    (code === null && status === null && cancel !== "true");
+    !isCancelled &&
+    (code === "00" || status === "PAID" || (code === null && status === null));
 
   useEffect(() => {
     if (isSuccess) {
       if (typeof window !== "undefined") {
         sessionStorage.removeItem("lastCreatedOrderId");
+        sessionStorage.removeItem("pendingCartBackup");
       }
       clearSelectedItems();
     }

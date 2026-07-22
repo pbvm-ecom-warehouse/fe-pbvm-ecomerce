@@ -109,12 +109,40 @@ export function ArtworkEditor2D({
   const [aiPrompt, setAiPrompt] = useState("Tea House Classic");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const contentLayerRef = useRef<Konva.Layer | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const images = useLoadedImages(layers);
   const dimensions = getArtboardDimensions(size, printHeightPercent);
   const imageLayerCount = getImageLayerCount(layers);
+
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+
+  useEffect(() => {
+    function updateWidth() {
+      if (containerRef.current) {
+        const w = containerRef.current.clientWidth - 20;
+        if (w > 0) setContainerWidth(w);
+      }
+    }
+    updateWidth();
+    window.addEventListener("resize", updateWidth);
+    return () => window.removeEventListener("resize", updateWidth);
+  }, []);
+
+  const effectiveWidth = useMemo(() => {
+    return Math.max(dimensions.width, containerWidth);
+  }, [dimensions.width, containerWidth]);
+
+  const effectivePrintArea = useMemo(() => {
+    return {
+      x: 32,
+      y: dimensions.printArea.y,
+      width: effectiveWidth - 64,
+      height: dimensions.printArea.height,
+    };
+  }, [effectiveWidth, dimensions.printArea.y, dimensions.printArea.height]);
 
   // Sync transformer to selected layer
   useEffect(() => {
@@ -132,16 +160,16 @@ export function ArtworkEditor2D({
       const layer = contentLayerRef.current;
       if (!layer) return;
       const dataUrl = layer.toDataURL({
-        x: dimensions.printArea.x,
-        y: dimensions.printArea.y,
-        width: dimensions.printArea.width,
-        height: dimensions.printArea.height,
+        x: effectivePrintArea.x,
+        y: effectivePrintArea.y,
+        width: effectivePrintArea.width,
+        height: effectivePrintArea.height,
         pixelRatio: 1,
       });
       onTextureChange(dataUrl);
     }, 300);
     return () => window.clearTimeout(id);
-  }, [dimensions.printArea, layers, activeStroke, onTextureChange]);
+  }, [effectivePrintArea, layers, activeStroke, onTextureChange]);
 
   /* ── Helpers ── */
   function getPointer() {
@@ -271,189 +299,177 @@ export function ArtworkEditor2D({
   /* ─── Render ─── */
   return (
     <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+      {/* ── UNIFIED FULL-WIDTH STRETCHED TOOLBAR ── */}
+      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-border bg-white px-3 py-2 text-xs w-full">
+        {/* LEFT GROUP: Title, Mode Toggles & Brush Controls */}
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-black uppercase tracking-wide text-[#253D4E]">2D Print Artboard</span>
+            <span className="text-[9px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
+              {effectiveWidth}×{effectivePrintArea.height}px
+            </span>
+          </div>
 
-      {/* ── Primary toolbar ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-white px-4 py-2.5">
-        <div>
-          <h2 className="text-[11px] font-black uppercase tracking-wide text-[#253D4E]">2D Print Artboard</h2>
-          <p className="text-[10px] text-muted-foreground font-medium">
-            {dimensions.width} × {dimensions.printArea.height}px content area
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Mode toggles */}
-          <button
-            type="button"
-            className={cn(
-              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-bold transition-all",
-              tool === "select"
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
-            )}
-            onClick={() => setTool("select")}
-          >
-            <MousePointer2 className="size-3.5" /> Chọn
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-bold transition-all",
-              tool === "brush"
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-muted/40 text-[#253D4E] hover:bg-muted",
-            )}
-            onClick={() => setTool("brush")}
-          >
-            <Paintbrush className="size-3.5" /> Vẽ tay
-          </button>
+          <div className="h-4 w-px bg-border mx-0.5 hidden sm:block" />
 
-          <div className="h-5 w-px bg-border mx-1" />
-
-          {/* Import image */}
-          <button
-            type="button"
-            disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
-            className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-xs font-bold text-[#253D4E] hover:bg-muted transition disabled:opacity-40"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <ImagePlus className="size-3.5" />
-            Hình ({imageLayerCount}/{MAX_IMAGE_LAYERS})
-          </button>
-
-          {/* Export PNG */}
-          <button
-            type="button"
-            className="flex h-8 items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2.5 text-xs font-bold text-[#253D4E] hover:bg-muted transition"
-            onClick={exportPng}
-          >
-            <Download className="size-3.5" /> Export PNG
-          </button>
-        </div>
-      </div>
-
-      {/* ── Contextual secondary toolbar ── */}
-      <div className="flex flex-wrap items-end gap-4 border-b border-border bg-muted/20 px-4 py-2.5">
-        {/* Brush controls (always visible, slightly dimmed when not in brush mode) */}
-        <div className={cn("flex items-center gap-2 transition-opacity", tool !== "brush" && "opacity-50")}>
-          <Paintbrush className="size-3.5 text-primary shrink-0" />
-          <Label className="text-[10px] font-bold text-muted-foreground shrink-0">Vẽ tay</Label>
-          <input
-            type="color"
-            aria-label="Màu nét vẽ"
-            value={brushColor}
-            onChange={(e) => setBrushColor(e.target.value)}
-            className="h-6 w-9 cursor-pointer rounded border border-border bg-white p-0.5"
-          />
+          {/* Mode Toggles */}
           <div className="flex items-center gap-1">
-            {BRUSH_SIZES.map((bs) => (
-              <button
-                key={bs}
-                type="button"
-                aria-label={`Brush size ${bs}`}
-                className={cn(
-                  "h-7 w-8 rounded border text-[10px] font-black transition-all",
-                  brushSize === bs
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-white text-[#253D4E] hover:bg-muted",
-                )}
-                onClick={() => setBrushSize(bs)}
-              >
-                {bs}
-              </button>
-            ))}
+            <button
+              type="button"
+              className={cn(
+                "flex h-7 items-center gap-1 rounded-md border px-2.5 text-[10.5px] font-bold transition-all cursor-pointer",
+                tool === "select"
+                  ? "border-primary bg-primary text-primary-foreground shadow-2xs"
+                  : "border-border bg-muted/30 text-[#253D4E] hover:bg-muted",
+              )}
+              onClick={() => setTool("select")}
+            >
+              <MousePointer2 className="size-3" /> Chọn
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "flex h-7 items-center gap-1 rounded-md border px-2.5 text-[10.5px] font-bold transition-all cursor-pointer",
+                tool === "brush"
+                  ? "border-primary bg-primary text-primary-foreground shadow-2xs"
+                  : "border-border bg-muted/30 text-[#253D4E] hover:bg-muted",
+              )}
+              onClick={() => setTool("brush")}
+            >
+              <Paintbrush className="size-3" /> Vẽ tay
+            </button>
+            <button
+              type="button"
+              disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
+              className="flex h-7 items-center gap-1 rounded-md border border-border bg-muted/30 px-2.5 text-[10.5px] font-bold text-[#253D4E] hover:bg-muted transition disabled:opacity-40 cursor-pointer"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <ImagePlus className="size-3" />
+              Hình ({imageLayerCount}/{MAX_IMAGE_LAYERS})
+            </button>
+          </div>
+
+          <div className="h-4 w-px bg-border mx-0.5 hidden md:block" />
+
+          {/* Brush Color & Size */}
+          <div className={cn("flex items-center gap-1.5 transition-opacity", tool !== "brush" && "opacity-50")}>
+            <input
+              type="color"
+              aria-label="Màu nét vẽ"
+              value={brushColor}
+              onChange={(e) => setBrushColor(e.target.value)}
+              className="h-7 w-7 cursor-pointer rounded-md border border-border bg-white p-0.5"
+            />
+            <div className="flex items-center gap-1">
+              {BRUSH_SIZES.map((bs) => (
+                <button
+                  key={bs}
+                  type="button"
+                  aria-label={`Brush size ${bs}`}
+                  className={cn(
+                    "h-7 w-7 rounded-md border text-[10px] font-black transition-all cursor-pointer",
+                    brushSize === bs
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-white text-[#253D4E] hover:bg-muted",
+                  )}
+                  onClick={() => setBrushSize(bs)}
+                >
+                  {bs}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
-        <div className="h-5 w-px bg-border hidden sm:block" />
-
-        {/* Text tool */}
-        <div className="flex items-center gap-2">
-          <Type className="size-3.5 text-primary shrink-0" />
-          <Label htmlFor="editor-text" className="text-[10px] font-bold text-muted-foreground shrink-0">
-            Text
-          </Label>
-          <div className="flex gap-1">
+        {/* MIDDLE-RIGHT GROUP: STRETCHED INPUTS & ACTIONS (FILLS REMAINING SPACE) */}
+        <div className="flex items-center gap-2 flex-1 min-w-[300px] justify-end">
+          {/* Text Input (flex-1 to stretch) */}
+          <div className="flex items-center gap-1 flex-1 min-w-[120px] max-w-[220px]">
             <Input
               id="editor-text"
               value={textValue}
               onChange={(e) => setTextValue(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addTextLayer()}
-              className="h-7 w-32 rounded-md bg-white text-[10px]"
+              placeholder="Nhập chữ..."
+              className="h-7 rounded-md bg-white text-[11px] px-2.5 flex-1"
             />
             <Button
               type="button"
               aria-label="Thêm text layer"
               size="icon"
               variant="outline"
-              className="h-7 w-7 rounded-md"
+              className="h-7 w-7 rounded-md shrink-0 cursor-pointer"
               onClick={addTextLayer}
             >
               <Type className="size-3.5" />
             </Button>
           </div>
-        </div>
 
-        <div className="h-5 w-px bg-border hidden sm:block" />
-
-        {/* AI Generate */}
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-3.5 text-primary shrink-0" />
-          <Label htmlFor="editor-ai" className="text-[10px] font-bold text-muted-foreground shrink-0">
-            AI
-          </Label>
-          <div className="flex gap-1">
+          {/* AI Input (flex-1 to stretch) */}
+          <div className="flex items-center gap-1 flex-1 min-w-[140px] max-w-[240px]">
             <Input
               id="editor-ai"
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleGenerateArtwork()}
               disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
-              className="h-7 w-36 rounded-md bg-white text-[10px]"
+              placeholder="Prompt AI..."
+              className="h-7 rounded-md bg-white text-[11px] px-2.5 flex-1"
             />
             <Button
               type="button"
               aria-label="Generate hình AI"
               size="icon"
               variant="outline"
-              className="h-7 w-7 rounded-md"
+              className="h-7 w-7 rounded-md shrink-0 cursor-pointer"
               disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
               onClick={handleGenerateArtwork}
             >
               <Sparkles className="size-3.5" />
             </Button>
           </div>
-        </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
+          <div className="h-4 w-px bg-border mx-0.5 shrink-0" />
 
-        {/* Actions */}
-        <div className="flex items-center gap-1.5">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-7 gap-1 rounded-md px-2.5 text-[10px] font-bold"
-            onClick={undoLastStroke}
-          >
-            <RotateCcw className="size-3" /> Undo
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-7 gap-1 rounded-md px-2.5 text-[10px] font-bold text-rose-600 border-rose-200 hover:bg-rose-50"
-            disabled={!selectedLayerId}
-            onClick={deleteSelectedLayer}
-          >
-            <Trash2 className="size-3" /> Xóa layer
-          </Button>
+          {/* Actions */}
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 rounded-md px-2.5 text-[10.5px] font-bold cursor-pointer"
+              onClick={undoLastStroke}
+            >
+              <RotateCcw className="size-3" /> Undo
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 rounded-md px-2.5 text-[10.5px] font-bold text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer"
+              disabled={!selectedLayerId}
+              onClick={deleteSelectedLayer}
+            >
+              <Trash2 className="size-3" /> Xóa
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1 rounded-md border-slate-200 bg-slate-50 px-2.5 text-[10.5px] font-bold text-[#253D4E] hover:bg-slate-100 cursor-pointer"
+              onClick={exportPng}
+            >
+              <Download className="size-3" /> Export PNG
+            </Button>
+          </div>
         </div>
       </div>
 
       {/* ── Canvas ── */}
-      <div className="overflow-auto bg-[linear-gradient(#e5e5e5_1px,transparent_1px),linear-gradient(90deg,#e5e5e5_1px,transparent_1px)] bg-[size:20px_20px] p-4">
+      <div ref={containerRef} className="overflow-hidden bg-[linear-gradient(#e5e5e5_1px,transparent_1px),linear-gradient(90deg,#e5e5e5_1px,transparent_1px)] bg-[size:20px_20px] p-2.5">
         <Stage
           ref={stageRef}
-          width={dimensions.width}
+          width={effectiveWidth}
           height={dimensions.height}
           className="mx-auto rounded-xl bg-white shadow-md"
           onMouseDown={handleStagePointerDown}
@@ -466,20 +482,20 @@ export function ArtworkEditor2D({
           {/* Background layer: cup silhouette + print area dashes */}
           <Layer>
             <Rect
-              x={24}
-              y={24}
-              width={dimensions.width - 48}
-              height={dimensions.height - 48}
-              cornerRadius={28}
+              x={20}
+              y={20}
+              width={effectiveWidth - 40}
+              height={dimensions.height - 40}
+              cornerRadius={24}
               fill={cupColor}
               stroke="#D7C4B7"
               strokeWidth={1}
             />
             <Rect
-              x={dimensions.printArea.x}
-              y={dimensions.printArea.y}
-              width={dimensions.printArea.width}
-              height={dimensions.printArea.height}
+              x={effectivePrintArea.x}
+              y={effectivePrintArea.y}
+              width={effectivePrintArea.width}
+              height={effectivePrintArea.height}
               cornerRadius={14}
               fill="rgba(255,255,255,0.55)"
               stroke="#253D4E"
@@ -487,8 +503,8 @@ export function ArtworkEditor2D({
               dash={[8, 7]}
             />
             <Text
-              x={dimensions.printArea.x + 16}
-              y={dimensions.printArea.y + 16}
+              x={effectivePrintArea.x + 16}
+              y={effectivePrintArea.y + 16}
               text="PRINT AREA"
               fill="#253D4E"
               fontSize={13}

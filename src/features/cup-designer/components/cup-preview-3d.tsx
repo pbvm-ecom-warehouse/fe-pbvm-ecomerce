@@ -10,7 +10,19 @@ import {
 } from "@react-three/drei";
 import type { Group } from "three";
 
+import { cn } from "@/lib/utils";
 import type { CupMaterialType, CupSize, CupStyle } from "@/types/api";
+
+// Silence non-critical Three.js Clock deprecation warning emitted by @react-three/fiber internal loop
+if (typeof window !== "undefined") {
+  const origWarn = console.warn;
+  console.warn = (...args: any[]) => {
+    if (args[0] && typeof args[0] === "string" && args[0].includes("THREE.Clock")) {
+      return;
+    }
+    origWarn(...args);
+  };
+}
 
 type CupPreview3DProps = {
   size: CupSize;
@@ -19,16 +31,17 @@ type CupPreview3DProps = {
   cupColor: string;
   artworkTextureUrl: string;
   printHeightPercent: number;
+  heightClassName?: string;
 };
 
 const CUP_GEOMETRY: Record<
   CupSize,
   { height: number; topRadius: number; bottomRadius: number }
 > = {
-  S: { height: 2.7, topRadius: 0.86, bottomRadius: 0.55 },
-  M: { height: 3.05, topRadius: 0.98, bottomRadius: 0.62 },
-  L: { height: 3.38, topRadius: 1.1, bottomRadius: 0.69 },
-  XL: { height: 3.72, topRadius: 1.2, bottomRadius: 0.76 },
+  "350ml": { height: 2.7, topRadius: 0.86, bottomRadius: 0.55 },
+  "500ml": { height: 3.05, topRadius: 0.98, bottomRadius: 0.62 },
+  "700ml": { height: 3.38, topRadius: 1.1, bottomRadius: 0.69 },
+  "1000ml": { height: 3.72, topRadius: 1.2, bottomRadius: 0.76 },
 };
 
 function getRadiusAtY({
@@ -235,7 +248,7 @@ export function CupPreview3D(props: CupPreview3DProps) {
   }
 
   return (
-    <section className="relative h-[520px] overflow-hidden rounded-lg border border-border bg-[radial-gradient(circle_at_50%_25%,#FFFFFF_0%,#E8F4EE_50%,#B8DCCB_100%)]">
+    <section className={cn("relative overflow-hidden rounded-lg border border-border bg-[radial-gradient(circle_at_50%_25%,#FFFFFF_0%,#E8F4EE_50%,#B8DCCB_100%)]", props.heightClassName ?? "h-[520px]")}>
       <Canvas
         camera={{ position: [0, 0.55, 5.8], fov: 38 }}
         dpr={[1, 2]}

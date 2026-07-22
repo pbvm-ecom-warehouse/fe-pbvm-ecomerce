@@ -74,6 +74,14 @@ export function ProductCard({
   const { rating, reviews } = getProductRating(product.id);
   const hasReviews = reviews > 0;
 
+  const isCupProduct =
+    product.category === "plain_cup" ||
+    product.category === "printed_cup" ||
+    product.category === "custom_print" ||
+    product.slug.includes("ly-") ||
+    product.name.toLowerCase().includes("ly nhựa") ||
+    product.name.toLowerCase().includes("ly giấy");
+
   return (
     <article className="group relative flex h-full flex-col overflow-hidden rounded-[20px] border border-[#E2EDE8] dark:border-[#2C332F] bg-white dark:bg-[#1C1F1D] shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-[#BCE3C9] dark:hover:border-primary/50">
       {/* Absolute Badges */}
@@ -131,7 +139,7 @@ export function ProductCard({
         <div className="flex items-center justify-between mt-2.5 pt-0.5">
           <div className="flex flex-col">
             <span className="text-base font-extrabold text-[#3BB77E] dark:text-[#3BB77E]">
-              {formatCurrency(product.b2bPrice)}
+              {formatCurrency(product.b2bPrice || product.price)}
             </span>
             {product.price > product.b2bPrice && (
               <span className="text-xs text-muted-foreground line-through leading-none mt-0.5">
