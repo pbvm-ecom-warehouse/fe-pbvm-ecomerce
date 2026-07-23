@@ -15,6 +15,9 @@ export const env = createEnv({
     NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: z.string().optional(),
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: z.string().optional(),
     NEXT_PUBLIC_FIREBASE_APP_ID: z.string().optional(),
+    NEXT_PUBLIC_AI_API_KEY: z.string().optional(),
+    NEXT_PUBLIC_BANANA_API_KEY: z.string().optional(),
+    NEXT_PUBLIC_GEMINI_API_KEY: z.string().optional(),
   },
   runtimeEnv: {
     NEXT_PUBLIC_ECOMMERCE_API_URL: process.env.NEXT_PUBLIC_ECOMMERCE_API_URL,
@@ -25,5 +28,8 @@ export const env = createEnv({
     NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
     NEXT_PUBLIC_FIREBASE_APP_ID: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+    NEXT_PUBLIC_AI_API_KEY: process.env.NEXT_PUBLIC_AI_API_KEY,
+    NEXT_PUBLIC_BANANA_API_KEY: process.env.NEXT_PUBLIC_BANANA_API_KEY,
+    NEXT_PUBLIC_GEMINI_API_KEY: process.env.NEXT_PUBLIC_GEMINI_API_KEY,
   },
 });

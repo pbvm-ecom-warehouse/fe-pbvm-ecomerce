@@ -1,23 +1,31 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   ContactShadows,
   Environment,
   OrbitControls,
   useTexture,
 } from "@react-three/drei";
+
+
 import type { Group } from "three";
 
 import { cn } from "@/lib/utils";
 import type { CupMaterialType, CupSize, CupStyle } from "@/types/api";
 
-// Silence non-critical Three.js Clock deprecation warning emitted by @react-three/fiber internal loop
+// Silence non-critical Three.js Clock deprecation & WebGL shader compilation info warnings
 if (typeof window !== "undefined") {
   const origWarn = console.warn;
   console.warn = (...args: any[]) => {
-    if (args[0] && typeof args[0] === "string" && args[0].includes("THREE.Clock")) {
+    const msg = String(args[0] || "");
+    if (
+      msg.includes("THREE.Clock") ||
+      msg.includes("THREE.WebGLProgram") ||
+      msg.includes("warning X4122") ||
+      msg.includes("Program Info Log")
+    ) {
       return;
     }
     origWarn(...args);
@@ -248,9 +256,9 @@ export function CupPreview3D(props: CupPreview3DProps) {
   }
 
   return (
-    <section className={cn("relative overflow-hidden rounded-lg border border-border bg-[radial-gradient(circle_at_50%_25%,#FFFFFF_0%,#E8F4EE_50%,#B8DCCB_100%)]", props.heightClassName ?? "h-[520px]")}>
+    <section className={cn("relative overflow-hidden rounded-xl border border-slate-200/80 bg-[radial-gradient(circle_at_50%_25%,#FFFFFF_0%,#E8F4EE_50%,#B8DCCB_100%)] shadow-xs", props.heightClassName ?? "h-[440px] sm:h-[480px] w-full")}>
       <Canvas
-        camera={{ position: [0, 0.55, 5.8], fov: 38 }}
+        camera={{ position: [0, 0, 8.6], fov: 35 }}
         dpr={[1, 2]}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
       >
@@ -268,9 +276,11 @@ export function CupPreview3D(props: CupPreview3DProps) {
             far={4}
           />
           <OrbitControls
+            makeDefault
+            target={[0, 0, 0]}
             enablePan={false}
-            minDistance={4.6}
-            maxDistance={7}
+            minDistance={5.5}
+            maxDistance={12.0}
             minPolarAngle={Math.PI / 3.1}
             maxPolarAngle={Math.PI / 1.72}
           />

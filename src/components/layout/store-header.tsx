@@ -36,6 +36,13 @@ export function StoreHeader() {
   const items = useCartStore((state) => state.items);
   const itemCount = items.length;
   const user = useAuthStore((state) => state.user);
+  const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
+
+  useEffect(() => {
+    if (user && user.type !== "admin") {
+      fetchAndSyncCart();
+    }
+  }, [user, fetchAndSyncCart]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);

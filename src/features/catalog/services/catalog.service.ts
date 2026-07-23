@@ -472,7 +472,10 @@ export async function fetchAllCupVariantsFromApi(): Promise<
     availableQty: number;
     inStock: boolean;
     price?: number;
+    productId?: string;
+    sku?: string;
   }>
+
 > {
   try {
     // ── Lấy danh sách sản phẩm từ DB (kể cả hết hàng nếu BE trả về) ──
@@ -540,26 +543,29 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       }),
     );
 
-    // ── Parse helpers chuẩn hóa từ thuộc tính DB ──
-    function parseMaterial(text: string): "clear" | "frosted" | "paper" | "glass" {
-      if (text.includes("pet") || text.includes("nhựa trong") || text.includes("trong")) return "clear";
-      if (text.includes("pp") || text.includes("nhựa mờ") || text.includes("mờ")) return "frosted";
-      if (text.includes("giấy") || text.includes("kraft") || text.includes("paper")) return "paper";
-      if (text.includes("thủy tinh") || text.includes("glass")) return "glass";
-      return "frosted";
+    // ── Parse helpers chuẩn hóa từ thuộc tính DB và mã SKU Kho ──
+    function parseMaterial(text: string, sku: string = ""): "clear" | "frosted" | "paper" | "glass" {
+      const full = (text + " " + sku).toLowerCase();
+      if (full.includes("pet") || full.includes("nhựa trong") || full.includes("trong")) return "clear";
+      if (full.includes("pp") || full.includes("nhựa mờ") || full.includes("mờ")) return "frosted";
+      if (full.includes("giấy") || full.includes("kraft") || full.includes("paper")) return "paper";
+      if (full.includes("thủy tinh") || full.includes("glass")) return "glass";
+      return "clear";
     }
 
-    function parseStyle(text: string): "straight" | "u_shape" | "heart" | "mug" {
-      if (text.includes("bầu") || text.includes("u-shape") || text.includes("đáy u") || text.includes("u_shape")) return "u_shape";
-      if (text.includes("tim") || text.includes("heart")) return "heart";
-      if (text.includes("mug") || text.includes("quai")) return "mug";
+    function parseStyle(text: string, sku: string = ""): "straight" | "u_shape" | "heart" | "mug" {
+      const full = (text + " " + sku).toLowerCase();
+      if (full.includes("-u") || full.includes("bầu") || full.includes("u-shape") || full.includes("đáy u") || full.includes("u_shape")) return "u_shape";
+      if (full.includes("heart") || full.includes("tim")) return "heart";
+      if (full.includes("mug") || full.includes("quai")) return "mug";
       return "straight";
     }
 
-    function parseSize(text: string): "350ml" | "500ml" | "700ml" | "1000ml" {
-      if (text.includes("1000") || text.includes("1l")) return "1000ml";
-      if (text.includes("700") || text.includes("750") || text.includes("l ") || text.includes("large")) return "700ml";
-      if (text.includes("350") || text.includes("s ") || text.includes("small")) return "350ml";
+    function parseSize(text: string, sku: string = ""): "350ml" | "500ml" | "700ml" | "1000ml" {
+      const full = (text + " " + sku).toLowerCase();
+      if (full.includes("1000") || full.includes("1l")) return "1000ml";
+      if (full.includes("700") || full.includes("750") || full.includes("l ") || full.includes("large")) return "700ml";
+      if (full.includes("350") || full.includes("s ") || full.includes("small")) return "350ml";
       return "500ml";
     }
 
@@ -587,20 +593,36 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         const availableQty = v.availableQty ?? v.stockSnapshot ?? p.stockSnapshot ?? 0;
         const inStock = availableQty > 0;
 
-        const attr = v.attributes ?? {};
-        const attrMaterial = (attr.material ?? attr["chất liệu"] ?? attr["chat lieu"] ?? "").toLowerCase();
-        const attrStyle = (attr.style ?? attr["kiểu dáng"] ?? attr["kieu dang"] ?? "").toLowerCase();
-        const attrSize = (attr.size ?? attr.capacity ?? attr["dung tích"] ?? attr["dung tich"] ?? "").toLowerCase();
+        let attrObj: Record<string, string> = {};
+        const rawAttr = v.attributes ?? p.attributes ?? {};
+        if (Array.isArray(rawAttr)) {
+          rawAttr.forEach((item: any) => {
+            if (item && (item.name || item.key) && item.value) {
+              attrObj[String(item.name || item.key).toLowerCase()] = String(item.value).toLowerCase();
+            }
+          });
+        } else if (rawAttr && typeof rawAttr === "object") {
+          Object.entries(rawAttr).forEach(([k, val]) => {
+            attrObj[String(k).toLowerCase()] = String(val).toLowerCase();
+          });
+        }
+
+        const attrMaterial = (attrObj.material ?? attrObj["chất liệu"] ?? attrObj["chat lieu"] ?? attrObj["materialtype"] ?? "").toLowerCase();
+        const attrStyle = (attrObj.style ?? attrObj["kiểu dáng"] ?? attrObj["kieu dang"] ?? attrObj["dáng"] ?? "").toLowerCase();
+        const attrSize = (attrObj.size ?? attrObj.capacity ?? attrObj["dung tích"] ?? attrObj["dung tich"] ?? attrObj["dungtich"] ?? "").toLowerCase();
+
+        const skuStr = String(v.sku ?? "").toLowerCase();
 
         const fullText = [
           attrMaterial, attrStyle, attrSize,
-          p.name, p.slug, v.name, v.sku,
-          ...Object.values(attr).map(String),
+          p.name, p.slug, v.name, skuStr,
+          ...Object.values(attrObj).map(String),
         ].filter(Boolean).join(" ").toLowerCase();
 
-        const material = parseMaterial(attrMaterial || fullText);
-        const style = parseStyle(attrStyle || fullText);
-        const size = parseSize(attrSize || fullText);
+        const material = parseMaterial(attrMaterial || fullText, skuStr);
+        const style = parseStyle(attrStyle || fullText, skuStr);
+        const size = parseSize(attrSize || fullText, skuStr);
+
 
         // Dedupe: nếu combo đã có với inStock=true thì ưu tiên thông tin còn hàng
         const existing = result.find(
@@ -611,6 +633,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
             existing.inStock = true;
             existing.availableQty = availableQty;
             existing.price = v.price ?? p.price;
+            if (v.sku) existing.sku = v.sku;
           }
           return;
         }
@@ -622,11 +645,12 @@ export async function fetchAllCupVariantsFromApi(): Promise<
           availableQty,
           inStock,
           price: v.price ?? p.price,
-          productId: p.id,
+          productId: p.id || p._id,
           sku: v.sku,
         });
       });
     });
+
 
     console.log("[Cup DB All] Tất cả variants (kể cả hết hàng):", result);
     return result;

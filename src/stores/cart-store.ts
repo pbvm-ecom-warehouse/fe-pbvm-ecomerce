@@ -47,6 +47,12 @@ function isLoggedIn() {
   return Boolean(user && user.type !== "admin");
 }
 
+function safeWarn(action: string, error: any) {
+  const data = error?.response?.data;
+  const msg = data?.message || data?.error || error?.message || String(error);
+  console.warn(`[CartStore] ${action} failed:`, msg);
+}
+
 export const useCartStore = create<CartState>()(
   persist(
     immer((set) => ({
@@ -73,7 +79,7 @@ export const useCartStore = create<CartState>()(
 
             if (isLoggedIn()) {
               const sku = product.productRefId || product.id;
-              updateCartItem(sku, existing.quantity).catch(console.error);
+              updateCartItem(sku, existing.quantity).catch((err) => safeWarn("updateCartItem", err));
             }
             return;
           }
@@ -97,7 +103,7 @@ export const useCartStore = create<CartState>()(
 
           if (isLoggedIn()) {
             const sku = product.productRefId || product.id;
-            addCartItem({ sku, quantity }).catch(console.error);
+            addCartItem({ sku, quantity }).catch((err) => safeWarn("addCartItem", err));
           }
         }),
 
@@ -129,7 +135,7 @@ export const useCartStore = create<CartState>()(
               quantity,
               designId,
               designFile: JSON.stringify(designFile),
-            }).catch(console.error);
+            }).catch((err) => safeWarn("addCustomPrintItem", err));
           }
         }),
 
@@ -141,7 +147,7 @@ export const useCartStore = create<CartState>()(
 
           if (isLoggedIn()) {
             const sku = item.productRefId || item.productId;
-            updateCartItem(sku, item.quantity).catch(console.error);
+            updateCartItem(sku, item.quantity).catch((err) => safeWarn("updateQuantity", err));
           }
         }),
 
@@ -152,7 +158,7 @@ export const useCartStore = create<CartState>()(
 
           if (isLoggedIn() && item) {
             const sku = item.productRefId || item.productId;
-            removeCartItem(sku).catch(console.error);
+            removeCartItem(sku).catch((err) => safeWarn("removeItem", err));
           }
         }),
 
@@ -160,7 +166,7 @@ export const useCartStore = create<CartState>()(
         set((state) => {
           state.items = [];
           if (isLoggedIn()) {
-            clearBackendCart().catch(console.error);
+            clearBackendCart().catch((err) => safeWarn("clearBackendCart", err));
           }
         }),
 
@@ -181,7 +187,7 @@ export const useCartStore = create<CartState>()(
               });
             }
           } catch (err) {
-            console.error("Failed to restore backend cart:", err);
+            safeWarn("restoreItems", err);
           }
         }
       },
@@ -209,7 +215,7 @@ export const useCartStore = create<CartState>()(
           if (isLoggedIn() && selected.length > 0) {
             for (const item of selected) {
               const sku = item.productRefId || item.productId;
-              removeCartItem(sku).catch(console.error);
+              removeCartItem(sku).catch((err) => safeWarn("removeSelectedCartItem", err));
             }
           }
         }),
@@ -219,6 +225,7 @@ export const useCartStore = create<CartState>()(
         try {
           const localItems = useCartStore.getState().items;
           const backendCart = await getCart();
+          const invalidCartItemIds = new Set<string>();
 
           // Upload any local items to server if they are not already in the server cart
           if (localItems.length > 0) {
@@ -226,51 +233,87 @@ export const useCartStore = create<CartState>()(
               const sku = item.productRefId || item.productId;
               const existsOnBackend = backendCart?.items?.some((bi) => bi.sku === sku);
               if (!existsOnBackend) {
-                await addCartItem({
-                  sku,
-                  quantity: item.quantity,
-                  designId: item.designId,
-                  designFile: item.designFile ? JSON.stringify(item.designFile) : undefined,
-                }).catch(console.error);
+                try {
+                  await addCartItem({
+                    sku,
+                    quantity: item.quantity,
+                    designId: item.designId,
+                    designFile: item.designFile ? JSON.stringify(item.designFile) : undefined,
+                  });
+                } catch (err: any) {
+                  let syncSuccess = false;
+                  // Fallback: If 400 Bad Request because designId wasn't found in DB, try without designId
+                  if (err?.response?.status === 400 && item.designId && item.designFile) {
+                    try {
+                      await addCartItem({
+                        sku,
+                        quantity: item.quantity,
+                        designFile: JSON.stringify(item.designFile),
+                      });
+                      syncSuccess = true;
+                    } catch (fallbackErr: any) {
+                      safeWarn(`syncItem (${sku})`, fallbackErr);
+                    }
+                  }
+
+                  if (!syncSuccess) {
+                    safeWarn(`syncItem (${sku})`, err);
+                    const status = err?.response?.status;
+                    const errCode = err?.response?.data?.code;
+                    // If variant does not exist on backend (CART_VARIANT_NOT_AVAILABLE or 400/404), mark item to be auto-removed from cart
+                    if (status === 400 || status === 404 || errCode === "CART_VARIANT_NOT_AVAILABLE") {
+                      invalidCartItemIds.add(item.cartItemId);
+                    }
+                  }
+                }
               }
             }
           }
 
-          const updatedCart = await getCart();
-          if (!updatedCart?.items?.length) return;
-
-          set((state) => {
-            state.items = updatedCart.items.map((item) => {
-              const isCustom = item.isPrintItem;
-              let designFileSnapshot: DesignFileSnapshot | undefined = undefined;
-              if (item.designFile) {
-                try {
-                  designFileSnapshot = JSON.parse(item.designFile);
-                } catch {
-                  // not JSON
-                }
-              }
-
-              return {
-                cartItemId: isCustom
-                  ? `custom:${item.sku}:${item.designId || ""}:${Date.now()}`
-                  : `standard:${item.sku}`,
-                productId: item.sku,
-                productRefId: item.sku,
-                name: item.sku,
-                slug: item.sku,
-                price: item.unitPrice,
-                quantity: item.quantity,
-                unit: "cái",
-                imageUrl: designFileSnapshot?.previewDataUrl || "/images/product-placeholder.svg",
-                fulfillmentType: isCustom ? "CUSTOM_PRINT" : "STANDARD",
-                designId: item.designId ?? undefined,
-                designFile: designFileSnapshot,
-              } satisfies CartItem;
+          // Automatically purge invalid/non-existent items from local cart state
+          if (invalidCartItemIds.size > 0) {
+            set((state) => {
+              state.items = state.items.filter((i) => !invalidCartItemIds.has(i.cartItemId));
             });
-          });
+          }
+
+          const updatedCart = await getCart();
+          if (!updatedCart?.items) return;
+
+          if (updatedCart.items.length > 0) {
+            set((state) => {
+              state.items = updatedCart.items.map((item) => {
+                const isCustom = item.isPrintItem;
+                let designFileSnapshot: DesignFileSnapshot | undefined = undefined;
+                if (item.designFile) {
+                  try {
+                    designFileSnapshot = JSON.parse(item.designFile);
+                  } catch {
+                    // not JSON
+                  }
+                }
+
+                return {
+                  cartItemId: isCustom
+                    ? `custom:${item.sku}:${item.designId || ""}:${Date.now()}`
+                    : `standard:${item.sku}`,
+                  productId: item.sku,
+                  productRefId: item.sku,
+                  name: item.sku,
+                  slug: item.sku,
+                  price: item.unitPrice,
+                  quantity: item.quantity,
+                  unit: "cái",
+                  imageUrl: designFileSnapshot?.previewDataUrl || "/images/product-placeholder.svg",
+                  fulfillmentType: isCustom ? "CUSTOM_PRINT" : "STANDARD",
+                  designId: item.designId ?? undefined,
+                  designFile: designFileSnapshot,
+                } satisfies CartItem;
+              });
+            });
+          }
         } catch (error) {
-          console.error("fetchAndSyncCart: failed to sync with backend:", error);
+          safeWarn("fetchAndSyncCart", error);
         }
       },
     })),
