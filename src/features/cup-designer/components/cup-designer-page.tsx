@@ -13,13 +13,26 @@ import {
   FolderOpen,
   History,
   Loader2,
+  Bot,
   PackagePlus,
   Paintbrush,
+  Send,
   ShoppingCart,
+  Sparkles,
+  Trash2,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
@@ -30,7 +43,9 @@ import {
   createDesign,
   listMyDesigns,
   deleteDesign,
+  uploadDesignImage,
 } from "../services/design.service";
+import { sendChatMessageToAi } from "../services/ai-chat.service";
 import { publicApiFetch } from "@/lib/public-api";
 import {
   fetchAllCupVariantsFromApi,
@@ -41,6 +56,7 @@ import type {
   CupStyle,
   DesignArtwork,
   DesignArtworkLayer,
+  DesignImageLayer,
   DesignFileSnapshot,
 } from "@/types/api";
 import { formatCurrency } from "@/utils/format-currency";
@@ -125,7 +141,68 @@ const SIZE_DESCRIPTIONS: Record<CupSize, string> = {
   "1000ml": "Size khổng lồ (1000ml)",
 };
 
+const DESIGN_DRAFT_KEY = "cup_designer_draft_v1";
+const SAVED_DESIGNS_KEY = "cup_designer_saved_designs_v1";
+
+interface DesignDraft {
+  materialType: CupMaterialType;
+  style: CupStyle;
+  size: CupSize;
+  printHeightPercent: number;
+  layers: DesignArtworkLayer[];
+  quantity: number;
+}
+
+function loadDraft(): DesignDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(DESIGN_DRAFT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as DesignDraft;
+  } catch {
+    return null;
+  }
+}
+
+function loadSavedDesigns(): any[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SAVED_DESIGNS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as any[];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedDesigns(designs: any[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(SAVED_DESIGNS_KEY, JSON.stringify(designs));
+  } catch {
+    // localStorage full
+  }
+}
+
+/** Merge local designs với API designs theo id, ưu tiên API data, local-only giữ nguyên */
+function mergeDesigns(local: any[], remote: any[]): any[] {
+  const remoteIds = new Set(remote.map((d) => d.id));
+  const localOnly = local.filter((d) => !remoteIds.has(d.id));
+  return [...remote, ...localOnly];
+}
+
+interface InStockVariant {
+  materialType: CupMaterialType;
+  style: CupStyle;
+  size: CupSize;
+  stockSnapshot: number;
+  inStock: boolean;
+  sku?: string;
+  price?: number;
+}
+
 export function CupDesignerPage() {
+
   const [isMounted, setIsMounted] = useState(false);
   const [currentStep, setCurrentStep] = useState<1 | 2>(1);
 
@@ -138,26 +215,257 @@ export function CupDesignerPage() {
   // Product-based mode: khoá material + style
   const [isProductLocked, setIsProductLocked] = useState(false);
 
-  // Cup config state
-  const [materialType, setMaterialType] = useState<CupMaterialType>(DEFAULT_CUP_CONFIG.materialType);
-  const [style, setStyle] = useState<CupStyle>(DEFAULT_CUP_CONFIG.style);
-  const [size, setSize] = useState<CupSize>(DEFAULT_CUP_CONFIG.size);
+  // Cup config state — khôi phục từ localStorage nếu có
+  const [materialType, setMaterialType] = useState<CupMaterialType>(() => loadDraft()?.materialType ?? DEFAULT_CUP_CONFIG.materialType);
+  const [style, setStyle] = useState<CupStyle>(() => loadDraft()?.style ?? DEFAULT_CUP_CONFIG.style);
+  const [size, setSize] = useState<CupSize>(() => loadDraft()?.size ?? DEFAULT_CUP_CONFIG.size);
   const [cupColor] = useState(DEFAULT_CUP_CONFIG.cupColor);
-  const [printHeightPercent, setPrintHeightPercent] = useState(DEFAULT_CUP_CONFIG.printHeightPercent);
+  const [printHeightPercent, setPrintHeightPercent] = useState(() => loadDraft()?.printHeightPercent ?? DEFAULT_CUP_CONFIG.printHeightPercent);
 
 
-  // Editor state
-  const [quantity, setQuantity] = useState(100);
-  const [layers, setLayers] = useState<DesignArtworkLayer[]>([]);
+  // Editor state — khôi phục từ localStorage nếu có
+  const [quantity, setQuantity] = useState(() => loadDraft()?.quantity ?? 100);
+  const [layers, setLayers] = useState<DesignArtworkLayer[]>(() => loadDraft()?.layers ?? []);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [artworkTextureUrl, setArtworkTextureUrl] = useState("");
   const [editorKey, setEditorKey] = useState(0);
   const [isSavingDesign, setIsSavingDesign] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [aiMessages, setAiMessages] = useState<
+    {
+      id: string;
+      sender: "user" | "ai";
+      text: string;
+      imageUrl?: string;
+      timestamp: string;
+    }[]
+  >([
+    {
+      id: "msg_welcome",
+      sender: "ai",
+      text: "Xin chào! Tôi là Trợ lý AI. Hãy gửi tin nhắn mô tả logo hoặc họa tiết bạn muốn vẽ lên ly nhé!",
+      timestamp: "Vừa xong",
+    },
+  ]);
 
-  // Saved designs panel
-  const [savedDesigns, setSavedDesigns] = useState<any[]>([]);
+  const [aiHistoryLogos, setAiHistoryLogos] = useState<
+    Array<{ id: string; src: string; prompt: string; timestamp: string }>
+  >([]);
+
+  const imageLayerCount = useMemo(() => {
+    return layers.filter((l) => l.type === "image").length;
+  }, [layers]);
+
+  const handleSendAiMessage = useCallback(
+    async (customPrompt?: string) => {
+      const textToSend = (customPrompt || aiPrompt).trim();
+      if (!textToSend) return;
+
+      const now = new Date().toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      const userMsg = {
+        id: `user_${Date.now()}`,
+        sender: "user" as const,
+        text: textToSend,
+        timestamp: now,
+      };
+
+      setAiMessages((prev) => [...prev, userMsg]);
+      setAiPrompt("");
+      setIsAiProcessing(true);
+
+      try {
+        const currentLayersSummary = layers.map((l) => {
+          if (l.type === "image") {
+            return {
+              type: "image",
+              prompt: (l as DesignImageLayer).prompt || "Logo/Họa tiết trên ly",
+            };
+          }
+          return {
+            type: "text",
+            text: (l as any).text || "",
+          };
+        });
+
+        const { text: aiReplyText, imageUrl: src, logoPromptInfo } = await sendChatMessageToAi(
+          textToSend,
+          aiMessages,
+          {
+            materialType,
+            style,
+            size,
+            layersCount: layers.length,
+            currentLayers: currentLayersSummary,
+          },
+        );
+
+        if (src) {
+          const dims = getArtboardDimensions(size, printHeightPercent);
+          const newId = `img_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const promptLabel = logoPromptInfo || textToSend;
+
+          setAiHistoryLogos((prev) => [
+            {
+              id: `hist_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+              src,
+              prompt: promptLabel,
+              timestamp: now,
+            },
+            ...prev.filter((item) => item.src !== src),
+          ]);
+
+          const imageLayer: DesignArtworkLayer = {
+            id: newId,
+            type: "image",
+            src,
+            x: dims.printArea.x + dims.printArea.width / 2 - 100,
+            y: dims.printArea.y + dims.printArea.height / 2 - 100,
+            width: 200,
+            height: 200,
+            rotation: 0,
+            source: "ai",
+            prompt: promptLabel,
+          };
+
+          setLayers((prev) => {
+            const existingImageIndex = prev.findIndex(
+              (l): l is DesignImageLayer => l.type === "image",
+            );
+            if (existingImageIndex >= 0) {
+              const oldLayer = prev[existingImageIndex] as DesignImageLayer;
+              const updatedLayer: DesignImageLayer = {
+                ...oldLayer,
+                id: newId,
+                src,
+                prompt: promptLabel,
+              };
+              const nextLayers = [...prev];
+              nextLayers[existingImageIndex] = updatedLayer;
+              return nextLayers;
+            }
+            return [...prev, imageLayer];
+          });
+          setSelectedLayerId(newId);
+
+
+          // TỰ ĐỘNG LƯU VÀO PHẦN "THIẾT KẾ ĐÃ LƯU" (SAVED DESIGNS)
+          const shortPrompt = promptLabel.length > 30 ? `${promptLabel.slice(0, 30)}...` : promptLabel;
+          const designName = `Mẫu AI: ${shortPrompt}`;
+          const autoSnapshot = createDesignSnapshot({
+            name: designName,
+            previewDataUrl: src,
+            artwork: {
+              cup: { size, style, materialType, cupColor },
+              artboard: { width: dims.width, height: dims.height, printHeightPercent },
+              layers: [imageLayer],
+            },
+          });
+
+          const autoDesignItem = {
+            id: `auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            name: designName,
+            thumbnail: src,
+            file: JSON.stringify({
+              snapshotVersion: autoSnapshot.snapshotVersion,
+              designId: autoSnapshot.designId,
+              name: autoSnapshot.name,
+              artwork: autoSnapshot.artwork,
+              exportedAt: autoSnapshot.exportedAt,
+            }),
+            createdAt: new Date().toISOString(),
+          };
+
+          setSavedDesigns((prev) => [autoDesignItem, ...prev.filter((d) => d.name !== designName)]);
+          setShowSavedPanel(true);
+
+          if (user) {
+            createDesign({
+              name: designName,
+              file: autoDesignItem.file,
+              thumbnail: src,
+            }).catch((e) => console.warn("Auto save design API error:", e));
+          }
+        }
+
+        const aiMsg = {
+          id: `ai_${Date.now()}`,
+          sender: "ai" as const,
+          text: aiReplyText,
+          timestamp: now,
+        };
+
+        setAiMessages((prev) => [...prev, aiMsg]);
+      } catch (err) {
+        console.error(err);
+        toast.error("Trợ lý AI gặp gián đoạn lúc này.");
+      } finally {
+        setIsAiProcessing(false);
+      }
+    },
+    [aiPrompt, aiMessages, materialType, style, size, layers, printHeightPercent],
+  );
+
+  const handleApplyHistoryLogo = useCallback(
+    (src: string, promptText: string) => {
+      const dims = getArtboardDimensions(size, printHeightPercent);
+      const newId = `img_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+      const imageLayer: DesignArtworkLayer = {
+        id: newId,
+        type: "image",
+        src,
+        x: dims.printArea.x + dims.printArea.width / 2 - 100,
+        y: dims.printArea.y + dims.printArea.height / 2 - 100,
+        width: 200,
+        height: 200,
+        rotation: 0,
+        source: "ai",
+        prompt: promptText,
+      };
+
+      setLayers((prev) => {
+        const existingAiIndex = prev.findIndex(
+          (l): l is DesignImageLayer => l.type === "image" && l.source === "ai",
+        );
+        if (existingAiIndex >= 0) {
+          const oldLayer = prev[existingAiIndex] as DesignImageLayer;
+          const updatedLayer: DesignImageLayer = {
+            ...oldLayer,
+            id: newId,
+            src,
+            prompt: promptText,
+          };
+          const nextLayers = [...prev];
+          nextLayers[existingAiIndex] = updatedLayer;
+          return nextLayers;
+        }
+        return [...prev, imageLayer];
+      });
+      setSelectedLayerId(newId);
+      toast.success("Đã áp dụng mẫu logo từ lịch sử lên ly!");
+    },
+    [size, printHeightPercent],
+  );
+
+  const handleReuseHistoryLogoForEdit = useCallback((promptText: string) => {
+    setAiPrompt(`Sửa logo ${promptText}: `);
+    const inputEl = document.getElementById("ai-chat-input") as HTMLInputElement | null;
+    if (inputEl) {
+      inputEl.focus();
+    }
+  }, []);
+
+  // Saved designs panel — khởi tạo từ localStorage
+  const [savedDesigns, setSavedDesigns] = useState<any[]>(() => loadSavedDesigns());
   const [loadingDesigns, setLoadingDesigns] = useState(false);
   const [showSavedPanel, setShowSavedPanel] = useState(true);
+  const [designToDelete, setDesignToDelete] = useState<any | null>(null);
+
 
   const addCustomPrintItem = useCartStore((s) => s.addCustomPrintItem);
   const user = useAuthStore((s) => s.user);
@@ -165,6 +473,23 @@ export function CupDesignerPage() {
   const searchParams = useSearchParams();
   /** productId truyền vào từ trang sản phẩm — có nghĩa là "Product-based mode" */
   const productIdFromUrl = searchParams?.get("productId") ?? null;
+
+  /* ── 0. AUTO-SAVE DRAFT VÀO LOCALSTORAGE ── */
+  useEffect(() => {
+    if (!isMounted) return;
+    const draft: DesignDraft = { materialType, style, size, printHeightPercent, layers, quantity };
+    try {
+      localStorage.setItem(DESIGN_DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // Bỏ qua nếu localStorage đầy
+    }
+  }, [isMounted, materialType, style, size, printHeightPercent, layers, quantity]);
+
+  /* ── 0b. AUTO-SAVE SAVED DESIGNS VÀO LOCALSTORAGE ── */
+  useEffect(() => {
+    if (!isMounted) return;
+    persistSavedDesigns(savedDesigns);
+  }, [isMounted, savedDesigns]);
 
   /* ── 1. FETCH TẤT CẢ VARIANTS LY TỪ DB (kể cả hết hàng) ── */
   useEffect(() => {
@@ -179,6 +504,8 @@ export function CupDesignerPage() {
           size: v.size,
           stockSnapshot: v.availableQty,
           inStock: v.inStock,
+          sku: v.sku,
+          price: v.price,
         }));
         setInStockVariants(mapped);
       })
@@ -191,6 +518,31 @@ export function CupDesignerPage() {
       });
   }, []);
 
+  const selectedVariantInfo = useMemo(() => {
+    return inStockVariants.find(
+      (v) => v.materialType === materialType && v.style === style && v.size === size,
+    );
+  }, [inStockVariants, materialType, style, size]);
+
+  const currentCupSku = useMemo(() => {
+    if (selectedVariantInfo?.sku) return selectedVariantInfo.sku;
+    const matCode = materialType === "clear" ? "PET" : materialType === "frosted" ? "PP" : materialType === "paper" ? "PAPER" : "GLASS";
+    const styleCode = style === "u_shape" ? "-U" : style === "heart" ? "-HEART" : style === "mug" ? "-MUG" : "";
+    return `CUP-${matCode}-${size.toUpperCase()}${styleCode}`;
+  }, [selectedVariantInfo, materialType, size, style]);
+
+
+  const loadDesignIdFromUrl = searchParams?.get("loadDesignId") ?? null;
+
+  /* ── 1d. AUTO LOAD DESIGN TỪ URL PARAMS ── */
+  useEffect(() => {
+    if (!loadDesignIdFromUrl || !isMounted || savedDesigns.length === 0) return;
+    const target = savedDesigns.find((d) => String(d.id) === String(loadDesignIdFromUrl));
+    if (target) {
+      handleLoadDesign(target);
+    }
+  }, [loadDesignIdFromUrl, savedDesigns, isMounted]);
+
   /* ── 1b. Đếm số design hiện tại của khách ── */
   useEffect(() => {
     if (!user || user.type === "admin") return;
@@ -198,6 +550,7 @@ export function CupDesignerPage() {
       .then((designs) => setDesignsCount(Array.isArray(designs) ? designs.length : 0))
       .catch(() => setDesignsCount(0));
   }, [user]);
+
 
   /* ── 1c. PRODUCT-BASED MODE: Pre-fill từ productId trong URL ── */
   useEffect(() => {
@@ -357,19 +710,45 @@ export function CupDesignerPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  /** Chuyển sang Giai đoạn 2 sau khi chọn phôi ly -> Luôn tạo bảng vẽ mới (empty layers) */
+  function handleProceedToStep2() {
+    setLayers([]);
+    setSelectedLayerId(null);
+    setEditorKey((k) => k + 1);
+    goToStep(2);
+  }
+
+
   function refreshSavedDesigns() {
     if (!user || user.type === "admin") return;
-    listMyDesigns().then((data) => setSavedDesigns(data || [])).catch(console.error);
+    listMyDesigns()
+      .then((data) => {
+        const merged = mergeDesigns(loadSavedDesigns(), data || []);
+        setSavedDesigns(merged);
+      })
+      .catch(() => {}); // giữ local khi API lỗi
   }
 
   useEffect(() => {
     if (!user || user.type === "admin") return;
     setLoadingDesigns(true);
     listMyDesigns()
-      .then((data) => setSavedDesigns(data || []))
-      .catch(console.error)
+      .then((data) => {
+        const merged = mergeDesigns(loadSavedDesigns(), data || []);
+        setSavedDesigns(merged);
+      })
+      .catch(() => {}) // giữ local khi API lỗi
       .finally(() => setLoadingDesigns(false));
   }, [user]);
+
+  function confirmDeleteDesign(design: any) {
+    setSavedDesigns((prev) => prev.filter((d) => d.id !== design.id));
+    if (user && design.id && !String(design.id).startsWith("auto_")) {
+      deleteDesign(design.id).catch((e) => console.warn("Delete design API:", e));
+    }
+    toast.success(`Đã xóa thiết kế "${design.name}"`);
+  }
+
 
   function handleLoadDesign(design: any) {
     let snapshot: DesignFileSnapshot | null = null;
@@ -394,9 +773,11 @@ export function CupDesignerPage() {
     setLayers(savedLayers ?? []);
     setSelectedLayerId(null);
     setEditorKey((k) => k + 1);
-    toast.success(`Đã tải thiết kế "${design.name}" — tiếp tục chỉnh sửa nhé!`);
+    const shortName = design.name && design.name.length > 25 ? `${design.name.slice(0, 25)}...` : design.name;
+    toast.success(`Đã tải mẫu "${shortName}" thành công!`);
     goToStep(2);
   }
+
 
   async function addToCart() {
     if (!user) {
@@ -429,10 +810,20 @@ export function CupDesignerPage() {
         exportedAt: designFile.exportedAt,
       });
 
+      let uploadedThumbnail = artworkTextureUrl;
+      if (artworkTextureUrl && artworkTextureUrl.startsWith("data:")) {
+        try {
+          const uploadRes = await uploadDesignImage(artworkTextureUrl);
+          uploadedThumbnail = uploadRes.thumbnail || uploadRes.file || artworkTextureUrl;
+        } catch (e) {
+          console.warn("Upload thumbnail to Cloudinary error:", e);
+        }
+      }
+
       const savedDesign = await createDesign({
         name: designFile.name,
         file: artworkPayload,
-        thumbnail: designFile.previewDataUrl,
+        thumbnail: uploadedThumbnail,
       });
 
       // Tăng số mẫu sau khi lưu thành công
@@ -443,11 +834,16 @@ export function CupDesignerPage() {
         toast.success(`Đã lưu thiết kế thành công! Combo này hiện hết hàng, bạn có thể đặt khi kho có lại.`);
       } else {
         addCustomPrintItem({
-          product: createCustomCupProduct({ size, price }),
+          product: {
+            ...createCustomCupProduct({ size, price }),
+            productRefId: currentCupSku,
+            name: `Ly in theo thiết kế ${CUP_MATERIAL_LABELS[materialType]} ${size} (${currentCupSku})`,
+          },
           quantity,
           designId: savedDesign.id,
           designFile: { ...designFile, designId: savedDesign.id },
         });
+
         toast.success("Đã lưu thiết kế và thêm ly in vào giỏ hàng thành công!");
       }
 
@@ -525,7 +921,7 @@ export function CupDesignerPage() {
             <span className="text-slate-300">→</span>
             <button
               type="button"
-              onClick={() => goToStep(2)}
+              onClick={() => (currentStep === 1 ? handleProceedToStep2() : goToStep(2))}
               className={cn(
                 "px-2.5 py-1 rounded-lg transition-all cursor-pointer select-none",
                 currentStep === 2 ? "bg-primary text-white font-black shadow-xs" : "bg-slate-100 text-slate-500 hover:bg-slate-200",
@@ -533,14 +929,21 @@ export function CupDesignerPage() {
             >
               2. In Logo &amp; Xem 3D
             </button>
+
           </div>
 
           {/* RIGHT: QUICK CONFIG SUMMARY */}
           <div className="flex items-center gap-3 text-xs">
-            <span className="hidden md:inline-block font-bold text-slate-500">
-              Đã chọn: <strong className="text-primary">{CUP_MATERIAL_LABELS[materialType]} · {CUP_STYLE_LABELS[style]} ({CUP_SIZE_LABELS[size]})</strong>
+            <span className="hidden md:inline-flex items-center gap-2 font-bold text-slate-500">
+              <span>
+                Đã chọn: <strong className="text-primary">{CUP_MATERIAL_LABELS[materialType]} · {CUP_STYLE_LABELS[style]} ({CUP_SIZE_LABELS[size]})</strong>
+              </span>
+              <span className="text-[10px] font-black tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md">
+                SKU: {currentCupSku}
+              </span>
             </span>
           </div>
+
         </div>
       </header>
 
@@ -552,7 +955,7 @@ export function CupDesignerPage() {
           {/* SINGLE UNIFIED MASTER CONTAINER CARD */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-8">
             {/* TOP ROW: 2 COLUMNS (LEFT: OPTIONS, RIGHT: 3D PREVIEW) */}
-            <div className="grid gap-8 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] items-stretch">
+            <div className="grid gap-6 xl:gap-8 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_380px] items-start min-w-0">
               {/* LEFT CONFIGURATION SECTIONS */}
               <div className="space-y-6 lg:pr-6">
 
@@ -588,8 +991,30 @@ export function CupDesignerPage() {
                     </Button>
                   </div>
                 )}
+
+                {/* WMS SKU PHÔI LY BANNER */}
+                <div className="flex flex-wrap items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl p-3 gap-2">
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-600">Phôi ly Kho chuẩn hóa (WMS SKU):</span>
+                    <span className="text-xs font-black tracking-wider bg-white text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg shadow-2xs">
+                      {currentCupSku}
+                    </span>
+                  </div>
+                  {selectedVariantInfo?.inStock === false ? (
+                    <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">
+                      Hết hàng trong kho (Vẫn có thể thiết kế &amp; lưu mẫu)
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                      Sẵn sàng in ấn ngay
+                    </span>
+                  )}
+                </div>
+
                 {/* SECTION 1: CHẤT LIỆU LY IN-STOCK */}
                 <div className="space-y-2.5">
+
                   <div className="flex items-center justify-between pb-0.5">
                     <h3 className="text-xs font-black text-[#253D4E] uppercase tracking-wider flex items-center gap-2">
                       <span className="size-2 rounded-full bg-primary" />
@@ -790,33 +1215,32 @@ export function CupDesignerPage() {
 
                   <Button
                     type="button"
-                    onClick={() => goToStep(2)}
+                    onClick={handleProceedToStep2}
                     className="w-full bg-primary hover:bg-[#2F9A68] text-white font-black text-xs h-10 px-4 rounded-xl shadow-xs cursor-pointer select-none flex items-center justify-center gap-2"
                   >
                     <span>Tiếp tục: In Logo &amp; Xem 3D</span>
                     <ArrowRight className="size-4" />
                   </Button>
+
                 </div>
               </div>
 
               {/* RIGHT 3D PREVIEW PANEL */}
-              <div className="flex flex-col gap-3 h-full">
+              <div className="space-y-2.5">
                 <div className="flex items-center justify-between shrink-0">
-                  <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Xem trước kiểu dáng 3D</span>
-                  <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md">Xoay 360°</span>
+                  <span className="text-xs font-black uppercase text-[#253D4E] tracking-wider">Xem trước kiểu dáng 3D</span>
+                  <span className="text-[10px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md">Xoay 360°</span>
                 </div>
 
-                <div className="rounded-xl overflow-hidden bg-slate-50 border border-slate-100 flex-1 min-h-[460px]">
-                  <CupPreview3D
-                    size={size}
-                    style={style}
-                    materialType={materialType}
-                    cupColor={cupColor}
-                    artworkTextureUrl=""
-                    printHeightPercent={printHeightPercent}
-                    heightClassName="h-full"
-                  />
-                </div>
+                <CupPreview3D
+                  size={size}
+                  style={style}
+                  materialType={materialType}
+                  cupColor={cupColor}
+                  artworkTextureUrl=""
+                  printHeightPercent={printHeightPercent}
+                  heightClassName="h-[440px] sm:h-[480px] lg:h-[520px] w-full"
+                />
               </div>
             </div>
           </div>
@@ -829,8 +1253,8 @@ export function CupDesignerPage() {
       {currentStep === 2 && (
         <div className="mx-auto w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 lg:py-4 animate-in fade-in duration-300">
           {/* SINGLE UNIFIED MASTER CONTAINER CARD FOR STEP 2 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs">
-            <div className="grid gap-5 grid-cols-1 lg:grid-cols-[240px_minmax(0,1fr)_340px] items-start">
+          <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-5 shadow-xs overflow-hidden">
+            <div className="grid gap-3.5 xl:gap-5 grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_280px] xl:grid-cols-[250px_minmax(0,1fr)_340px] items-stretch min-w-0">
               {/* LEFT PANEL: THÔNG SỐ LY & THIẾT KẾ ĐÃ LƯU */}
               <div className="space-y-4">
                 <div className="space-y-3">
@@ -872,97 +1296,109 @@ export function CupDesignerPage() {
                   </div>
                 </div>
 
-                {/* Saved designs section */}
-                {user && user.type !== "admin" && (
-                  <div className="pt-3 space-y-2 border-t border-slate-100">
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between py-1 text-left hover:bg-slate-50 transition cursor-pointer"
-                      onClick={() => setShowSavedPanel((v) => !v)}
-                    >
-                      <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide text-[#253D4E]">
-                        <History className="size-3.5 text-primary" />
-                        <span>Thiết kế đã lưu</span>
-                        {savedDesigns.length > 0 && (
-                          <span className="text-[9.5px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                            {savedDesigns.length}
-                          </span>
-                        )}
-                      </div>
-                      {showSavedPanel ? (
-                        <ChevronUp className="size-3.5 text-slate-400" />
-                      ) : (
-                        <ChevronDown className="size-3.5 text-slate-400" />
+                {/* Saved designs section - Hiển thị mặc định cho mọi người dùng */}
+                <div className="pt-3 space-y-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between py-1 text-left hover:bg-slate-50 transition cursor-pointer"
+                    onClick={() => setShowSavedPanel((v) => !v)}
+                  >
+                    <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide text-[#253D4E]">
+                      <History className="size-3.5 text-primary" />
+                      <span>Thiết kế đã lưu</span>
+                      {savedDesigns.length > 0 && (
+                        <span className="text-[9.5px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">
+                          {savedDesigns.length}
+                        </span>
                       )}
-                    </button>
+                    </div>
+                    {showSavedPanel ? (
+                      <ChevronUp className="size-3.5 text-slate-400" />
+                    ) : (
+                      <ChevronDown className="size-3.5 text-slate-400" />
+                    )}
+                  </button>
 
-                    {showSavedPanel && (
-                      <div className="pt-1">
-                        {loadingDesigns ? (
-                          <div className="flex h-16 items-center justify-center gap-2">
-                            <Loader2 className="size-4 animate-spin text-primary" />
-                            <span className="text-[10px] text-slate-400 font-medium">Đang tải...</span>
-                          </div>
-                        ) : savedDesigns.length === 0 ? (
-                          <div className="py-3 text-center">
-                            <Paintbrush className="mx-auto size-5 text-slate-300 mb-1" />
-                            <p className="text-[10px] text-slate-400 font-bold">Chưa có thiết kế nào.</p>
-                            <p className="text-[9px] text-slate-400 mt-0.5">
-                              Thiết kế &amp; thêm vào giỏ để lưu.
-                            </p>
-                          </div>
-                        ) : (
-                          <div className="max-h-[220px] overflow-y-auto pr-1 space-y-1.5 divide-y divide-slate-100">
-                            {savedDesigns.map((d) => (
-                              <div
-                                key={d.id}
-                                className="flex items-center gap-2 pt-1.5 first:pt-0 hover:bg-slate-50 p-1 rounded-lg transition"
-                              >
-                                <div className="size-8 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
-                                  {d.thumbnail ? (
-                                    <img
-                                      src={d.thumbnail}
-                                      alt={d.name}
-                                      className="size-full object-contain"
-                                    />
-                                  ) : (
-                                    <div className="flex size-full items-center justify-center">
-                                      <Paintbrush className="size-3 text-slate-300" />
-                                    </div>
-                                  )}
-                                </div>
+                  {showSavedPanel && (
+                    <div className="pt-1">
+                      {loadingDesigns ? (
+                        <div className="flex h-16 items-center justify-center gap-2">
+                          <Loader2 className="size-4 animate-spin text-primary" />
+                          <span className="text-[10px] text-slate-400 font-medium">Đang tải...</span>
+                        </div>
+                      ) : savedDesigns.length === 0 ? (
+                        <div className="py-3 text-center">
+                          <Paintbrush className="mx-auto size-5 text-slate-300 mb-1" />
+                          <p className="text-[10px] text-slate-400 font-bold">Chưa có thiết kế nào.</p>
+                          <p className="text-[9px] text-slate-400 mt-0.5">
+                            Các mẫu logo AI tạo ra sẽ tự động được lưu tại đây.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="max-h-[220px] overflow-y-auto pr-1 space-y-1.5 divide-y divide-slate-100">
+                          {savedDesigns.map((d) => (
+                            <div
+                              key={d.id}
+                              className="flex items-center gap-2 pt-1.5 first:pt-0 hover:bg-slate-50 p-1 rounded-lg transition"
+                            >
+                              <div className="size-8 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
+                                {d.thumbnail ? (
+                                  <img
+                                    src={d.thumbnail}
+                                    alt={d.name}
+                                    className="size-full object-contain"
+                                  />
+                                ) : (
+                                  <div className="flex size-full items-center justify-center">
+                                    <Paintbrush className="size-3 text-slate-300" />
+                                  </div>
+                                )}
+                              </div>
 
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-[10px] font-bold text-[#253D4E]">{d.name}</p>
-                                  <p className="text-[8.5px] text-slate-400">
-                                    {d.createdAt
-                                      ? new Date(d.createdAt).toLocaleDateString("vi-VN")
-                                      : ""}
-                                  </p>
-                                </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-[10px] font-bold text-[#253D4E]">{d.name}</p>
+                                <p className="text-[8.5px] text-slate-400">
+                                  {d.createdAt
+                                    ? new Date(d.createdAt).toLocaleDateString("vi-VN")
+                                    : ""}
+                                </p>
+                              </div>
 
+                              <div className="flex items-center gap-1">
                                 <Button
                                   type="button"
                                   size="icon"
                                   variant="outline"
-                                  title={`Tải thiết kế "${d.name}" vào editor`}
+                                  title={`Tải thiết kế "${d.name}" vào ly để sửa tiếp`}
                                   className="size-7 shrink-0 rounded-lg border-primary/30 text-primary hover:bg-emerald-50 cursor-pointer"
                                   onClick={() => handleLoadDesign(d)}
                                 >
                                   <FolderOpen className="size-3.5" />
                                 </Button>
+                                <Button
+                                  type="button"
+                                  size="icon"
+                                  variant="outline"
+                                  title={`Xóa thiết kế "${d.name}"`}
+                                  className="size-7 shrink-0 rounded-lg border-red-200 text-red-400 hover:bg-red-50 hover:border-red-400 cursor-pointer"
+                                  onClick={() => setDesignToDelete(d)}
+                                >
+                                  <Trash2 className="size-3.5" />
+                                </Button>
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* CENTER: 2D Canvas Editor */}
               <div className="min-w-0">
+
+
                 <ArtworkEditor2D
                   key={editorKey}
                   size={size}
@@ -976,20 +1412,151 @@ export function CupDesignerPage() {
                 />
               </div>
 
-              {/* RIGHT PANEL: MÔ PHỎNG LY 3D THỰC TẾ */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-black text-[#253D4E] uppercase tracking-wider">
-                  <span>Mô phỏng ly 3D thực tế</span>
-                  <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Xoay 360°</span>
+
+              {/* RIGHT PANEL: MÔ PHỎNG LY 3D THỰC TẾ & TẠO HÌNH AI */}
+              <div className="space-y-3">
+                {/* 3D Preview */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-black text-[#253D4E] uppercase tracking-wider">
+                    <span>Mô phỏng ly 3D thực tế</span>
+                    <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Xoay 360°</span>
+                  </div>
+                  <CupPreview3D
+                    size={size}
+                    style={style}
+                    materialType={materialType}
+                    cupColor={cupColor}
+                    artworkTextureUrl={artworkTextureUrl}
+                    printHeightPercent={printHeightPercent}
+                    heightClassName="h-[360px] sm:h-[400px] w-full"
+                  />
                 </div>
-                <CupPreview3D
-                  size={size}
-                  style={style}
-                  materialType={materialType}
-                  cupColor={cupColor}
-                  artworkTextureUrl={artworkTextureUrl}
-                  printHeightPercent={printHeightPercent}
-                />
+
+                {/* AI DESIGN CHAT ASSISTANT PANEL */}
+                <div className="rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-white via-emerald-50/30 to-emerald-50/60 p-3 space-y-2.5 shadow-2xs">
+                  {/* Header */}
+                  <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex size-6 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                        <Bot className="size-3.5" />
+                      </div>
+                      <div>
+                        <h4 className="text-[11.5px] font-black text-[#253D4E] uppercase tracking-wide flex items-center gap-1">
+                          Trợ lý AI Thiết kế
+                          <Sparkles className="size-3 text-emerald-600 animate-pulse" />
+                        </h4>
+                        <p className="text-[9px] font-medium text-emerald-700">Trò chuyện để AI tự vẽ &amp; dán logo lên ly</p>
+                      </div>
+                    </div>
+                    <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
+                      {imageLayerCount} hình trên ly
+                    </span>
+                  </div>
+
+                  {/* Chat Messages Stream */}
+                  <div className="max-h-[210px] min-h-[140px] overflow-y-auto space-y-2 pr-1 text-xs">
+                    {aiMessages.map((msg) => (
+                      <div
+                        key={msg.id}
+                        className={cn(
+                          "flex gap-2 text-[11px]",
+                          msg.sender === "user" ? "justify-end" : "justify-start",
+                        )}
+                      >
+                        {msg.sender === "ai" && (
+                          <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white text-[9px]">
+                            <Bot className="size-3" />
+                          </div>
+                        )}
+
+                        <div
+                          className={cn(
+                            "max-w-[85%] rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed shadow-2xs space-y-1.5",
+                            msg.sender === "user"
+                              ? "bg-emerald-600 text-white font-medium rounded-tr-none"
+                              : "bg-white text-slate-700 border border-emerald-100 font-medium rounded-tl-none",
+                          )}
+                        >
+                          <p>{msg.text}</p>
+
+                          <span
+                            className={cn(
+                              "block text-[8.5px] text-right font-medium",
+                              msg.sender === "user" ? "text-emerald-100" : "text-slate-400",
+                            )}
+                          >
+                            {msg.timestamp}
+                          </span>
+                        </div>
+
+                        {msg.sender === "user" && (
+                          <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600 text-[9px]">
+                            <User className="size-3" />
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {isAiProcessing && (
+                      <div className="flex gap-2 text-[11px] justify-start items-center">
+                        <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                          <Bot className="size-3" />
+                        </div>
+                        <div className="bg-white border border-emerald-100 rounded-xl px-3 py-1.5 text-[10.5px] font-medium text-emerald-700 flex items-center gap-2 shadow-2xs">
+                          <Loader2 className="size-3.5 animate-spin text-emerald-600" />
+                          <span>AI đang vẽ họa tiết theo yêu cầu...</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quick Tag Pills */}
+                  <div className="flex items-center gap-1 flex-wrap pt-1 border-t border-emerald-100">
+                    <span className="text-[9px] text-slate-400 font-bold mr-0.5">Gợi ý prompt:</span>
+                    {[
+                      "Tạo logo Bông Búp Tea",
+                      "Logo Cà Phê Mộc 1995",
+                      "Logo Mascot chú gấu",
+                      "Logo chữ M tối giản",
+                    ].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        disabled={isAiProcessing}
+                        onClick={() => handleSendAiMessage(tag)}
+                        className="text-[9px] font-bold text-emerald-800 bg-white border border-emerald-200/90 hover:bg-emerald-100 px-2 py-0.5 rounded-md transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        + {tag}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Chat Input Bar */}
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <Input
+                      id="ai-chat-input"
+                      value={aiPrompt}
+                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSendAiMessage()}
+                      disabled={isAiProcessing}
+                      placeholder="Gửi yêu cầu thiết kế cho AI..."
+                      className="h-8 rounded-xl bg-white text-xs px-3 flex-1 border-emerald-200 focus-visible:ring-emerald-500 font-medium"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 w-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs p-0 shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
+                      disabled={isAiProcessing || !aiPrompt.trim()}
+                      onClick={() => handleSendAiMessage()}
+                    >
+                      {isAiProcessing ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Send className="size-3.5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
 
               {/* FULL-WIDTH BOTTOM BAR: ĐẶT IN & LƯU ĐƠN HÀNG (EXTENDS FROM LEFT TO RIGHT EDGE) */}
@@ -1092,6 +1659,47 @@ export function CupDesignerPage() {
           </div>
         </div>
       )}
+      {/* MODAL XÁC NHẬN XÓA THIẾT KẾ */}
+      <Dialog open={!!designToDelete} onOpenChange={(open) => !open && setDesignToDelete(null)}>
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white border border-slate-200 p-6">
+          <DialogHeader className="items-center text-center sm:items-start sm:text-left gap-2">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 sm:mx-0">
+              <Trash2 className="size-6" />
+            </div>
+            <DialogTitle className="text-base font-bold text-slate-800">
+              Xác nhận xóa mẫu thiết kế
+            </DialogTitle>
+            <DialogDescription className="text-xs font-medium text-slate-500">
+              Bạn có chắc chắn muốn xóa mẫu thiết kế{" "}
+              <strong className="text-slate-800 font-bold">"{designToDelete?.name}"</strong> khỏi thư viện không?
+              Hành động này sẽ xóa vĩnh viễn và không thể khôi phục.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-4 flex items-center justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDesignToDelete(null)}
+              className="rounded-xl text-xs font-semibold h-9 px-4 cursor-pointer"
+            >
+              Hủy bỏ
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (designToDelete) {
+                  confirmDeleteDesign(designToDelete);
+                  setDesignToDelete(null);
+                }
+              }}
+              className="rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white h-9 px-4 cursor-pointer shadow-xs border-0"
+            >
+              Xác nhận xóa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

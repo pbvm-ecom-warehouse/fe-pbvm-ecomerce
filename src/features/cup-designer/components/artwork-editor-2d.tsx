@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Download,
+  FilePlus,
   ImagePlus,
   MousePointer2,
   Paintbrush,
@@ -11,6 +12,7 @@ import {
   Trash2,
   Type,
 } from "lucide-react";
+
 import {
   Image as KonvaImage,
   Layer,
@@ -23,6 +25,14 @@ import {
 import type Konva from "konva";
 
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -34,7 +44,7 @@ import type {
   DesignTextLayer,
 } from "@/types/api";
 
-import { generateArtworkDataUrl } from "../services/artwork-generator.service";
+import { generateBananaLogoArtworkAsync } from "../services/artwork-generator.service";
 import { getArtboardDimensions } from "../utils/artwork";
 
 type ToolMode = "select" | "brush";
@@ -79,9 +89,14 @@ function useLoadedImages(layers: DesignArtworkLayer[]) {
     );
     imageLayers.forEach((layer) => {
       const img = new window.Image();
-      img.crossOrigin = "anonymous";
+      if (!layer.src.startsWith("data:")) {
+        img.crossOrigin = "anonymous";
+      }
       img.onload = () => {
         if (!cancelled) setImages((cur) => ({ ...cur, [layer.id]: img }));
+      };
+      img.onerror = (err) => {
+        console.error("Failed to load layer image:", layer.id, err);
       };
       img.src = layer.src;
     });
@@ -101,6 +116,8 @@ export function ArtworkEditor2D({
   onSelectedLayerChange,
   onTextureChange,
 }: ArtworkEditor2DProps) {
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
   const [tool, setTool] = useState<ToolMode>("select");
   const [brushColor, setBrushColor] = useState("#3BB77E");
   const [brushSize, setBrushSize] = useState<(typeof BRUSH_SIZES)[number]>(5);
@@ -120,29 +137,36 @@ export function ArtworkEditor2D({
   const [containerWidth, setContainerWidth] = useState<number>(0);
 
   useEffect(() => {
-    function updateWidth() {
-      if (containerRef.current) {
-        const w = containerRef.current.clientWidth - 20;
-        if (w > 0) setContainerWidth(w);
+    const el = containerRef.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const w = Math.floor(entry.contentRect.width - 20);
+        if (w > 0) {
+          setContainerWidth(w);
+        }
       }
-    }
-    updateWidth();
-    window.addEventListener("resize", updateWidth);
-    return () => window.removeEventListener("resize", updateWidth);
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
   }, []);
 
-  const effectiveWidth = useMemo(() => {
-    return Math.max(dimensions.width, containerWidth);
-  }, [dimensions.width, containerWidth]);
+  const baseWidth = dimensions.width;
+  const baseHeight = dimensions.height;
+
+  const scaleRatio = useMemo(() => {
+    if (!containerWidth || containerWidth <= 0) return 0.65;
+    return containerWidth / baseWidth;
+  }, [containerWidth, baseWidth]);
+
+  const stageWidth = Math.round(baseWidth * scaleRatio);
+  const stageHeight = Math.round(baseHeight * scaleRatio);
 
   const effectivePrintArea = useMemo(() => {
-    return {
-      x: 32,
-      y: dimensions.printArea.y,
-      width: effectiveWidth - 64,
-      height: dimensions.printArea.height,
-    };
-  }, [effectiveWidth, dimensions.printArea.y, dimensions.printArea.height]);
+    return dimensions.printArea;
+  }, [dimensions.printArea]);
 
   // Sync transformer to selected layer
   useEffect(() => {
@@ -164,7 +188,7 @@ export function ArtworkEditor2D({
         y: effectivePrintArea.y,
         width: effectivePrintArea.width,
         height: effectivePrintArea.height,
-        pixelRatio: 1,
+        pixelRatio: 2,
       });
       onTextureChange(dataUrl);
     }, 300);
@@ -173,8 +197,11 @@ export function ArtworkEditor2D({
 
   /* ── Helpers ── */
   function getPointer() {
-    const pointer = stageRef.current?.getPointerPosition();
-    return pointer ? [pointer.x, pointer.y] : null;
+    const stage = stageRef.current;
+    if (!stage) return null;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return null;
+    return [pointer.x / scaleRatio, pointer.y / scaleRatio];
   }
 
   function updateLayer(layerId: string, patch: Partial<DesignArtworkLayer>) {
@@ -234,7 +261,6 @@ export function ArtworkEditor2D({
   }
 
   function addImageLayer(src: string, source: DesignImageLayer["source"], prompt?: string) {
-    if (imageLayerCount >= MAX_IMAGE_LAYERS) return;
     const imageLayer: DesignImageLayer = {
       id: createLayerId(source),
       type: "image",
@@ -253,7 +279,7 @@ export function ArtworkEditor2D({
   }
 
   function handleImport(file: File | undefined) {
-    if (!file || imageLayerCount >= MAX_IMAGE_LAYERS || !file.type.startsWith("image/")) return;
+    if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") addImageLayer(reader.result, "upload");
@@ -261,9 +287,14 @@ export function ArtworkEditor2D({
     reader.readAsDataURL(file);
   }
 
-  function handleGenerateArtwork() {
+  async function handleGenerateArtwork() {
     if (imageLayerCount >= MAX_IMAGE_LAYERS) return;
-    addImageLayer(generateArtworkDataUrl(aiPrompt), "ai", aiPrompt);
+    try {
+      const src = await generateBananaLogoArtworkAsync({ brandName: aiPrompt }, aiPrompt);
+      addImageLayer(src, "ai", aiPrompt);
+    } catch (e) {
+      console.error("AI Artwork Generation Error:", e);
+    }
   }
 
   function undoLastStroke() {
@@ -279,6 +310,13 @@ export function ArtworkEditor2D({
     onLayersChange(layers.filter((l) => l.id !== selectedLayerId));
     onSelectedLayerChange(null);
   }
+
+  function clearAllLayers() {
+    if (layers.length === 0) return;
+    setShowClearConfirm(true);
+  }
+
+
 
   function exportPng() {
     const layer = contentLayerRef.current;
@@ -306,7 +344,7 @@ export function ArtworkEditor2D({
           <div className="flex items-center gap-1.5">
             <span className="text-[11px] font-black uppercase tracking-wide text-[#253D4E]">2D Print Artboard</span>
             <span className="text-[9px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
-              {effectiveWidth}×{effectivePrintArea.height}px
+              {baseWidth}×{effectivePrintArea.height}px
             </span>
           </div>
 
@@ -340,12 +378,11 @@ export function ArtworkEditor2D({
             </button>
             <button
               type="button"
-              disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
-              className="flex h-7 items-center gap-1 rounded-md border border-border bg-muted/30 px-2.5 text-[10.5px] font-bold text-[#253D4E] hover:bg-muted transition disabled:opacity-40 cursor-pointer"
+              className="flex h-7 items-center gap-1 rounded-md border border-border bg-muted/30 px-2.5 text-[10.5px] font-bold text-[#253D4E] hover:bg-muted transition cursor-pointer"
               onClick={() => fileInputRef.current?.click()}
             >
               <ImagePlus className="size-3" />
-              Hình ({imageLayerCount}/{MAX_IMAGE_LAYERS})
+              Hình ({imageLayerCount})
             </button>
           </div>
 
@@ -405,30 +442,6 @@ export function ArtworkEditor2D({
             </Button>
           </div>
 
-          {/* AI Input (flex-1 to stretch) */}
-          <div className="flex items-center gap-1 flex-1 min-w-[140px] max-w-[240px]">
-            <Input
-              id="editor-ai"
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleGenerateArtwork()}
-              disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
-              placeholder="Prompt AI..."
-              className="h-7 rounded-md bg-white text-[11px] px-2.5 flex-1"
-            />
-            <Button
-              type="button"
-              aria-label="Generate hình AI"
-              size="icon"
-              variant="outline"
-              className="h-7 w-7 rounded-md shrink-0 cursor-pointer"
-              disabled={imageLayerCount >= MAX_IMAGE_LAYERS}
-              onClick={handleGenerateArtwork}
-            >
-              <Sparkles className="size-3.5" />
-            </Button>
-          </div>
-
           <div className="h-4 w-px bg-border mx-0.5 shrink-0" />
 
           {/* Actions */}
@@ -456,6 +469,18 @@ export function ArtworkEditor2D({
               type="button"
               variant="outline"
               size="sm"
+              title="Tạo mới bảng trắng (xóa tất cả layer)"
+              className="h-7 gap-1 rounded-md px-2.5 text-[10.5px] font-bold text-amber-700 border-amber-200 bg-amber-50/50 hover:bg-amber-100/70 cursor-pointer disabled:opacity-50"
+              disabled={layers.length === 0}
+              onClick={clearAllLayers}
+            >
+              <FilePlus className="size-3 text-amber-600" /> Bảng trắng
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
               className="h-7 gap-1 rounded-md border-slate-200 bg-slate-50 px-2.5 text-[10.5px] font-bold text-[#253D4E] hover:bg-slate-100 cursor-pointer"
               onClick={exportPng}
             >
@@ -466,11 +491,13 @@ export function ArtworkEditor2D({
       </div>
 
       {/* ── Canvas ── */}
-      <div ref={containerRef} className="overflow-hidden bg-[linear-gradient(#e5e5e5_1px,transparent_1px),linear-gradient(90deg,#e5e5e5_1px,transparent_1px)] bg-[size:20px_20px] p-2.5">
+      <div ref={containerRef} className="overflow-hidden bg-[linear-gradient(#e5e5e5_1px,transparent_1px),linear-gradient(90deg,#e5e5e5_1px,transparent_1px)] bg-[size:20px_20px] p-2.5 flex items-center justify-center min-h-[360px] sm:min-h-[420px]">
         <Stage
           ref={stageRef}
-          width={effectiveWidth}
-          height={dimensions.height}
+          width={stageWidth}
+          height={stageHeight}
+          scaleX={scaleRatio}
+          scaleY={scaleRatio}
           className="mx-auto rounded-xl bg-white shadow-md"
           onMouseDown={handleStagePointerDown}
           onMouseMove={handleStagePointerMove}
@@ -484,8 +511,8 @@ export function ArtworkEditor2D({
             <Rect
               x={20}
               y={20}
-              width={effectiveWidth - 40}
-              height={dimensions.height - 40}
+              width={baseWidth - 40}
+              height={baseHeight - 40}
               cornerRadius={24}
               fill={cupColor}
               stroke="#D7C4B7"
@@ -630,6 +657,41 @@ export function ArtworkEditor2D({
           e.target.value = "";
         }}
       />
+      {/* MODAL XÁC NHẬN TẠO MỚI BẢNG TRẮNG */}
+      <Dialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white border border-slate-200 p-6">
+          <DialogHeader className="items-center text-center sm:items-start sm:text-left gap-1.5">
+            <DialogTitle className="text-base font-bold text-slate-800">
+              Tạo mới bảng trắng
+            </DialogTitle>
+            <DialogDescription className="text-xs font-medium text-slate-500">
+              Bạn có chắc chắn muốn xóa toàn bộ logo và hình vẽ hiện tại trên ly để bắt đầu bảng trắng mới không?
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-4 flex items-center justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowClearConfirm(false)}
+              className="rounded-xl text-xs font-semibold h-9 px-4 cursor-pointer"
+            >
+              Hủy bỏ
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                onLayersChange([]);
+                onSelectedLayerChange(null);
+                setShowClearConfirm(false);
+              }}
+              className="rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white h-9 px-4 cursor-pointer shadow-xs border-0"
+            >
+              Xác nhận tạo mới
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

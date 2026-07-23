@@ -210,6 +210,7 @@ function LoginForm() {
               />
               <button
                 type="button"
+                suppressHydrationWarning
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer flex items-center justify-center"
               >

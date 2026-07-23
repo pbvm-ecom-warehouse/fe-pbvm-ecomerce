@@ -10,6 +10,7 @@ import {
 } from "@/lib/auth-token";
 import { getApiBaseUrl, type ApiEnvelope, unwrapApiData } from "@/lib/api-contract";
 import { env } from "@/lib/env";
+import { useAuthStore } from "@/stores/auth-store";
 
 type RetryRequestConfig = InternalAxiosRequestConfig & {
   _retry?: boolean;
@@ -44,6 +45,8 @@ async function refreshAccessToken() {
   const refreshToken = getRefreshToken();
 
   if (!refreshToken) {
+    clearAuthTokens();
+    useAuthStore.getState().setUser(null);
     throw new Error("Missing refresh token");
   }
 
@@ -94,6 +97,13 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    const refreshToken = getRefreshToken();
+    if (!refreshToken) {
+      clearAuthTokens();
+      useAuthStore.getState().setUser(null);
+      return Promise.reject(error);
+    }
+
     originalRequest._retry = true;
 
     try {
@@ -102,6 +112,7 @@ apiClient.interceptors.response.use(
       return apiClient(originalRequest);
     } catch (refreshError) {
       clearAuthTokens();
+      useAuthStore.getState().setUser(null);
       return Promise.reject(refreshError);
     }
   },

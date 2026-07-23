@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { User, Palette, Trash2 } from "lucide-react";
+import { User, Palette, Trash2, Pencil } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -14,29 +14,72 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuthStore } from "@/stores/auth-store";
 import { useCartStore } from "@/stores/cart-store";
 import { createCustomCupProduct } from "@/features/cup-designer/utils/artwork";
 import { listMyDesigns, deleteDesign } from "@/features/cup-designer/services/design.service";
 
+const SAVED_DESIGNS_KEY = "cup_designer_saved_designs_v1";
+
+function loadSavedDesigns(): any[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(SAVED_DESIGNS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as any[];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedDesigns(designs: any[]) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(SAVED_DESIGNS_KEY, JSON.stringify(designs));
+  } catch {
+    // localStorage full
+  }
+}
+
+function mergeDesigns(local: any[], remote: any[]): any[] {
+  const remoteIds = new Set(remote.map((d) => d.id));
+  const localOnly = local.filter((d) => !remoteIds.has(d.id));
+  return [...remote, ...localOnly];
+}
+
 export default function AccountDesignsPage() {
   const user = useAuthStore((state) => state.user);
 
   // Saved designs state
-  const [designs, setDesigns] = useState<any[]>([]);
+  const [designs, setDesigns] = useState<any[]>(() => loadSavedDesigns());
   const [loadingDesigns, setLoadingDesigns] = useState(false);
   const addCustomPrintItem = useCartStore((state) => state.addCustomPrintItem);
 
   const fetchDesigns = async () => {
-    if (!user || user.type === "admin") return;
-    setDesigns([]);
     setLoadingDesigns(true);
-    try {
-      const data = await listMyDesigns();
-      setDesigns(data || []);
-    } catch (err) {
-      console.error("Failed to fetch designs:", err);
-    } finally {
+    const local = loadSavedDesigns();
+    setDesigns(local);
+
+    if (user && user.type !== "admin") {
+      try {
+        const data = await listMyDesigns();
+        const merged = mergeDesigns(local, data || []);
+        setDesigns(merged);
+        persistSavedDesigns(merged);
+      } catch (err) {
+        console.error("Failed to fetch designs from API:", err);
+      } finally {
+        setLoadingDesigns(false);
+      }
+    } else {
       setLoadingDesigns(false);
     }
   };
@@ -45,17 +88,30 @@ export default function AccountDesignsPage() {
     fetchDesigns();
   }, [user]);
 
-  const handleDeleteDesign = async (id: string) => {
-    if (!confirm("Bạn có chắc chắn muốn xóa mẫu thiết kế này khỏi thư viện?")) return;
+  // Delete confirmation modal state
+  const [designToDelete, setDesignToDelete] = useState<any | null>(null);
+
+  const handleConfirmDelete = async () => {
+    if (!designToDelete) return;
+    const id = designToDelete.id;
     try {
-      await deleteDesign(id);
-      setDesigns((current) => current.filter((d) => d.id !== id));
+      if (user && id && !String(id).startsWith("auto_")) {
+        await deleteDesign(id).catch((e) => console.warn("Delete design API error:", e));
+      }
+      setDesigns((current) => {
+        const updated = current.filter((d) => d.id !== id);
+        persistSavedDesigns(updated);
+        return updated;
+      });
       toast.success("Xóa thiết kế thành công!");
     } catch (err: any) {
       console.error(err);
       toast.error("Xóa thiết kế thất bại.");
+    } finally {
+      setDesignToDelete(null);
     }
   };
+
 
   if (!user) {
     return (
@@ -168,6 +224,29 @@ export default function AccountDesignsPage() {
                   toast.success(`Đã thêm mẫu "${design.name}" vào giỏ hàng với số lượng mặc định (100 ly).`);
                 };
 
+                const handleEditDesign = () => {
+                  let snapshot: any = null;
+                  if (typeof design.file === "string" && design.file.trimStart().startsWith("{")) {
+                    try {
+                      snapshot = JSON.parse(design.file);
+                    } catch {}
+                  }
+
+                  if (snapshot?.artwork) {
+                    const draft = {
+                      materialType: snapshot.artwork.cup?.materialType || "clear",
+                      style: snapshot.artwork.cup?.style || "straight",
+                      size: snapshot.artwork.cup?.size || "500ml",
+                      printHeightPercent: snapshot.artwork.artboard?.printHeightPercent || 60,
+                      layers: snapshot.artwork.layers || [],
+                      quantity: 100,
+                    };
+                    try {
+                      localStorage.setItem("cup_designer_draft_v1", JSON.stringify(draft));
+                    } catch {}
+                  }
+                };
+
                 return (
                   <div key={design.id} className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xs transition-all hover:shadow-md">
                     {/* Preview Image Container */}
@@ -194,15 +273,25 @@ export default function AccountDesignsPage() {
                         </p>
                       </div>
 
-                      <div className="flex gap-2 w-full">
+                      <div className="flex gap-1.5 w-full">
                         <Button
                           onClick={handleAddToCart}
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] h-8 font-bold border-0 shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1"
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] h-8 font-bold border-0 shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1 px-2"
                         >
-                          Đặt in (100c)
+                          Đặt in
                         </Button>
                         <Button
-                          onClick={() => handleDeleteDesign(design.id)}
+                          asChild
+                          variant="outline"
+                          className="flex-1 border-emerald-300 bg-emerald-50/60 hover:bg-emerald-100/80 text-emerald-800 rounded-xl text-[11px] h-8 font-bold shadow-2xs active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1 px-2"
+                        >
+                          <Link href={`/design-cup?loadDesignId=${design.id}`} onClick={handleEditDesign}>
+                            <Pencil size={11} className="text-emerald-700 shrink-0" />
+                            Thiết kế
+                          </Link>
+                        </Button>
+                        <Button
+                          onClick={() => setDesignToDelete(design)}
                           variant="outline"
                           className="size-8 p-0 border-rose-100 hover:border-rose-200 hover:bg-rose-50 text-rose-500 rounded-xl shrink-0 cursor-pointer flex items-center justify-center"
                           title="Xóa thiết kế"
@@ -213,11 +302,49 @@ export default function AccountDesignsPage() {
                     </div>
                   </div>
                 );
+
               })}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* MODAL XÁC NHẬN XÓA THIẾT KẾ */}
+      <Dialog open={!!designToDelete} onOpenChange={(open) => !open && setDesignToDelete(null)}>
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white border border-slate-200 p-6">
+          <DialogHeader className="items-center text-center sm:items-start sm:text-left gap-2">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 sm:mx-0">
+              <Trash2 className="size-6" />
+            </div>
+            <DialogTitle className="text-base font-bold text-slate-800">
+              Xác nhận xóa mẫu thiết kế
+            </DialogTitle>
+            <DialogDescription className="text-xs font-medium text-slate-500">
+              Bạn có chắc chắn muốn xóa mẫu thiết kế{" "}
+              <strong className="text-slate-800 font-bold">"{designToDelete?.name}"</strong> khỏi thư viện không?
+              Hành động này sẽ xóa vĩnh viễn và không thể khôi phục.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-4 flex items-center justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDesignToDelete(null)}
+              className="rounded-xl text-xs font-semibold h-9 px-4 cursor-pointer"
+            >
+              Hủy bỏ
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmDelete}
+              className="rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white h-9 px-4 cursor-pointer shadow-xs border-0"
+            >
+              Xác nhận xóa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

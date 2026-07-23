@@ -47,6 +47,11 @@ export function CartPageClient() {
   const toggleSelectItem = useCartStore((state) => state.toggleSelectItem);
   const toggleSelectAll = useCartStore((state) => state.toggleSelectAll);
   const restoreItems = useCartStore((state) => state.restoreItems);
+  const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
+
+  useEffect(() => {
+    fetchAndSyncCart();
+  }, [fetchAndSyncCart]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

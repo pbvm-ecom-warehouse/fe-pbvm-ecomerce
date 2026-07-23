@@ -46,10 +46,12 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  suppressHydrationWarning = true,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
+    suppressHydrationWarning?: boolean;
   }) {
   const Comp = asChild ? Slot.Root : "button";
 
@@ -58,8 +60,8 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
+      suppressHydrationWarning={suppressHydrationWarning}
       className={cn(buttonVariants({ variant, size, className }))}
-      suppressHydrationWarning
       {...props}
     />
   );
