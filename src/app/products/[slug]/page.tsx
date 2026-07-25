@@ -11,9 +11,5 @@ export default async function ProductDetailPage({
   const { slug } = await params;
   const product = await getCatalogProductBySlug(slug);
 
-  if (!product) {
-    notFound();
-  }
-
-  return <ProductDetailView product={product} />;
+  return <ProductDetailView initialProduct={product} slug={slug} />;
 }

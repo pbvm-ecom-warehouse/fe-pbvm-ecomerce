@@ -111,91 +111,64 @@ export async function adminListProducts() {
     });
 
     // Enrich each active product with variants from its detail page and local draft/override matches
-    const enrichedActive = await Promise.all(
-      nonDeletedActive.map(async (p) => {
-        const id = String(p.id || p._id || "");
-        const pSlug = String(p.slug || "").toLowerCase();
-        const pSku = String(p.productRefId || p.sku || "");
+    // Enrich each active product with local draft/override matches without calling detail API for every product
+    const enrichedActive = nonDeletedActive.map((p) => {
+      const id = String(p.id || p._id || "");
+      const pSlug = String(p.slug || "").toLowerCase();
+      const pSku = String(p.productRefId || p.sku || "");
 
-        const draftMatch = draftBySlug.get(pSlug) || draftById.get(id) || {};
-        const ov = {
-          ...draftMatch,
-          ...(overrides[id] || {}),
-          ...(pSlug ? overrides[pSlug] : {}),
-          ...(pSku ? overrides[pSku] : {}),
-        };
+      const draftMatch = draftBySlug.get(pSlug) || draftById.get(id) || {};
+      const ov = {
+        ...draftMatch,
+        ...(overrides[id] || {}),
+        ...(pSlug ? overrides[pSlug] : {}),
+        ...(pSku ? overrides[pSku] : {}),
+      };
 
-        try {
-          const detail = await publicApiFetch<any>(
-            `/catalog/products/${encodeURIComponent(p.slug)}`,
-          );
+      const finalImages = cleanImageCandidate(
+        ov.images,
+        ov.imageUrl,
+        p.images,
+        p.imageUrl,
+      );
 
-          const finalImages = cleanImageCandidate(
-            ov.images,
-            ov.imageUrl,
-            p.images,
-            p.imageUrl,
-            detail?.images,
-            detail?.imageUrl,
-          );
+      const beVariants =
+        Array.isArray(p.variants) && p.variants.length > 0
+          ? p.variants
+          : null;
 
-          // BE là source of truth cho variants: ưu tiên lấy variants từ BE detail / p.variants trước ov.variants
-          const beVariants =
-            Array.isArray(detail?.variants) && detail.variants.length > 0
-              ? detail.variants
-              : Array.isArray(p.variants) && p.variants.length > 0
-                ? p.variants
-                : null;
+      let baseVariants = beVariants ?? (Array.isArray(ov.variants) ? ov.variants : []);
+      if (baseVariants.length === 0) {
+        baseVariants = [
+          {
+            id: `var-${id}`,
+            sku: p.productRefId || p.sku || (p.slug ? p.slug.toUpperCase() : "SKU"),
+            productId: id,
+            price: ov.price ?? p.price ?? 0,
+            availableQty: p.stockSnapshot ?? p.availableQty ?? 0,
+            fulfillmentType: p.fulfillmentType || "STANDARD",
+            attributes: p.attributes || {},
+          },
+        ];
+      }
 
-          let baseVariants = beVariants ?? (Array.isArray(ov.variants) ? ov.variants : []);
-          if (baseVariants.length === 0) {
-            baseVariants = [
-              {
-                id: `var-${id}`,
-                sku: p.productRefId || p.sku || (p.slug ? p.slug.toUpperCase() : "SKU"),
-                productId: id,
-                price: ov.price ?? detail?.price ?? p.price ?? 0,
-                availableQty: p.stockSnapshot ?? p.availableQty ?? 0,
-                fulfillmentType: p.fulfillmentType || "STANDARD",
-                attributes: p.attributes || {},
-              },
-            ];
-          }
+      if (ov.price !== undefined || ov.fulfillmentType) {
+        baseVariants = baseVariants.map((v: any) => ({
+          ...v,
+          ...(ov.price !== undefined ? { price: ov.price } : {}),
+          ...(ov.fulfillmentType ? { fulfillmentType: ov.fulfillmentType } : {}),
+        }));
+      }
 
-          if (ov.price !== undefined || ov.fulfillmentType) {
-            baseVariants = baseVariants.map((v: any) => ({
-              ...v,
-              ...(ov.price !== undefined ? { price: ov.price } : {}),
-              ...(ov.fulfillmentType ? { fulfillmentType: ov.fulfillmentType } : {}),
-            }));
-          }
-
-          return {
-            ...p,
-            ...detail,
-            id,
-            ...ov,
-            price: ov.price ?? detail?.price ?? p.price,
-            variants: baseVariants,
-            images: finalImages,
-          };
-        } catch {
-          const finalImages = cleanImageCandidate(
-            ov.images,
-            ov.imageUrl,
-            p.images,
-            p.imageUrl,
-          );
-          return {
-            ...p,
-            id,
-            variants: ov.variants || p.variants || [],
-            ...ov,
-            images: finalImages,
-          };
-        }
-      }),
-    );
+      return {
+        ...p,
+        id,
+        ...ov,
+        price: ov.price ?? p.price,
+        variants: baseVariants,
+        images: finalImages,
+      };
+    });
 
     // Filter out drafts that were merged into active or deleted
     const activeIds = new Set(enrichedActive.map((p) => String(p.id || p._id)));

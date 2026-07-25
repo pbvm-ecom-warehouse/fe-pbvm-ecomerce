@@ -53,6 +53,83 @@ const FULFILLMENT_LABELS: Record<string, string> = {
   CUSTOM_PRINT: "Hàng khách tự thiết kế",
 };
 
+function getProductType(product: any, sku: string = ""): "CUP" | "MATERIAL" | "PACKAGING" {
+  const catStr = String(
+    product?.category?.slug || product?.category || product?.categoryId || ""
+  ).toLowerCase();
+  const nameStr = String(product?.name || "").toLowerCase();
+  const skuUpper = String(sku || product?.sku || product?.slug || "").toUpperCase();
+
+  if (
+    catStr.includes("material") ||
+    catStr.includes("ingredient") ||
+    catStr.includes("nguyen-lieu") ||
+    catStr.includes("nguyen_lieu") ||
+    nameStr.includes("nguyên liệu") ||
+    nameStr.includes("trà") ||
+    nameStr.includes("đường") ||
+    nameStr.includes("bột") ||
+    nameStr.includes("siro") ||
+    skuUpper.startsWith("MAT")
+  ) {
+    return "MATERIAL";
+  }
+
+  if (
+    catStr.includes("packaging") ||
+    catStr.includes("bao-bi") ||
+    catStr.includes("bao_bi") ||
+    nameStr.includes("bao bì") ||
+    nameStr.includes("túi") ||
+    nameStr.includes("ống hút") ||
+    nameStr.includes("muỗng") ||
+    nameStr.includes("nắp") ||
+    skuUpper.startsWith("PKG")
+  ) {
+    return "PACKAGING";
+  }
+
+  return "CUP";
+}
+
+function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Record<string, any> = {}) {
+  const capacityVal = attrs.capacity || attrs.size || attrs.spec || attrs.weight || "";
+  const styleVal = attrs.style || attrs.packaging || attrs.specification || "";
+  const materialVal = attrs.material || attrs.origin || attrs.type || attrs.brand || "";
+
+  if (type === "MATERIAL") {
+    return {
+      col1Label: "TRỌNG LƯỢNG",
+      col1Val: capacityVal || "-",
+      col2Label: "ĐÓNG GÓI",
+      col2Val: styleVal || "-",
+      col3Label: "NGUỒN GỐC",
+      col3Val: materialVal || "-",
+    };
+  }
+
+  if (type === "PACKAGING") {
+    return {
+      col1Label: "KÍCH THƯỚC",
+      col1Val: capacityVal || "-",
+      col2Label: "QUY CÁCH BAO BÌ",
+      col2Val: styleVal || "-",
+      col3Label: "CHẤT LIỆU",
+      col3Val: materialVal || "-",
+    };
+  }
+
+  // Default for CUP
+  return {
+    col1Label: "DUNG TÍCH",
+    col1Val: capacityVal || "-",
+    col2Label: "KIỂU DÁNG",
+    col2Val: styleVal || "-",
+    col3Label: "CHẤT LIỆU",
+    col3Val: materialVal || "-",
+  };
+}
+
 export default function ProductVariantManagementPage() {
   const params = useParams();
   const router = useRouter();
@@ -132,9 +209,9 @@ export default function ProductVariantManagementPage() {
       );
       setProdCategoryId(
         foundProd.categoryId ||
-          foundProd.category?._id ||
-          foundFoundCategory(catsList, foundProd) ||
-          (catsList[0]?.id || "")
+        foundProd.category?._id ||
+        foundFoundCategory(catsList, foundProd) ||
+        (catsList[0]?.id || "")
       );
 
       // 2. GỌI API LẤY VARIANT THỰC TẾ TỪ CSDL DATABASE
@@ -147,8 +224,8 @@ export default function ProductVariantManagementPage() {
         fetchedVariants.length > 0
           ? fetchedVariants
           : Array.isArray(foundProd.variants) && foundProd.variants.length > 0
-          ? foundProd.variants
-          : [];
+            ? foundProd.variants
+            : [];
 
       if (rawVars.length > 0) {
         setProdVariants(
@@ -604,37 +681,43 @@ export default function ProductVariantManagementPage() {
                       </div>
 
                       {/* THÔNG SỐ TỪ CSDL DATABASE */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                        <div>
-                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                            Dung tích / Size
-                          </span>
-                          <span className="font-bold text-slate-900">{capacityVal || "-"}</span>
-                        </div>
+                      {(() => {
+                        const pType = getProductType(product, varItem.sku);
+                        const info = getVariantInfoLabels(pType, attrs);
+                        return (
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
+                            <div>
+                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
+                                {info.col1Label}
+                              </span>
+                              <span className="font-bold text-slate-900">{info.col1Val}</span>
+                            </div>
 
-                        <div>
-                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                            Kiểu dáng
-                          </span>
-                          <span className="font-bold text-slate-800">{styleVal || "-"}</span>
-                        </div>
+                            <div>
+                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
+                                {info.col2Label}
+                              </span>
+                              <span className="font-bold text-slate-800">{info.col2Val}</span>
+                            </div>
 
-                        <div>
-                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                            Chất liệu
-                          </span>
-                          <span className="font-bold text-slate-800">{materialVal || "-"}</span>
-                        </div>
+                            <div>
+                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
+                                {info.col3Label}
+                              </span>
+                              <span className="font-bold text-slate-800">{info.col3Val}</span>
+                            </div>
 
-                        <div>
-                          <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                            Tồn kho DB
-                          </span>
-                          <span className="font-black text-emerald-700">
-                            {varItem.availableQty ?? 0} sản phẩm
-                          </span>
-                        </div>
-                      </div>
+                            <div>
+                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
+                                Tồn kho DB
+                              </span>
+                              <span className="font-black text-emerald-700">
+                                {varItem.availableQty ?? 0} sản phẩm
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* CHỈNH SỬA GIÁ BÁN VARIANT */}
                       <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">

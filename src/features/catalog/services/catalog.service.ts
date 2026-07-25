@@ -47,7 +47,7 @@ function getValidImageUrl(img: string | undefined): string {
  * Map một product detail (từ /catalog/products/:slug có variants)
  * thành CatalogProduct dùng ở FE.
  */
-function mapProductDetail(p: any): CatalogProduct {
+export function mapProductDetail(p: any): CatalogProduct {
   let ov: any = {};
   if (typeof window !== "undefined") {
     try {
@@ -308,22 +308,12 @@ export async function listCatalogProducts() {
       return emptyCatalogResponse;
     }
 
-    // Enrich each product with variant/price via detail endpoint
-    const enriched = await Promise.all(
-      rawProducts.map(async (p) => {
-        try {
-          if (Array.isArray(p.variants) && p.variants.length > 0) {
-            return mapProductDetail(p);
-          }
-          const detail = await publicApiFetch<any>(
-            `/catalog/products/${encodeURIComponent(p.slug)}`,
-          );
-          return detail ? mapProductDetail({ ...p, ...detail }) : mapProductListItem(p);
-        } catch {
-          return mapProductListItem(p);
-        }
-      }),
-    );
+    const enriched = rawProducts.map((p) => {
+      if (Array.isArray(p.variants) && p.variants.length > 0) {
+        return mapProductDetail(p);
+      }
+      return mapProductListItem(p);
+    });
 
     return {
       data: enriched,
@@ -346,20 +336,38 @@ export async function listCatalogProducts() {
  * Lấy chi tiết sản phẩm theo slug từ BE — có đầy đủ variants và giá.
  */
 export async function getCatalogProductBySlug(slug: string) {
+  const decodedSlug = decodeURIComponent(slug);
+  const normalizedSlug = decodedSlug.trim();
+  const hyphenatedSlug = normalizedSlug.toLowerCase().replace(/\s+/g, "-");
+
+  const targetSlug = hyphenatedSlug || decodedSlug;
   try {
     const p = await publicApiFetch<any>(
-      `/catalog/products/${encodeURIComponent(slug)}`,
+      `/catalog/products/${encodeURIComponent(targetSlug)}`,
     );
     if (p) return mapProductDetail(p);
-  } catch (error) {
-    console.warn(`getCatalogProductBySlug(${slug}): BE error:`, error);
+  } catch {
+    if (decodedSlug !== targetSlug) {
+      try {
+        const p = await publicApiFetch<any>(
+          `/catalog/products/${encodeURIComponent(decodedSlug)}`,
+        );
+        if (p) return mapProductDetail(p);
+      } catch {}
+    }
   }
 
   // Fallback check local drafts/overrides if backend detail is missing or stale
   if (typeof window !== "undefined") {
     try {
       const drafts = JSON.parse(localStorage.getItem("ecom_local_drafts") || "[]");
-      const found = drafts.find((d: any) => d.slug === slug || d.id === slug || d._id === slug);
+      const found = drafts.find(
+        (d: any) =>
+          d.slug === decodedSlug ||
+          d.slug === hyphenatedSlug ||
+          d.id === decodedSlug ||
+          d._id === decodedSlug
+      );
       if (found) return mapProductDetail(found);
     } catch (e) {
       console.error(e);
