@@ -35,6 +35,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getOrder, cancelOrder } from "@/features/order/services/order.service";
+import { cleanProductName } from "@/features/catalog/services/catalog.service";
 import { useCartStore } from "@/stores/cart-store";
 import { CupConfigDetails } from "@/features/cart/components/cup-config-details";
 import { formatCurrency } from "@/utils/format-currency";
@@ -414,7 +415,7 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
               {order.items?.map((item: any, idx: number) => (
                 <div key={idx} className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between gap-4 items-start sm:items-center hover:bg-slate-50/50 transition-colors">
                   <div className="space-y-1 min-w-0">
-                    <p className="font-extrabold text-sm text-[#253D4E] truncate">{item.name || item.sku}</p>
+                    <p className="font-extrabold text-sm text-[#253D4E] truncate">{cleanProductName(item.name, item.sku)}</p>
                     <p className="text-[10px] text-muted-foreground font-bold">SKU: {item.sku}</p>
                     <CupConfigDetails item={item} />
                     {item.isPrintItem && item.designId && (

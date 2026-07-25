@@ -27,6 +27,7 @@ import { useCartStore } from "@/stores/cart-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/utils/format-currency";
 import { getOrder, cancelOrder } from "@/features/order/services/order.service";
+import { cleanProductName } from "@/features/catalog/services/catalog.service";
 import {
   Dialog,
   DialogContent,
@@ -96,7 +97,11 @@ export function CartPageClient() {
                     : `standard:${item.sku}`,
                   productId: item.sku,
                   productRefId: item.sku,
-                  name: item.name || item.sku,
+                  name: item.name && item.name !== item.sku
+                    ? item.name
+                    : (item.sku && (item.sku.includes("CUP") || item.sku.includes("HRT") || item.sku.includes("LY"))
+                      ? `Ly Nhựa Nắp Tim ${item.sku.match(/(\d{3,4})/)?.[1] ? item.sku.match(/(\d{3,4})/)?.[1] + "ml" : ""}`.trim()
+                      : item.sku),
                   slug: item.sku,
                   price: item.unitPrice,
                   quantity: item.quantity,
@@ -249,11 +254,11 @@ export function CartPageClient() {
                     <div>
                       {item.fulfillmentType === "CUSTOM_PRINT" ? (
                         <span className="font-extrabold text-foreground text-sm sm:text-base leading-snug block">
-                          {item.name}
+                          {cleanProductName(item.name, item.productRefId || item.productId)}
                         </span>
                       ) : (
                         <Link href={`/products/${item.slug}`} className="font-extrabold text-foreground text-sm sm:text-base leading-snug hover:text-primary transition-colors">
-                          {item.name}
+                          {cleanProductName(item.name, item.productRefId || item.productId)}
                         </Link>
                       )}
                     </div>

@@ -303,12 +303,22 @@ export function WmsSyncToEcomModal({
       const product = await adminCreateProduct(productPayload);
       const productId = String(product.id || product._id);
 
-      // 2. Create Variant with existing WMS SKU
+      // 2. Create Variant with existing WMS SKU & attributes
       const variantPayload = {
         sku: selectedItem.sku,
         productId,
         price: Number(ecomPrice) || 0,
         fulfillmentType: "STANDARD" as FulfillmentType,
+        attributes: {
+          capacity: ecomSize,
+          size: ecomSize,
+          spec: ecomSize,
+          style: ecomStyle,
+          packaging: ecomStyle,
+          material: ecomMaterial,
+          origin: ecomMaterial,
+          color: ecomColor,
+        },
       };
 
       await adminCreateVariant(variantPayload);
@@ -428,6 +438,112 @@ export function WmsSyncToEcomModal({
                 ))}
               </select>
             </div>
+
+            {/* 1.5. XEM TRƯỚC & CHỈNH SỬA THÔNG SỐ VARIANT (DUNG TÍCH, KIỂU DÁNG, CHẤT LIỆU, TRỌNG LƯỢNG, XUẤT XỨ) */}
+            {selectedItem && (() => {
+              const pType =
+                selectedItem.type === "MATERIAL" || selectedItem.sku?.startsWith("MAT")
+                  ? "MATERIAL"
+                  : selectedItem.type === "PACKAGING" || selectedItem.sku?.startsWith("PKG")
+                    ? "PACKAGING"
+                    : "CUP";
+
+              const col1Label =
+                pType === "MATERIAL"
+                  ? "TRỌNG LƯỢNG"
+                  : pType === "PACKAGING"
+                    ? "KÍCH THƯỚC"
+                    : "DUNG TÍCH";
+
+              const col2Label =
+                pType === "MATERIAL"
+                  ? "QUY CÁCH ĐÓNG GÓI"
+                  : pType === "PACKAGING"
+                    ? "QUY CÁCH BAO BÌ"
+                    : "KIỂU DÁNG";
+
+              const col3Label =
+                pType === "MATERIAL"
+                  ? "NGUỒN GỐC"
+                  : pType === "PACKAGING"
+                    ? "CHẤT LIỆU BAO BÌ"
+                    : "CHẤT LIỆU";
+
+              return (
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                    <span>XEM TRƯỚC THÔNG SỐ VARIANT SẼ ĐẨY LÊN</span>
+                    <span className="font-mono text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md border border-emerald-300/60 text-[11px]">
+                      Tồn kho WMS: {(selectedItem as any).totalQuantity ?? (selectedItem as any).availableQty ?? 0}
+                    </span>
+                  </div>
+
+                  {/* THÔNG SỐ BANNER PREVIEW */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3 rounded-xl bg-white border border-slate-200 text-xs shadow-2xs">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        {col1Label}
+                      </span>
+                      <span className="font-bold text-slate-900">{ecomSize || "-"}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        {col2Label}
+                      </span>
+                      <span className="font-bold text-slate-800">{ecomStyle || "-"}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        {col3Label}
+                      </span>
+                      <span className="font-bold text-slate-800">{ecomMaterial || "-"}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
+                        TỒN KHO DB
+                      </span>
+                      <span className="font-black text-emerald-700">
+                        {(selectedItem as any).totalQuantity ?? (selectedItem as any).availableQty ?? 0} sản phẩm
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* CHỈNH SỬA TRỰC TIẾP CÁC THÔNG SỐ VARIANT */}
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div>
+                      <Label className="text-[10.5px] font-bold text-slate-600 block mb-1">{col1Label}</Label>
+                      <Input
+                        value={ecomSize}
+                        onChange={(e) => setEcomSize(e.target.value)}
+                        placeholder="500ml / 500g"
+                        className="h-8 text-xs rounded-lg font-bold bg-white"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10.5px] font-bold text-slate-600 block mb-1">{col2Label}</Label>
+                      <Input
+                        value={ecomStyle}
+                        onChange={(e) => setEcomStyle(e.target.value)}
+                        placeholder="Nắp phẳng / Túi Kraft"
+                        className="h-8 text-xs rounded-lg font-bold bg-white"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10.5px] font-bold text-slate-600 block mb-1">{col3Label}</Label>
+                      <Input
+                        value={ecomMaterial}
+                        onChange={(e) => setEcomMaterial(e.target.value)}
+                        placeholder="Nhựa PET / Đài Loan"
+                        className="h-8 text-xs rounded-lg font-bold bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* 2. Danh mục Ecommerce */}
             <div className="space-y-1.5">

@@ -55,6 +55,7 @@ import {
   addAddress,
   type AddressResponse,
 } from "@/features/checkout/services/checkout.service";
+import { cleanProductName } from "@/features/catalog/services/catalog.service";
 import { getOrder, cancelOrder } from "@/features/order/services/order.service";
 import { apiClient } from "@/lib/api-client";
 import { unwrapApiData } from "@/lib/api-contract";
@@ -509,7 +510,7 @@ export function CheckoutForm() {
                 {pendingOrder.items.map((item: any, idx: number) => (
                   <div key={idx} className="flex justify-between items-center py-2 text-xs">
                     <div className="min-w-0 flex-1">
-                      <p className="font-bold text-foreground truncate">{item.name || item.sku}</p>
+                      <p className="font-bold text-foreground truncate">{cleanProductName(item.name, item.sku)}</p>
                       <p className="text-[10px] text-muted-foreground">Số lượng: {item.quantity}</p>
                     </div>
                     <span className="font-semibold text-foreground shrink-0 pl-2">
@@ -952,7 +953,7 @@ export function CheckoutForm() {
                   </div>
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-bold text-foreground truncate leading-tight">{item.name}</h4>
+                    <h4 className="text-xs font-bold text-foreground truncate leading-tight">{cleanProductName(item.name, item.productRefId || item.productId)}</h4>
                     <CupConfigDetails item={item} />
                     <div className="flex items-center justify-between mt-1 text-[11px] text-muted-foreground font-medium">
                       <span>{formatCurrency(item.price)} x {item.quantity}</span>

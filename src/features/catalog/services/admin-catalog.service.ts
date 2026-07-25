@@ -111,91 +111,64 @@ export async function adminListProducts() {
     });
 
     // Enrich each active product with variants from its detail page and local draft/override matches
-    const enrichedActive = await Promise.all(
-      nonDeletedActive.map(async (p) => {
-        const id = String(p.id || p._id || "");
-        const pSlug = String(p.slug || "").toLowerCase();
-        const pSku = String(p.productRefId || p.sku || "");
+    // Enrich each active product with local draft/override matches without calling detail API for every product
+    const enrichedActive = nonDeletedActive.map((p) => {
+      const id = String(p.id || p._id || "");
+      const pSlug = String(p.slug || "").toLowerCase();
+      const pSku = String(p.productRefId || p.sku || "");
 
-        const draftMatch = draftBySlug.get(pSlug) || draftById.get(id) || {};
-        const ov = {
-          ...draftMatch,
-          ...(overrides[id] || {}),
-          ...(pSlug ? overrides[pSlug] : {}),
-          ...(pSku ? overrides[pSku] : {}),
-        };
+      const draftMatch = draftBySlug.get(pSlug) || draftById.get(id) || {};
+      const ov = {
+        ...draftMatch,
+        ...(overrides[id] || {}),
+        ...(pSlug ? overrides[pSlug] : {}),
+        ...(pSku ? overrides[pSku] : {}),
+      };
 
-        try {
-          const detail = await publicApiFetch<any>(
-            `/catalog/products/${encodeURIComponent(p.slug)}`,
-          );
+      const finalImages = cleanImageCandidate(
+        ov.images,
+        ov.imageUrl,
+        p.images,
+        p.imageUrl,
+      );
 
-          const finalImages = cleanImageCandidate(
-            ov.images,
-            ov.imageUrl,
-            p.images,
-            p.imageUrl,
-            detail?.images,
-            detail?.imageUrl,
-          );
+      const beVariants =
+        Array.isArray(p.variants) && p.variants.length > 0
+          ? p.variants
+          : null;
 
-          // BE là source of truth cho variants: ưu tiên lấy variants từ BE detail / p.variants trước ov.variants
-          const beVariants =
-            Array.isArray(detail?.variants) && detail.variants.length > 0
-              ? detail.variants
-              : Array.isArray(p.variants) && p.variants.length > 0
-                ? p.variants
-                : null;
+      let baseVariants = beVariants ?? (Array.isArray(ov.variants) ? ov.variants : []);
+      if (baseVariants.length === 0) {
+        baseVariants = [
+          {
+            id: `var-${id}`,
+            sku: p.productRefId || p.sku || (p.slug ? p.slug.toUpperCase() : "SKU"),
+            productId: id,
+            price: ov.price ?? p.price ?? 0,
+            availableQty: p.stockSnapshot ?? p.availableQty ?? 0,
+            fulfillmentType: p.fulfillmentType || "STANDARD",
+            attributes: p.attributes || {},
+          },
+        ];
+      }
 
-          let baseVariants = beVariants ?? (Array.isArray(ov.variants) ? ov.variants : []);
-          if (baseVariants.length === 0) {
-            baseVariants = [
-              {
-                id: `var-${id}`,
-                sku: p.productRefId || p.sku || (p.slug ? p.slug.toUpperCase() : "SKU"),
-                productId: id,
-                price: ov.price ?? detail?.price ?? p.price ?? 0,
-                availableQty: p.stockSnapshot ?? p.availableQty ?? 0,
-                fulfillmentType: p.fulfillmentType || "STANDARD",
-                attributes: p.attributes || {},
-              },
-            ];
-          }
+      if (ov.price !== undefined || ov.fulfillmentType) {
+        baseVariants = baseVariants.map((v: any) => ({
+          ...v,
+          ...(ov.price !== undefined ? { price: ov.price } : {}),
+          ...(ov.fulfillmentType ? { fulfillmentType: ov.fulfillmentType } : {}),
+        }));
+      }
 
-          if (ov.price !== undefined || ov.fulfillmentType) {
-            baseVariants = baseVariants.map((v: any) => ({
-              ...v,
-              ...(ov.price !== undefined ? { price: ov.price } : {}),
-              ...(ov.fulfillmentType ? { fulfillmentType: ov.fulfillmentType } : {}),
-            }));
-          }
-
-          return {
-            ...p,
-            ...detail,
-            id,
-            ...ov,
-            price: ov.price ?? detail?.price ?? p.price,
-            variants: baseVariants,
-            images: finalImages,
-          };
-        } catch {
-          const finalImages = cleanImageCandidate(
-            ov.images,
-            ov.imageUrl,
-            p.images,
-            p.imageUrl,
-          );
-          return {
-            ...p,
-            id,
-            variants: ov.variants || p.variants || [],
-            ...ov,
-            images: finalImages,
-          };
-        }
-      }),
-    );
+      return {
+        ...p,
+        id,
+        ...ov,
+        price: ov.price ?? p.price,
+        variants: baseVariants,
+        images: finalImages,
+      };
+    });
 
     // Filter out drafts that were merged into active or deleted
     const activeIds = new Set(enrichedActive.map((p) => String(p.id || p._id)));
@@ -757,7 +730,7 @@ export async function adminUpdateVariant(
   if (data.price !== undefined) patchPayload.price = Number(data.price);
   if (data.fulfillmentType !== undefined) patchPayload.fulfillmentType = data.fulfillmentType;
 
-  const isLocalId = id.startsWith("local-") || id.startsWith("var-");
+  const isLocalId = id.startsWith("local-") || id.startsWith("var-") || id.startsWith("wms-");
   let updated: any = null;
 
   if (!isLocalId) {
@@ -771,17 +744,15 @@ export async function adminUpdateVariant(
       const errMessage = error?.response?.data?.message || error?.message || "PATCH /admin/catalog/variants failed";
       console.info(`[adminUpdateVariant] Backend PATCH call fallback (${errMessage}). Updating local variant...`);
       // Nếu variant chưa tồn tại trên BE (404 / NOT_FOUND), tự động POST tạo mới
-      if (
-        (error?.response?.status === 404 || error?.response?.data?.error?.code?.includes("NOT_FOUND")) &&
-        data.productId &&
-        data.price !== undefined
-      ) {
+      const is404 = error?.response?.status === 404 || error?.response?.data?.error?.code?.includes("NOT_FOUND") || String(error?.response?.data?.message).includes("NotFound");
+      if (is404 && (data.productId || patchPayload.productId)) {
         try {
+          const targetProdId = data.productId || patchPayload.productId;
           console.info(`[Auto-Persist Variant] Variant ${id} not found on BE. Creating variant via POST...`);
           updated = await adminCreateVariant({
             sku: data.sku || "SKU",
-            productId: data.productId,
-            price: Number(data.price),
+            productId: targetProdId,
+            price: Number(data.price ?? 0),
             attributes: data.attributes || {},
             fulfillmentType: data.fulfillmentType || "STANDARD",
           });

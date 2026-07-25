@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState, useMemo, useEffect } from "react";
 import { subscribeProductSync } from "@/features/catalog/services/admin-catalog.service";
+import { mapProductDetail } from "@/features/catalog/services/catalog.service";
 import {
   Award,
   BadgePercent,
@@ -39,7 +40,8 @@ const categoryCopy: Record<CatalogProduct["category"], string> = {
   custom_print: "Ly in theo yêu cầu",
 };
 
-function getVendorName(product: CatalogProduct) {
+function getVendorName(product: CatalogProduct | null) {
+  if (!product) return "PBVM Supplier";
   if (product.slug.includes("kievit")) return "Kievit Indo";
   if (product.slug.includes("tra-den") || product.slug.includes("phuc-long")) return "Phúc Long";
   if (product.slug.includes("gia-uy")) return "Gia Uy";
@@ -48,12 +50,14 @@ function getVendorName(product: CatalogProduct) {
   return "PBVM Supplier";
 }
 
-function getProductImages(product: CatalogProduct): string[] {
+function getProductImages(product: CatalogProduct | null): string[] {
+  if (!product) return ["/images/product-placeholder.svg"];
   const mainImage = product.imageUrl || "/images/product-placeholder.svg";
   return [mainImage];
 }
 
-function getProductSizes(product: CatalogProduct): string[] {
+function getProductSizes(product: CatalogProduct | null): string[] {
+  if (!product) return [];
   if (product.variants && product.variants.length > 0) {
     const extracted = product.variants
       .map((v) => {
@@ -109,8 +113,6 @@ function getProductSizes(product: CatalogProduct): string[] {
   return ["Chai 1L", "Can 2.5kg", "Thùng"];
 }
 
-
-
 function getVariantLabel(v: ProductVariant): string {
   const attrSize =
     v.attributes?.size ||
@@ -132,18 +134,63 @@ function getVariantLabel(v: ProductVariant): string {
   return v.sku;
 }
 
-export function ProductDetailView({ product: initialProduct }: { product: CatalogProduct }) {
-  const [product, setProduct] = useState<CatalogProduct>(initialProduct);
+export function ProductDetailView({
+  initialProduct,
+  slug: targetSlug,
+}: {
+  initialProduct?: CatalogProduct | null;
+  slug?: string;
+}) {
+  const [product, setProduct] = useState<CatalogProduct | null>(initialProduct ?? null);
 
   useEffect(() => {
     const syncOverride = () => {
       if (typeof window === "undefined") return;
       try {
+        let baseProduct = initialProduct;
+
+        // Fallback check local drafts/overrides if server returned null
+        if (!baseProduct && targetSlug) {
+          const decoded = decodeURIComponent(targetSlug);
+          const hyphenated = decoded.trim().toLowerCase().replace(/\s+/g, "-");
+          const drafts = JSON.parse(localStorage.getItem("ecom_local_drafts") || "[]");
+          const foundDraft = drafts.find(
+            (d: any) =>
+              d.slug === decoded ||
+              d.slug === hyphenated ||
+              d.id === decoded ||
+              d._id === decoded ||
+              (d.name && d.name.toLowerCase().trim().replace(/\s+/g, "-") === hyphenated)
+          );
+          if (foundDraft) {
+            baseProduct = mapProductDetail(foundDraft);
+          } else {
+            const overrides = JSON.parse(localStorage.getItem("ecom_local_overrides") || "{}");
+            const foundOv: any =
+              overrides[decoded] ||
+              overrides[hyphenated] ||
+              Object.values(overrides).find((item: any) => {
+                if (!item) return false;
+                const itemSlug = String(item.slug || "").toLowerCase();
+                const itemName = String(item.name || "").toLowerCase().trim().replace(/\s+/g, "-");
+                return itemSlug === decoded.toLowerCase() || itemSlug === hyphenated || itemName === hyphenated;
+              });
+            if (foundOv) {
+              baseProduct = mapProductDetail(foundOv);
+            }
+          }
+        }
+
+        if (!baseProduct) {
+          setProduct(null);
+          return;
+        }
+
         const overrides = JSON.parse(localStorage.getItem("ecom_local_overrides") || "{}");
-        const pId = initialProduct.id;
-        const pSlug = initialProduct.slug;
-        const pRef = initialProduct.productRefId;
-        const pNameKey = initialProduct.name ? initialProduct.name.toLowerCase().trim().replace(/\s+/g, "-") : "";
+        const pId = baseProduct.id;
+        const pSlug = baseProduct.slug;
+        const pRef = baseProduct.productRefId;
+        const pNameKey = baseProduct.name ? baseProduct.name.toLowerCase().trim().replace(/\s+/g, "-") : "";
 
         let ov: any =
           (pId ? overrides[pId] : null) ||
@@ -167,37 +214,32 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
 
         if (ov) {
           const newImg = (ov.images && ov.images[0]) || ov.imageUrl;
-          const newName = ov.name || initialProduct.name;
+          const newName = ov.name || baseProduct.name;
 
-          // BE là source of truth cho variants và price.
-          // Chỉ dùng override variants khi initialProduct (SSR từ BE) không có variants.
-          const beVariants = initialProduct.variants && initialProduct.variants.length > 0
-            ? initialProduct.variants
+          const beVariants = baseProduct.variants && baseProduct.variants.length > 0
+            ? baseProduct.variants
             : null;
           const newVariants = beVariants ?? ov.variants ?? [];
 
-          // Tính giá từ variants BE trước; fallback sang override price.
           const validVariantPrices = newVariants
             .map((v: any) => Number(v.price))
             .filter((pr: number) => !isNaN(pr) && pr > 0);
 
           const minVariantPrice = validVariantPrices.length > 0
             ? Math.min(...validVariantPrices)
-            : (initialProduct.price ?? ov.price);
+            : (baseProduct.price ?? ov.price);
 
-          setProduct((prev) => ({
-            ...prev,
-            // Chỉ override UI metadata (name, images) — KHÔNG override price/variants khi BE có dữ liệu.
+          setProduct({
+            ...baseProduct,
             name: newName,
-            imageUrl: newImg || prev.imageUrl,
-            images: ov.images || prev.images || (newImg ? [newImg] : prev.images),
-            // Giá và variants luôn từ BE (đã được tính ở trên).
+            imageUrl: newImg || baseProduct.imageUrl,
+            images: ov.images || baseProduct.images || (newImg ? [newImg] : baseProduct.images),
             price: minVariantPrice,
             b2bPrice: minVariantPrice,
             variants: newVariants,
-          }));
+          });
         } else {
-          setProduct(initialProduct);
+          setProduct(baseProduct);
         }
       } catch (e) {
         console.error("ProductDetailView override error:", e);
@@ -209,13 +251,12 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
     return () => {
       unsubscribe();
     };
-  }, [initialProduct]);
+  }, [initialProduct, targetSlug]);
 
   const images = useMemo(() => getProductImages(product), [product]);
   const sizes = useMemo(() => getProductSizes(product), [product]);
 
-
-  const hasVariants = Boolean(product.variants && product.variants.length > 0);
+  const hasVariants = Boolean(product?.variants && product.variants.length > 0);
 
   const [activeImage, setActiveImage] = useState(images[0]);
 
@@ -230,21 +271,21 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
   const [activeTab, setActiveTab] = useState<"desc" | "specs" | "vendor" | "reviews">("desc");
 
   const selectedVariant = useMemo(() => {
-    if (!hasVariants || !product.variants || product.variants.length === 0) return null;
+    if (!product || !hasVariants || !product.variants || product.variants.length === 0) return null;
     return product.variants[selectedVariantIndex] ?? product.variants[0];
-  }, [hasVariants, product.variants, selectedVariantIndex]);
+  }, [product, hasVariants, selectedVariantIndex]);
 
-  const activePrice = selectedVariant ? selectedVariant.price : (product.b2bPrice || product.price);
-  const hasSalePrice = product.price > activePrice;
-  const discountPercent = hasSalePrice
+  const activePrice = selectedVariant ? selectedVariant.price : ((product?.b2bPrice || product?.price) ?? 0);
+  const hasSalePrice = Boolean(product && product.price > activePrice);
+  const discountPercent = hasSalePrice && product
     ? Math.round(((product.price - activePrice) / product.price) * 100)
     : 0;
 
   const isCustomPrint = selectedVariant
     ? selectedVariant.fulfillmentType === "CUSTOM_PRINT"
-    : product.fulfillmentType === "CUSTOM_PRINT";
+    : product?.fulfillmentType === "CUSTOM_PRINT";
 
-  const activeStock = selectedVariant ? (selectedVariant.availableQty ?? 0) : product.stockSnapshot;
+  const activeStock = selectedVariant ? (selectedVariant.availableQty ?? 0) : (product?.stockSnapshot ?? 0);
   const isSelectedVariantOutOfStock = activeStock <= 0;
 
   const activeLabel = selectedVariant
@@ -252,6 +293,7 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
     : (selectedSize || "Tiêu chuẩn");
 
   const activeProductToAddToCart = useMemo(() => {
+    if (!product) return null;
     if (!selectedVariant) return product;
     return {
       ...product,
@@ -263,6 +305,7 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
   }, [product, selectedVariant]);
 
   const isCupProduct = useMemo(() => {
+    if (!product) return false;
     const nameLower = product.name.toLowerCase();
     return (
       product.category === "plain_cup" ||
@@ -276,7 +319,7 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
   }, [product]);
 
   const canBeCustomDesigned = useMemo(() => {
-    // RÀNG BUỘC: CHỈ LY CHƯA IN MỚI ĐƯỢC THIẾT KẾ (bỏ qua printed_cup)
+    if (!product) return false;
     if (product.category === "printed_cup" || (product as any).isPrinted === true) return false;
     const nameLower = product.name.toLowerCase();
     return (
@@ -290,6 +333,7 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
   }, [product, isCupProduct]);
 
   const inferredMaterial = useMemo(() => {
+    if (!product) return "frosted";
     const text = `${product.name} ${product.slug} ${JSON.stringify(selectedVariant?.attributes || {})}`.toLowerCase();
     if (text.includes("mờ") || text.includes("frosted") || text.includes("pp")) return "frosted";
     if (text.includes("giấy") || text.includes("paper")) return "paper";
@@ -298,6 +342,7 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
   }, [product, selectedVariant]);
 
   const inferredStyle = useMemo(() => {
+    if (!product) return "straight";
     const text = `${product.name} ${product.slug} ${JSON.stringify(selectedVariant?.attributes || {})}`.toLowerCase();
     if (text.includes("bầu") || text.includes("u-shape") || text.includes("đáy u")) return "u_shape";
     if (text.includes("tim") || text.includes("heart")) return "heart";
@@ -306,12 +351,29 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
   }, [product, selectedVariant]);
 
   const categoryLabel = useMemo(() => {
+    if (!product) return "";
     if (product.category === "plain_cup") return "Ly nhựa chưa in";
     if (product.category === "printed_cup") return "Ly nhựa đã in";
     if (product.category === "custom_print") return "Ly in theo yêu cầu";
     if (isCupProduct) return "Ly nhựa & Bao bì";
     return categoryCopy[product.category] || "Bao bì / Nguyên liệu";
-  }, [product.category, isCupProduct]);
+  }, [product, isCupProduct]);
+
+  if (!product) {
+    return (
+      <div className="container min-h-[60vh] flex flex-col items-center justify-center text-center py-16">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
+          Sản phẩm không tồn tại
+        </h2>
+        <p className="text-muted-foreground mb-6">
+          Sản phẩm này có thể đã bị xóa hoặc đường dẫn không đúng.
+        </p>
+        <Button asChild className="bg-[#3BB77E] hover:bg-[#299e69] text-white">
+          <Link href="/products">Quay lại danh sách sản phẩm</Link>
+        </Button>
+      </div>
+    );
+  }
 
   const activeSku = selectedVariant?.sku || product.productRefId;
   const displayStock = selectedVariant ? selectedVariant.availableQty : product.stockSnapshot;
@@ -425,7 +487,7 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
             {/* Sizing / Variant Row */}
             <div className="mt-6 space-y-2">
               <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                {hasVariants ? "Phân loại sản phẩm / Variant" : "Trọng lượng / Dung tích"}
+                {hasVariants ? "Dung tích" : "Trọng lượng / Dung tích"}
               </div>
               <div className="flex items-center gap-2.5 flex-wrap">
                 {hasVariants && product.variants ? (
@@ -519,7 +581,7 @@ export function ProductDetailView({ product: initialProduct }: { product: Catalo
               <div className="flex-1 min-w-[140px]">
                 <AddToCartButton
                   className="h-11 w-full bg-[#3BB77E] hover:bg-[#2f9565] text-white font-bold rounded-lg flex items-center justify-center gap-2 border-0 cursor-pointer text-sm shadow-none"
-                  product={activeProductToAddToCart}
+                  product={activeProductToAddToCart!}
                   quantity={isSelectedVariantOutOfStock ? 0 : quantity}
                   selectedSize={activeLabel}
                   attributes={selectedVariant?.attributes}

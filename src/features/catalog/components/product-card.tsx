@@ -170,7 +170,7 @@ export function ProductCard({
       )}
 
       {/* Image Container */}
-      <Link href={`/products/${product.slug}`} className="block">
+      <Link href={`/products/${encodeURIComponent(product.slug)}`} className="block">
         <div className="relative aspect-square w-full flex items-center justify-center p-3.5 bg-transparent mt-2">
           <div className="relative w-full h-full">
             <Image
@@ -192,7 +192,7 @@ export function ProductCard({
         </span>
 
         <h3 className="line-clamp-2 text-sm font-bold text-[#253D4E] dark:text-zinc-100 mt-1 min-h-[36px] leading-tight">
-          <Link href={`/products/${product.slug}`} className="hover:text-[#3BB77E] transition-colors">
+          <Link href={`/products/${encodeURIComponent(product.slug)}`} className="hover:text-[#3BB77E] transition-colors">
             {product.name}
           </Link>
         </h3>

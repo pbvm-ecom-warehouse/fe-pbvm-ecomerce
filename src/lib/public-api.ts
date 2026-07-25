@@ -23,7 +23,7 @@ function buildPublicApiUrl(path: string) {
 export async function publicApiFetch<T>(
   path: string,
   init: NextFetchInit = {},
-  maxRetries = 2,
+  maxRetries = 0,
 ): Promise<T> {
   const autoTags = inferCacheTags(path);
   const nextInit = init.next ?? {};
@@ -51,7 +51,12 @@ export async function publicApiFetch<T>(
         return unwrapApiData((await response.json()) as T);
       }
 
-      // Retry automatically on 502 Bad Gateway / 503 / 504 proxy errors
+      if (response.status === 429) {
+        console.warn(`[publicApiFetch] Rate limited (429) for ${path}`);
+        throw new Error(`Public API rate limited: 429`);
+      }
+
+      // Retry automatically only on 502 Bad Gateway / 503 / 504 proxy errors
       if (
         (response.status === 502 || response.status === 503 || response.status === 504) &&
         attempt < maxRetries

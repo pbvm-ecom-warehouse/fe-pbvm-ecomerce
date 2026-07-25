@@ -97,18 +97,15 @@ export default function AdminFinancePage() {
       {/* ONE SINGLE MASTER CARD CONTAINER FOR ALL SECTIONS */}
       <Card className="rounded-2xl border border-[#E9E3DD] bg-white shadow-sm overflow-hidden divide-y divide-[#E9E3DD]">
         {/* SECTION 1: Top Header */}
-        <div className="p-6 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="size-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold shadow-2xs">
-              <Wallet className="size-6" />
+        <div className="py-4 px-6 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+              <Wallet className="size-4" />
             </div>
             <div>
-              <h1 className="text-lg font-black text-slate-800 uppercase tracking-wider">
+              <h1 className="text-sm font-black text-slate-700 uppercase tracking-wider">
                 Quản lý Dòng Tiền &amp; Doanh Thu
               </h1>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Báo cáo realtime dòng tiền vào/ra, doanh thu theo đơn hàng và đối soát thanh toán cho Manager.
-              </p>
             </div>
           </div>
 
