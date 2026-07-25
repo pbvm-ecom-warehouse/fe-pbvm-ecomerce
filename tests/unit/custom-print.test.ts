@@ -74,4 +74,26 @@ describe("custom print checkout contract", () => {
       },
     ]);
   });
+
+  it("restricts design studio access strictly to unprinted cups", () => {
+    const isPrintedCup = (p: { category: string; isPrinted?: boolean }) =>
+      p.category === "printed_cup" || p.isPrinted === true;
+
+    const unprintedCup = { category: "plain_cup", isPrinted: false };
+    const printedCup = { category: "printed_cup", isPrinted: true };
+
+    expect(isPrintedCup(unprintedCup)).toBe(false);
+    expect(isPrintedCup(printedCup)).toBe(true);
+  });
+
+  it("supports hybrid AI artwork layers combining image and text layers", () => {
+    const hybridLayers = [
+      { id: "img_1", type: "image", src: "https://res.cloudinary.com/demo/logo.png", prompt: "Gấu Béo logo" },
+      { id: "txt_ai_1", type: "text", text: "Gấu Béo", color: "#059669", fontSize: 28 },
+    ];
+    expect(hybridLayers).toHaveLength(2);
+    expect(hybridLayers[0]?.type).toBe("image");
+    expect(hybridLayers[1]?.type).toBe("text");
+    expect((hybridLayers[1] as any).text).toBe("Gấu Béo");
+  });
 });

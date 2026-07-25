@@ -35,6 +35,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type {
   CupSize,
@@ -58,6 +64,7 @@ type ArtworkEditor2DProps = {
   onLayersChange: (layers: DesignArtworkLayer[]) => void;
   onSelectedLayerChange: (layerId: string | null) => void;
   onTextureChange: (dataUrl: string) => void;
+  savedDesignsNode?: React.ReactNode;
 };
 
 const BRUSH_SIZES = [3, 5, 8, 12] as const;
@@ -115,6 +122,7 @@ export function ArtworkEditor2D({
   onLayersChange,
   onSelectedLayerChange,
   onTextureChange,
+  savedDesignsNode,
 }: ArtworkEditor2DProps) {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -142,10 +150,8 @@ export function ArtworkEditor2D({
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const w = Math.floor(entry.contentRect.width - 20);
-        if (w > 0) {
-          setContainerWidth(w);
-        }
+        const w = Math.floor(entry.contentRect.width - 24);
+        if (w > 0) setContainerWidth(w);
       }
     });
 
@@ -336,162 +342,182 @@ export function ArtworkEditor2D({
 
   /* ─── Render ─── */
   return (
-    <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm">
-      {/* ── UNIFIED FULL-WIDTH STRETCHED TOOLBAR ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-border bg-white px-3 py-2 text-xs w-full">
-        {/* LEFT GROUP: Title, Mode Toggles & Brush Controls */}
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-black uppercase tracking-wide text-[#253D4E]">2D Print Artboard</span>
-            <span className="text-[9px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded">
-              {baseWidth}×{effectivePrintArea.height}px
-            </span>
-          </div>
+    <TooltipProvider>
+      <section className="flex flex-col overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+        {/* ── HIGH-END CANVA/FIGMA STYLE EDITOR TOOLBAR ── */}
+        <div className="border-b border-slate-200 bg-white text-xs w-full">
+          {/* ROW 1: HEADER & DOCUMENT ACTIONS */}
+          <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 bg-slate-50/80 border-b border-slate-200/80">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-[#253D4E]">2D Print Artboard</span>
+              <span className="text-[9.5px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md shadow-2xs">
+                {baseWidth}×{effectivePrintArea.height}px
+              </span>
+            </div>
 
-          <div className="h-4 w-px bg-border mx-0.5 hidden sm:block" />
+            <div className="flex items-center gap-2">
+              {savedDesignsNode}
 
-          {/* Mode Toggles */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className={cn(
-                "flex h-7 items-center gap-1 rounded-md border px-2.5 text-[10.5px] font-bold transition-all cursor-pointer",
-                tool === "select"
-                  ? "border-primary bg-primary text-primary-foreground shadow-2xs"
-                  : "border-border bg-muted/30 text-[#253D4E] hover:bg-muted",
-              )}
-              onClick={() => setTool("select")}
-            >
-              <MousePointer2 className="size-3" /> Chọn
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "flex h-7 items-center gap-1 rounded-md border px-2.5 text-[10.5px] font-bold transition-all cursor-pointer",
-                tool === "brush"
-                  ? "border-primary bg-primary text-primary-foreground shadow-2xs"
-                  : "border-border bg-muted/30 text-[#253D4E] hover:bg-muted",
-              )}
-              onClick={() => setTool("brush")}
-            >
-              <Paintbrush className="size-3" /> Vẽ tay
-            </button>
-            <button
-              type="button"
-              className="flex h-7 items-center gap-1 rounded-md border border-border bg-muted/30 px-2.5 text-[10.5px] font-bold text-[#253D4E] hover:bg-muted transition cursor-pointer"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImagePlus className="size-3" />
-              Hình ({imageLayerCount})
-            </button>
-          </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[10.5px] font-bold text-amber-800 border-amber-200/90 bg-amber-50/60 hover:bg-amber-100/80 px-2.5 rounded-lg cursor-pointer disabled:opacity-50 gap-1"
+                    disabled={layers.length === 0}
+                    onClick={clearAllLayers}
+                  >
+                    <FilePlus className="size-3.5 text-amber-600" />
+                    <span className="hidden sm:inline">Bảng trắng</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[11px] font-medium">
+                  Xóa tất cả các layer để vẽ lại từ đầu
+                </TooltipContent>
+              </Tooltip>
 
-          <div className="h-4 w-px bg-border mx-0.5 hidden md:block" />
-
-          {/* Brush Color & Size */}
-          <div className={cn("flex items-center gap-1.5 transition-opacity", tool !== "brush" && "opacity-50")}>
-            <input
-              type="color"
-              aria-label="Màu nét vẽ"
-              value={brushColor}
-              onChange={(e) => setBrushColor(e.target.value)}
-              className="h-7 w-7 cursor-pointer rounded-md border border-border bg-white p-0.5"
-            />
-            <div className="flex items-center gap-1">
-              {BRUSH_SIZES.map((bs) => (
-                <button
-                  key={bs}
-                  type="button"
-                  aria-label={`Brush size ${bs}`}
-                  className={cn(
-                    "h-7 w-7 rounded-md border text-[10px] font-black transition-all cursor-pointer",
-                    brushSize === bs
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-white text-[#253D4E] hover:bg-muted",
-                  )}
-                  onClick={() => setBrushSize(bs)}
-                >
-                  {bs}
-                </button>
-              ))}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[10.5px] font-bold text-slate-700 border-slate-200 bg-white hover:bg-slate-100 px-2.5 rounded-lg cursor-pointer gap-1 shadow-2xs"
+                    onClick={exportPng}
+                  >
+                    <Download className="size-3.5 text-slate-500" />
+                    <span>Export PNG</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-[11px] font-medium">
+                  Tải file thiết kế 2D phẳng dạng hình PNG
+                </TooltipContent>
+              </Tooltip>
             </div>
           </div>
-        </div>
 
-        {/* MIDDLE-RIGHT GROUP: STRETCHED INPUTS & ACTIONS (FILLS REMAINING SPACE) */}
-        <div className="flex items-center gap-2 flex-1 min-w-[300px] justify-end">
-          {/* Text Input (flex-1 to stretch) */}
-          <div className="flex items-center gap-1 flex-1 min-w-[120px] max-w-[220px]">
-            <Input
-              id="editor-text"
-              value={textValue}
-              onChange={(e) => setTextValue(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addTextLayer()}
-              placeholder="Nhập chữ..."
-              className="h-7 rounded-md bg-white text-[11px] px-2.5 flex-1"
-            />
-            <Button
-              type="button"
-              aria-label="Thêm text layer"
-              size="icon"
-              variant="outline"
-              className="h-7 w-7 rounded-md shrink-0 cursor-pointer"
-              onClick={addTextLayer}
-            >
-              <Type className="size-3.5" />
-            </Button>
+        {/* ROW 2: EDITOR CONTROL BAR (STREAMLINED TOOLKIT) */}
+        <div className="flex flex-wrap items-center justify-between gap-1.5 px-3 py-1.5 bg-white border-t border-slate-100">
+          {/* Left: Tool modes & Brush controls */}
+          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className={cn(
+                  "flex h-6.5 items-center gap-1 rounded-lg border px-2 text-[11px] font-bold transition-all cursor-pointer shadow-2xs",
+                  tool === "select"
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-slate-200 bg-slate-50 text-[#253D4E] hover:bg-slate-100",
+                )}
+                onClick={() => setTool("select")}
+              >
+                <MousePointer2 className="size-3" /> Chọn
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex h-6.5 items-center gap-1 rounded-lg border px-2 text-[11px] font-bold transition-all cursor-pointer shadow-2xs",
+                  tool === "brush"
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-slate-200 bg-slate-50 text-[#253D4E] hover:bg-slate-100",
+                )}
+                onClick={() => setTool("brush")}
+              >
+                <Paintbrush className="size-3" /> Vẽ tay
+              </button>
+              <button
+                type="button"
+                className="flex h-6.5 items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 text-[11px] font-bold text-[#253D4E] hover:bg-slate-100 transition cursor-pointer shadow-2xs"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus className="size-3 text-slate-500" />
+                Hình ({imageLayerCount})
+              </button>
+            </div>
+
+            <div className="h-3.5 w-px bg-slate-200 mx-0.5" />
+
+            {/* Brush Color & Sizes */}
+            <div className={cn("flex items-center gap-1 transition-opacity", tool !== "brush" && "opacity-50")}>
+              <input
+                type="color"
+                aria-label="Màu nét vẽ"
+                value={brushColor}
+                onChange={(e) => setBrushColor(e.target.value)}
+                className="h-6.5 w-6.5 cursor-pointer rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs"
+              />
+              <div className="flex items-center gap-0.5">
+                {BRUSH_SIZES.map((bs) => (
+                  <button
+                    key={bs}
+                    type="button"
+                    aria-label={`Brush size ${bs}`}
+                    className={cn(
+                      "h-6.5 w-6.5 rounded-lg border text-[10px] font-black transition-all cursor-pointer shadow-2xs",
+                      brushSize === bs
+                        ? "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-slate-200 bg-white text-[#253D4E] hover:bg-slate-100",
+                    )}
+                    onClick={() => setBrushSize(bs)}
+                  >
+                    {bs}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="h-4 w-px bg-border mx-0.5 shrink-0" />
+          {/* Right: Text Input, Undo & Delete */}
+          <div className="flex items-center gap-1.5 flex-wrap shrink-0 justify-end">
+            <div className="flex items-center gap-1">
+              <Input
+                id="editor-text"
+                value={textValue}
+                onChange={(e) => setTextValue(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && addTextLayer()}
+                placeholder="Nhập chữ..."
+                className="h-6.5 rounded-lg bg-white text-[11px] px-2 w-[100px] sm:w-[130px] border-slate-200"
+              />
+              <Button
+                type="button"
+                aria-label="Thêm text layer"
+                size="icon"
+                variant="outline"
+                className="h-6.5 w-6.5 rounded-lg shrink-0 cursor-pointer border-slate-200 hover:bg-slate-50"
+                onClick={addTextLayer}
+              >
+                <Type className="size-3 text-slate-600" />
+              </Button>
+            </div>
 
-          {/* Actions */}
-          <div className="flex items-center gap-1 shrink-0">
+            <div className="h-3.5 w-px bg-slate-200 mx-0.5" />
+
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 gap-1 rounded-md px-2.5 text-[10.5px] font-bold cursor-pointer"
+              className="h-6.5 text-[11px] font-bold px-2 rounded-lg border-slate-200 text-slate-700 hover:bg-slate-100 cursor-pointer gap-1"
               onClick={undoLastStroke}
             >
-              <RotateCcw className="size-3" /> Undo
+              <RotateCcw className="size-3 text-slate-500" /> Undo
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-7 gap-1 rounded-md px-2.5 text-[10.5px] font-bold text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer"
+              className="h-6.5 text-[11px] font-bold px-2 rounded-lg text-rose-600 border-rose-200 hover:bg-rose-50 cursor-pointer gap-1"
               disabled={!selectedLayerId}
               onClick={deleteSelectedLayer}
             >
               <Trash2 className="size-3" /> Xóa
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              title="Tạo mới bảng trắng (xóa tất cả layer)"
-              className="h-7 gap-1 rounded-md px-2.5 text-[10.5px] font-bold text-amber-700 border-amber-200 bg-amber-50/50 hover:bg-amber-100/70 cursor-pointer disabled:opacity-50"
-              disabled={layers.length === 0}
-              onClick={clearAllLayers}
-            >
-              <FilePlus className="size-3 text-amber-600" /> Bảng trắng
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1 rounded-md border-slate-200 bg-slate-50 px-2.5 text-[10.5px] font-bold text-[#253D4E] hover:bg-slate-100 cursor-pointer"
-              onClick={exportPng}
-            >
-              <Download className="size-3" /> Export PNG
             </Button>
           </div>
         </div>
       </div>
 
       {/* ── Canvas ── */}
-      <div ref={containerRef} className="overflow-hidden bg-[linear-gradient(#e5e5e5_1px,transparent_1px),linear-gradient(90deg,#e5e5e5_1px,transparent_1px)] bg-[size:20px_20px] p-2.5 flex items-center justify-center min-h-[360px] sm:min-h-[420px]">
+      <div ref={containerRef} className="overflow-hidden bg-[linear-gradient(#e5e5e5_1px,transparent_1px),linear-gradient(90deg,#e5e5e5_1px,transparent_1px)] bg-[size:20px_20px] p-3 sm:p-4 flex items-center justify-center rounded-b-2xl w-full flex-1 min-h-[360px]">
         <Stage
           ref={stageRef}
           width={stageWidth}
@@ -514,8 +540,8 @@ export function ArtworkEditor2D({
               width={baseWidth - 40}
               height={baseHeight - 40}
               cornerRadius={24}
-              fill={cupColor}
-              stroke="#D7C4B7"
+              fill="#FFFFFF"
+              stroke="#E2E8F0"
               strokeWidth={1}
             />
             <Rect
@@ -693,5 +719,6 @@ export function ArtworkEditor2D({
         </DialogContent>
       </Dialog>
     </section>
+    </TooltipProvider>
   );
 }

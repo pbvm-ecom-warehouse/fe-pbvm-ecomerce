@@ -22,7 +22,10 @@ export function StorefrontAdminRedirectGuard({
     if (mounted && user && user.type === "admin") {
       // If admin tries to access storefront routes
       if (pathname && !pathname.startsWith("/admin")) {
-        router.replace("/admin/catalog/products");
+        const timer = setTimeout(() => {
+          router.replace("/admin/catalog/categories");
+        }, 0);
+        return () => clearTimeout(timer);
       }
     }
   }, [mounted, user, pathname, router]);

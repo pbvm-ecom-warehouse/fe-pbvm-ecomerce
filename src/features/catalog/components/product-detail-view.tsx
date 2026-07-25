@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { subscribeProductSync } from "@/features/catalog/services/admin-catalog.service";
 import {
   Award,
   BadgePercent,
@@ -108,41 +109,121 @@ function getProductSizes(product: CatalogProduct): string[] {
   return ["Chai 1L", "Can 2.5kg", "Thùng"];
 }
 
-// Pseudo-random rating based on product ID to keep catalog look consistent
-function getProductRating(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const rating = 4.0 + (Math.abs(hash) % 11) / 10;
-  const reviews = 5 + (Math.abs(hash) % 45); // 5 to 49 reviews
-  return { rating, reviews };
-}
+
 
 function getVariantLabel(v: ProductVariant): string {
   const attrSize =
     v.attributes?.size ||
     v.attributes?.capacity ||
-    v.attributes?.["dung tích"];
+    v.attributes?.["dung tích"] ||
+    v.attributes?.material ||
+    v.attributes?.style;
   if (attrSize) return attrSize;
 
-  const sku = v.sku.toUpperCase();
-  if (sku.includes("350ML")) return "Ly PP 350ml";
-  if (sku.includes("DEFAULT")) return "Ly nhựa tiêu chuẩn (500ml)";
+  const sku = (v.sku || "").toUpperCase();
+  if (sku.includes("1000ML")) return "1000ml";
+  if (sku.includes("700ML") || sku.includes("750ML")) return "700ml";
+  if (sku.includes("500ML")) return "500ml";
+  if (sku.includes("350ML")) return "350ml";
+  if (sku.includes("DEFAULT")) return "Ly tiêu chuẩn";
   if (sku.includes("PRINTED") || v.fulfillmentType === "CUSTOM_PRINT")
     return "In logo theo yêu cầu";
 
   return v.sku;
 }
 
-export function ProductDetailView({ product }: { product: CatalogProduct }) {
+export function ProductDetailView({ product: initialProduct }: { product: CatalogProduct }) {
+  const [product, setProduct] = useState<CatalogProduct>(initialProduct);
+
+  useEffect(() => {
+    const syncOverride = () => {
+      if (typeof window === "undefined") return;
+      try {
+        const overrides = JSON.parse(localStorage.getItem("ecom_local_overrides") || "{}");
+        const pId = initialProduct.id;
+        const pSlug = initialProduct.slug;
+        const pRef = initialProduct.productRefId;
+        const pNameKey = initialProduct.name ? initialProduct.name.toLowerCase().trim().replace(/\s+/g, "-") : "";
+
+        let ov: any =
+          (pId ? overrides[pId] : null) ||
+          (pSlug ? overrides[pSlug] : null) ||
+          (pRef ? overrides[pRef] : null) ||
+          (pNameKey ? overrides[pNameKey] : null);
+
+        if (!ov && typeof overrides === "object") {
+          ov = Object.values(overrides).find((item: any) => {
+            if (!item) return false;
+            const itemSlug = String(item.slug || "").toLowerCase();
+            const itemName = String(item.name || "").toLowerCase().trim().replace(/\s+/g, "-");
+            const itemId = String(item.id || item._id || "");
+            return (
+              (pSlug && itemSlug === pSlug.toLowerCase()) ||
+              (pNameKey && itemName === pNameKey) ||
+              (pId && itemId === pId)
+            );
+          });
+        }
+
+        if (ov) {
+          const newImg = (ov.images && ov.images[0]) || ov.imageUrl;
+          const newName = ov.name || initialProduct.name;
+
+          // BE là source of truth cho variants và price.
+          // Chỉ dùng override variants khi initialProduct (SSR từ BE) không có variants.
+          const beVariants = initialProduct.variants && initialProduct.variants.length > 0
+            ? initialProduct.variants
+            : null;
+          const newVariants = beVariants ?? ov.variants ?? [];
+
+          // Tính giá từ variants BE trước; fallback sang override price.
+          const validVariantPrices = newVariants
+            .map((v: any) => Number(v.price))
+            .filter((pr: number) => !isNaN(pr) && pr > 0);
+
+          const minVariantPrice = validVariantPrices.length > 0
+            ? Math.min(...validVariantPrices)
+            : (initialProduct.price ?? ov.price);
+
+          setProduct((prev) => ({
+            ...prev,
+            // Chỉ override UI metadata (name, images) — KHÔNG override price/variants khi BE có dữ liệu.
+            name: newName,
+            imageUrl: newImg || prev.imageUrl,
+            images: ov.images || prev.images || (newImg ? [newImg] : prev.images),
+            // Giá và variants luôn từ BE (đã được tính ở trên).
+            price: minVariantPrice,
+            b2bPrice: minVariantPrice,
+            variants: newVariants,
+          }));
+        } else {
+          setProduct(initialProduct);
+        }
+      } catch (e) {
+        console.error("ProductDetailView override error:", e);
+      }
+    };
+
+    syncOverride();
+    const unsubscribe = subscribeProductSync(syncOverride);
+    return () => {
+      unsubscribe();
+    };
+  }, [initialProduct]);
+
   const images = useMemo(() => getProductImages(product), [product]);
   const sizes = useMemo(() => getProductSizes(product), [product]);
-  const { rating, reviews } = useMemo(() => getProductRating(product.id), [product.id]);
+
 
   const hasVariants = Boolean(product.variants && product.variants.length > 0);
 
   const [activeImage, setActiveImage] = useState(images[0]);
+
+  useEffect(() => {
+    if (images[0]) {
+      setActiveImage(images[0]);
+    }
+  }, [images]);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState(sizes[0]);
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
@@ -193,6 +274,20 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
       nameLower.startsWith("ly ")
     );
   }, [product]);
+
+  const canBeCustomDesigned = useMemo(() => {
+    // RÀNG BUỘC: CHỈ LY CHƯA IN MỚI ĐƯỢC THIẾT KẾ (bỏ qua printed_cup)
+    if (product.category === "printed_cup" || (product as any).isPrinted === true) return false;
+    const nameLower = product.name.toLowerCase();
+    return (
+      product.category === "plain_cup" ||
+      product.category === "custom_print" ||
+      product.fulfillmentType === "CUSTOM_PRINT" ||
+      nameLower.includes("phôi") ||
+      nameLower.includes("trơn") ||
+      (isCupProduct && !nameLower.includes("in sẵn") && !nameLower.includes("in hình"))
+    );
+  }, [product, isCupProduct]);
 
   const inferredMaterial = useMemo(() => {
     const text = `${product.name} ${product.slug} ${JSON.stringify(selectedVariant?.attributes || {})}`.toLowerCase();
@@ -289,13 +384,6 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
 
           {/* RIGHT: Product Info Details (7 columns on desktop) */}
           <div className="lg:col-span-7 flex flex-col justify-start">
-            {/* Hot/Sale status banner */}
-            <div className="mb-3">
-              <span className="bg-[#FEEFEA] text-[#FD6E6E] text-xs font-extrabold px-3 py-1 rounded-md inline-block uppercase tracking-wider">
-                {isCustomPrint ? "Sale Off" : "Hot Deal"}
-              </span>
-            </div>
-
             {/* Title */}
             <h1 className="text-2xl md:text-3xl font-extrabold text-[#253D4E] dark:text-zinc-100 leading-tight tracking-tight">
               {product.name}
@@ -439,8 +527,8 @@ export function ProductDetailView({ product }: { product: CatalogProduct }) {
                 />
               </div>
 
-              {/* Nút Thiết kế ly này (Gọn gàng kế bên nút Thêm) */}
-              {isCupProduct && (
+              {/* Nút Thiết kế ly này (Gọn gàng kế bên nút Thêm - Chỉ dành cho ly chưa in) */}
+              {canBeCustomDesigned && (
                 <div className="shrink-0">
                   <Button
                     asChild

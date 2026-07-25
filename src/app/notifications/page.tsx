@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Bell,
@@ -26,6 +26,10 @@ import { useCartStore } from "@/stores/cart-store";
 function NotificationsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/orders");
+  }, [router]);
 
   const type = searchParams.get("type");
   const orderCode = searchParams.get("orderCode");

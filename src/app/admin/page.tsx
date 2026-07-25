@@ -9,11 +9,14 @@ export default function AdminPage() {
   const user = useAuthStore((state) => state.user);
 
   useEffect(() => {
-    if (user && user.type === "admin") {
-      router.push("/admin/catalog/products");
-    } else {
-      router.push("/login");
-    }
+    const timer = setTimeout(() => {
+      if (user && user.type === "admin") {
+        router.push("/admin/catalog/categories");
+      } else {
+        router.push("/login");
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [user, router]);
 
   return (

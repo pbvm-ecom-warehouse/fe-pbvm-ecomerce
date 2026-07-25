@@ -44,6 +44,10 @@ const nextConfig: NextConfig = {
         source: "/api/shop/:path*",
         destination: "https://api-ecom-wms.hoaiphuong.io.vn/api/shop/:path*",
       },
+      {
+        source: "/api/wms/:path*",
+        destination: "https://api-ecom-wms.hoaiphuong.io.vn/api/wms/:path*",
+      },
     ];
   },
 };

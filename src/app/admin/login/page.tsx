@@ -7,7 +7,10 @@ export default function AdminLoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/login");
+    const timer = setTimeout(() => {
+      router.replace("/login");
+    }, 0);
+    return () => clearTimeout(timer);
   }, [router]);
 
   return (

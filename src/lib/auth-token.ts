@@ -1,5 +1,6 @@
 const ACCESS_TOKEN_KEY = "ecommerce_access_token";
 const REFRESH_TOKEN_KEY = "ecommerce_refresh_token";
+const WMS_ACCESS_TOKEN_KEY = "wms_access_token";
 const TENANT_ID_KEY = "tenant_id";
 
 export type AuthTokens = {
@@ -17,6 +18,23 @@ export function getAccessToken() {
 
 export function getRefreshToken() {
   return isBrowser() ? window.localStorage.getItem(REFRESH_TOKEN_KEY) : null;
+}
+
+export function getWmsAccessTokenOnly() {
+  return isBrowser() ? window.localStorage.getItem(WMS_ACCESS_TOKEN_KEY) : null;
+}
+
+export function getWmsAccessToken() {
+  if (!isBrowser()) return null;
+  return (
+    window.localStorage.getItem(WMS_ACCESS_TOKEN_KEY) ||
+    window.localStorage.getItem(ACCESS_TOKEN_KEY)
+  );
+}
+
+export function setWmsAccessToken(token: string) {
+  if (!isBrowser()) return;
+  window.localStorage.setItem(WMS_ACCESS_TOKEN_KEY, token);
 }
 
 export function getTenantId(fallback: string) {
@@ -49,4 +67,5 @@ export function clearAuthTokens() {
 
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
   window.localStorage.removeItem(REFRESH_TOKEN_KEY);
+  window.localStorage.removeItem(WMS_ACCESS_TOKEN_KEY);
 }

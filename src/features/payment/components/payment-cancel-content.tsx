@@ -168,40 +168,14 @@ export function PaymentCancelContent() {
           transition={{ duration: 0.5 }}
           className="space-y-6 text-center"
         >
-          {/* Cancel Icon */}
-          <div className="relative mx-auto flex h-24 w-24 items-center justify-center">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
-              className="flex h-24 w-24 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400"
-            >
-              <XCircle className="h-14 w-14" />
-            </motion.div>
-          </div>
-
-          {/* Title & Badge */}
+          {/* Title */}
           <div className="space-y-2">
-            <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-              <AlertTriangle className="mr-1 h-3.5 w-3.5 text-amber-600" /> Thanh toán chưa hoàn tất
-            </Badge>
             <h1 className="text-3xl font-extrabold text-foreground sm:text-4xl tracking-tight">
               Thanh Toán Đã Bị Hủy
             </h1>
             <p className="text-base text-muted-foreground max-w-lg mx-auto">
               Bạn đã dừng giao dịch thanh toán trực tuyến. Các sản phẩm của bạn <strong className="text-amber-800 font-bold">vẫn được lưu giữ trong giỏ hàng</strong> để bạn dễ dàng xem lại hoặc mua sau.
             </p>
-          </div>
-
-          {/* Alert Notice for retained cart */}
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-left text-xs text-emerald-900 flex items-center gap-3 shadow-sm">
-            <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
-            <div>
-              <p className="font-bold text-sm text-emerald-950">Giỏ hàng của bạn được bảo lưu!</p>
-              <p className="mt-0.5 text-emerald-800">
-                Toàn bộ các mặt hàng trong đơn thanh toán này vẫn được giữ nguyên trong giỏ hàng. Bạn không bị mất sản phẩm đã chọn.
-              </p>
-            </div>
           </div>
 
           {/* Details Card */}

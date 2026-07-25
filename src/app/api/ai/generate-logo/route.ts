@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       .replace(/\s+/g, " ")
       .trim();
 
-    const fullPrompt = `${cleanPrompt}, masterpiece, 8k resolution, professional graphic design logo, sharp focus`;
+    const fullPrompt = `${cleanPrompt}, flat vector graphic logo design, minimal clean icon motif, sharp contours, 8k resolution, centered emblem, masterpiece`;
     const encodedPrompt = encodeURIComponent(fullPrompt);
 
     const aiEndpoints = [
@@ -79,18 +79,28 @@ export async function POST(req: Request) {
       });
     }
 
-    // SVG Vector fallback if external AI servers busy
+    // High-quality SVG Vector fallback if external AI servers are busy
+    const displayTitle = cleanPrompt.replace(/[^a-zA-Z0-9\sàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/g, "").trim();
+    const shortTitle = (displayTitle || "LOGO DESIGN").toUpperCase().slice(0, 18);
+
     const svgContent = `
     <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
       <defs>
         <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#059669;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#10B981;stop-opacity:1" />
+          <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
         </linearGradient>
+        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#059669" flood-opacity="0.25"/>
+        </filter>
       </defs>
-      <circle cx="512" cy="512" r="420" fill="none" stroke="url(#grad1)" stroke-width="24" />
-      <text x="512" y="520" font-family="system-ui, sans-serif" font-size="72" font-weight="900" fill="#059669" text-anchor="middle" letter-spacing="4">
-        ${cleanPrompt.toUpperCase().slice(0, 20)}
+      <rect width="1024" height="1024" fill="none"/>
+      <g filter="url(#shadow)">
+        <circle cx="512" cy="460" r="320" fill="none" stroke="url(#grad1)" stroke-width="28" />
+        <polygon points="512,220 580,360 740,360 610,460 660,610 512,510 364,610 414,460 284,360 444,360" fill="url(#grad1)" opacity="0.85"/>
+      </g>
+      <text x="512" y="860" font-family="'Be Vietnam Pro', system-ui, sans-serif" font-size="64" font-weight="900" fill="#047857" text-anchor="middle" letter-spacing="3">
+        ${shortTitle}
       </text>
     </svg>`;
 

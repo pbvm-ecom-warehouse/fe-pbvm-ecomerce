@@ -16,9 +16,9 @@ export function parsePromptToBananaLogoOptions(promptText: string): BananaLogoOp
 }
 
 /**
- * THUẬT TOÁN TÁCH NỀN THÔNG MINH ĐA SẮC (SMART DUAL-COLOR BACKGROUND REMOVER)
- * Tự động lấy mẫu 4 góc ảnh để nhận biết nền Đen hay nền Trắng do AI sinh ra, 
- * sau đó xóa sạch nền đen/trắng thành TRANSPARENT PNG 100%!
+ * THUẬT TOÁN TÁCH NỀN AI THÔNG MINH CAO CẤP (SMART ADAPTIVE BACKGROUND REMOVER)
+ * Tự động lấy mẫu góc ảnh để nhận biết màu nền chính xác (nền trắng, nền đen, hoặc nền đơn sắc),
+ * thực hiện khử viền mịn (soft edge alpha matting) loại bỏ triệt để viền nhiễu xung quanh logo.
  */
 export async function removeWhiteBackgroundFromImage(imageUrl: string): Promise<string> {
   return new Promise((resolve) => {
@@ -41,49 +41,61 @@ export async function removeWhiteBackgroundFromImage(imageUrl: string): Promise<
         const w = canvas.width;
         const h = canvas.height;
 
-        // Lấy mẫu độ sáng tại 4 góc tệp ảnh
-        const cornerIndices = [
-          0, // Góc trên-trái
-          (w - 1) * 4, // Góc trên-phải
-          (h - 1) * w * 4, // Góc dưới-trái
-          ((h - 1) * w + (w - 1)) * 4, // Góc dưới-phải
+        // 1. Lấy mẫu trung bình màu R, G, B tại 4 viền góc của bức ảnh
+        const samplePoints = [
+          0,
+          (w - 1) * 4,
+          (h - 1) * w * 4,
+          ((h - 1) * w + (w - 1)) * 4,
+          Math.floor(w / 2) * 4,
+          Math.floor((h - 1) * w + w / 2) * 4,
         ];
 
-        let totalBrightness = 0;
-        cornerIndices.forEach((idx) => {
-          totalBrightness += (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+        let sumR = 0, sumG = 0, sumB = 0;
+        samplePoints.forEach((idx) => {
+          sumR += data[idx] ?? 255;
+          sumG += data[idx + 1] ?? 255;
+          sumB += data[idx + 2] ?? 255;
         });
-        const avgCornerBrightness = totalBrightness / cornerIndices.length;
 
-        // Nhận diện nếu nền là Nền Đen (< 80) hay Nền Trắng (>= 80)
-        const isDarkBackground = avgCornerBrightness < 80;
+        const bgR = sumR / samplePoints.length;
+        const bgG = sumG / samplePoints.length;
+        const bgB = sumB / samplePoints.length;
+        const bgBrightness = (bgR + bgG + bgB) / 3;
 
+        const isDarkBackground = bgBrightness < 80;
+
+        // 2. Duyệt qua từng pixel và áp dụng thuật toán Alpha Matting mềm mịn
         for (let i = 0; i < data.length; i += 4) {
           const r = data[i];
           const g = data[i + 1];
           const b = data[i + 2];
-          const brightness = (r + g + b) / 3;
+
+          // Khoảng cách Euclidian giữa màu pixel và màu nền chuẩn
+          const colorDistance = Math.sqrt(
+            (r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2
+          );
 
           if (isDarkBackground) {
             // Tách Nền Đen
-            if (brightness < 45) {
-              data[i + 3] = 0; // Trong suốt 100%
-            } else if (brightness < 85) {
-              const alphaFactor = (brightness - 45) / 40;
-              data[i + 3] = Math.floor(data[i + 3] * alphaFactor);
+            if (colorDistance < 40) {
+              data[i + 3] = 0; // Trong suốt hoàn toàn
+            } else if (colorDistance < 80) {
+              const alphaRatio = (colorDistance - 40) / 40;
+              data[i + 3] = Math.floor((data[i + 3] ?? 255) * alphaRatio);
             }
           } else {
-            // Tách Nền Trắng
-            if (brightness > 215) {
-              data[i + 3] = 0; // Trong suốt 100%
-            } else if (brightness > 180) {
-              const alphaFactor = (215 - brightness) / 35;
-              data[i + 3] = Math.floor(data[i + 3] * alphaFactor);
+            // Tách Nền Trắng / Nền Sáng
+            if (colorDistance < 45) {
+              data[i + 3] = 0; // Trong suốt hoàn toàn
+            } else if (colorDistance < 90) {
+              const alphaRatio = (colorDistance - 45) / 45;
+              data[i + 3] = Math.floor((data[i + 3] ?? 255) * alphaRatio);
             }
           }
         }
-        ctx.putImageData(imgData, 0, 0);
 
+        ctx.putImageData(imgData, 0, 0);
         resolve(canvas.toDataURL("image/png"));
       } catch (e) {
         resolve(imageUrl);

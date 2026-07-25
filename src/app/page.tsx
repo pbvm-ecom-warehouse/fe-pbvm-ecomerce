@@ -2,150 +2,17 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  BadgePercent,
   ChevronRight,
-  Clock,
-  Paintbrush,
   ShieldCheck,
-  Star,
 } from "lucide-react";
 
 import { listCatalogProducts } from "@/features/catalog/services/catalog.service";
 import { Button } from "@/components/ui/button";
 import { CatalogGrid } from "@/features/catalog/components/catalog-grid";
-import { AddToCartButton } from "@/features/catalog/components/add-to-cart-button";
-import { formatCurrency } from "@/utils/format-currency";
-import { cn } from "@/lib/utils";
-import type { CatalogProduct } from "@/types/api";
-
-function getProductThumbnail(name: string): string {
-  const lowercase = name.toLowerCase();
-  if (lowercase.includes("bột kem") || lowercase.includes("bột sữa") || lowercase.includes("kievit")) {
-    return "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=120&h=120&q=80";
-  }
-  if (lowercase.includes("trà") || lowercase.includes("hồng trà") || lowercase.includes("ô long") || lowercase.includes("xanh")) {
-    return "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?auto=format&fit=crop&w=120&h=120&q=80";
-  }
-  if (lowercase.includes("ly") || lowercase.includes("nhựa") || lowercase.includes("cốc")) {
-    return "/images/clear_cups.png";
-  }
-  return "https://images.unsplash.com/photo-1574316071802-0d684efa7bf5?auto=format&fit=crop&w=120&h=120&q=80";
-}
 
 export default async function HomePage() {
   const products = await listCatalogProducts();
   const featuredProducts = products.data.slice(0, 8);
-
-
-  const getVendorName = (product: CatalogProduct) => {
-    if (product.slug.includes("kievit")) return "Kievit Indo";
-    if (product.slug.includes("tra-den") || product.slug.includes("phuc-long")) return "Phúc Long";
-    if (product.slug.includes("gia-uy")) return "Gia Uy";
-    if (product.slug.includes("maulin")) return "Maulin";
-    if (product.slug.includes("ly-nhua") || product.slug.includes("pet") || product.slug.includes("pp")) return "PBVM Plastic";
-    return "PBVM Supplier";
-  };
-
-  const categoryCopy: Record<CatalogProduct["category"], string> = {
-    ingredient: "Nguyên liệu",
-    plain_cup: "Ly chưa in",
-    printed_cup: "Ly đã in",
-    custom_print: "Ly in theo yêu cầu",
-  };
-
-  // Filter products to only include those with active discounts
-  const productsWithDiscounts = products.data.filter(
-    (p) => p.price > p.b2bPrice,
-  );
-
-  const deals = productsWithDiscounts.slice(0, 4).map((p) => {
-    const finalPrice = p.b2bPrice;
-    const oldPrice = p.price;
-
-    let dealImage = p.imageUrl || "/images/product-placeholder.svg";
-    if (dealImage === "/images/product-placeholder.svg") {
-      if (p.category === "printed_cup") dealImage = "/images/printed_cups.png";
-      else if (p.category === "plain_cup") dealImage = "/images/clear_cups.png";
-      else dealImage = "/images/boba_ingredients.png";
-    }
-
-    return {
-      title: p.name,
-      price: finalPrice,
-      oldPrice: oldPrice,
-      vendor: getVendorName(p),
-      days: "02",
-      hours: "14",
-      mins: "20",
-      secs: "45",
-      image: dealImage,
-      category: categoryCopy[p.category] || "Nguyên liệu",
-      slug: p.slug,
-      product: p,
-    };
-  });
-
-  const getProductScore = (id: string) => {
-    let hash = 0;
-    for (let i = 0; i < id.length; i++) {
-      hash = id.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const salesCount = Math.abs(hash) % 1000;
-    const rating = 4.0 + (Math.abs(hash) % 11) / 10;
-    return { salesCount, rating };
-  };
-
-  const getColItems = (type: "bestseller" | "trending" | "new" | "toprated") => {
-    if (products.data.length === 0) return [];
-    
-    let sorted = [...products.data];
-
-    if (type === "bestseller") {
-      sorted.sort((a, b) => getProductScore(b.id).salesCount - getProductScore(a.id).salesCount);
-    } else if (type === "trending") {
-      sorted.sort((a, b) => getProductScore(b.id).salesCount - getProductScore(a.id).salesCount);
-      if (sorted.length > 1) {
-        const first = sorted.shift()!;
-        sorted.push(first);
-      }
-    } else if (type === "new") {
-      sorted.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    } else if (type === "toprated") {
-      sorted.sort((a, b) => getProductScore(b.id).rating - getProductScore(a.id).rating);
-    }
-
-    return sorted.slice(0, 3).map((p) => {
-      const hasDiscount = p.price > p.b2bPrice;
-      const finalPrice = p.b2bPrice;
-      const oldPrice = hasDiscount ? p.price : 0;
-      
-      return {
-        name: p.name,
-        price: formatCurrency(finalPrice),
-        oldPrice: oldPrice > 0 ? formatCurrency(oldPrice) : "",
-        imageUrl: p.imageUrl,
-      };
-    });
-  };
-
-  const listCols = [
-    {
-      title: "Bán chạy nhất",
-      items: getColItems("bestseller"),
-    },
-    {
-      title: "Đang là xu hướng",
-      items: getColItems("trending"),
-    },
-    {
-      title: "Mới cập nhật",
-      items: getColItems("new"),
-    },
-    {
-      title: "Đánh giá cao",
-      items: getColItems("toprated"),
-    },
-  ];
 
   return (
     <div className="flex flex-col min-h-screen bg-background dark:bg-[#1C1816]">
@@ -272,135 +139,14 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Section 4: Daily Deals Spotlight */}
-      <section className="py-6 md:py-8 bg-white dark:bg-[#1C1816]/30">
-        <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6 gap-4 border-b border-gray-100 dark:border-zinc-800 pb-3">
-            <h2 className="text-2xl md:text-3xl font-extrabold text-[#253D4E] dark:text-zinc-100 tracking-tight">
-              Ưu đãi hôm nay
-            </h2>
-            <Link
-              href="/products"
-              className="text-sm font-bold text-[#3BB77E] hover:text-[#2F9A68] hover:translate-x-0.5 transition-all flex items-center gap-1 cursor-pointer"
-            >
-              All Deals <ChevronRight className="size-4" />
-            </Link>
-          </div>
 
-          {/* Grid Layout */}
-          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {deals.slice(0, 4).map((deal, idx) => (
-              <div
-                key={idx}
-                className="relative aspect-[3/4] w-full rounded-[20px] overflow-hidden border border-[#E2EDE8] dark:border-[#2C332F] bg-white dark:bg-[#1C1F1D] shadow-sm hover:shadow-md transition-all duration-300 group"
-              >
-                {/* Background Image */}
-                <div className="absolute inset-0 z-0">
-                  <Image
-                    src={deal.image}
-                    alt={deal.title}
-                    fill
-                    sizes="(max-width: 768px) 100vw, 25vw"
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent" />
-                </div>
-
-                {/* White Inset Content Card */}
-                <div className="absolute bottom-4 left-4 right-4 bg-white dark:bg-[#121d19] rounded-[20px] p-4 shadow-lg border border-gray-100/50 dark:border-zinc-800/50 flex flex-col justify-between z-10">
-                  <div>
-                    {/* Category */}
-                    <div className="text-[9px] text-muted-foreground/80 font-bold uppercase tracking-wider mb-1">
-                      {deal.category}
-                    </div>
-                    {/* Title */}
-                    <h3 className="text-xs md:text-sm font-bold text-[#253D4E] dark:text-zinc-100 leading-snug line-clamp-2 min-h-[36px]">
-                      <Link href={`/products/${deal.slug}`} className="hover:text-[#3BB77E] transition-colors">
-                        {deal.title}
-                      </Link>
-                    </h3>
-                    {/* Vendor */}
-                    <div className="text-[10px] text-muted-foreground/80 dark:text-zinc-400 mt-1">
-                      By <span className="text-[#3BB77E] font-bold hover:underline cursor-pointer">{deal.vendor}</span>
-                    </div>
-                  </div>
-
-                  {/* Pricing & Add Button */}
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100 dark:border-zinc-800/80">
-                    <div className="flex flex-col">
-                      <span className="text-sm md:text-base font-extrabold text-[#3BB77E]">
-                        {formatCurrency(deal.price)}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground line-through">
-                        {formatCurrency(deal.oldPrice)}
-                      </span>
-                    </div>
-
-                    <AddToCartButton
-                      className="h-8 rounded-lg bg-[#DEF9EC] dark:bg-[#1b3d2f] hover:bg-[#3BB77E] hover:text-white text-[#3BB77E] dark:text-[#4ade80] font-bold text-xs transition-all duration-200 px-3 cursor-pointer border-0 shadow-none active:scale-[0.98]"
-                      product={deal.product}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Section 6: Standard Catalog Products Grid */}
+      {/* Section: Standard Catalog Products Grid */}
       <section className="py-6 md:py-8 bg-white dark:bg-[#1C1816]/30">
         <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
           <CatalogGrid
             products={featuredProducts}
             title="Sản phẩm bán chạy nhất"
           />
-        </div>
-      </section>
-
-      {/* Section 7: Curated Lists (4-column footer lists with product images) */}
-      <section className="py-6 md:py-8 bg-[#FAF8F6] dark:bg-[#1C1816]">
-        <div className="container mx-auto px-4 lg:px-8 max-w-7xl">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-            {listCols.map((col, colIdx) => (
-              <div key={colIdx} className="space-y-3">
-                <h3 className="text-xs font-extrabold text-[#1C1917] dark:text-white uppercase tracking-wider pb-1">
-                  {col.title}
-                </h3>
-                <div className="flex flex-col gap-1">
-                  {col.items.map((item, itemIdx) => (
-                    <div key={itemIdx} className="flex items-center gap-3 py-2 group cursor-pointer">
-                      {/* Image Thumbnail */}
-                      <div className="relative size-12 rounded-lg overflow-hidden shrink-0 bg-[#F0F6F3] dark:bg-[#162D21] border border-[#E2EDE8] dark:border-[#2C332F]">
-                        <img
-                          src={item.imageUrl || "/images/product-placeholder.svg"}
-                          alt={item.name}
-                          className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-300 mix-blend-multiply dark:mix-blend-normal"
-                        />
-                      </div>
-                      {/* Text details */}
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-xs font-bold text-[#1C1917] dark:text-white truncate group-hover:text-primary dark:group-hover:text-primary transition-colors">
-                          {item.name}
-                        </h4>
-                        <div className="flex items-baseline gap-1.5 mt-0.5">
-                          <span className={cn("text-xs font-extrabold", item.oldPrice ? "text-[#E74C3C]" : "text-[#253D4E]")}>
-                            {item.price}
-                          </span>
-                          {item.oldPrice && (
-                            <span className="text-[10px] text-[#253D4E]/70 line-through">
-                              {item.oldPrice}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 

@@ -145,24 +145,8 @@ function PaymentReturnContent() {
         >
           {isSuccess ? (
             <>
-              {/* Success Icon */}
-              <div className="relative mx-auto flex h-24 w-24 items-center justify-center">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
-                  className="flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400"
-                >
-                  <CheckCircle2 className="h-14 w-14" />
-                </motion.div>
-                <div className="absolute -inset-2 rounded-full border-2 border-emerald-400/30 animate-ping" />
-              </div>
-
               {/* Title & Description */}
               <div className="space-y-2">
-                <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-                  <Check className="mr-1 h-3 w-3" /> Giao dịch thành công
-                </Badge>
                 <h1 className="text-3xl font-extrabold text-foreground sm:text-4xl tracking-tight">
                   Thanh Toán Thành Công!
                 </h1>
