@@ -144,10 +144,43 @@ const SIZE_DESCRIPTIONS: Record<CupSize, string> = {
 const DESIGN_DRAFT_KEY = "cup_designer_draft_v1";
 const SAVED_DESIGNS_KEY = "cup_designer_saved_designs_v1";
 
+/** Tăng/Giảm độ đậm nhạt của màu Hex (-50% đến +50%) */
+function adjustColorBrightness(hex: string, percent: number): string {
+  if (!hex || !hex.startsWith("#")) return hex;
+  let cleanHex = hex.replace("#", "");
+  if (cleanHex.length === 3) {
+    cleanHex = cleanHex.split("").map((c) => c + c).join("");
+  }
+  let num = parseInt(cleanHex, 16);
+  if (isNaN(num)) return hex;
+
+  let amt = Math.round(2.55 * percent);
+  let R = (num >> 16) + amt;
+  let G = ((num >> 8) & 0x00ff) + amt;
+  let B = (num & 0x0000ff) + amt;
+
+  R = Math.min(255, Math.max(0, R));
+  G = Math.min(255, Math.max(0, G));
+  B = Math.min(255, Math.max(0, B));
+
+  return "#" + ((1 << 24) + (R << 16) + (G << 8) + B).toString(16).slice(1);
+}
+
+const CUP_COLORS = [
+  { label: "Trong suốt / Tự nhiên", value: "#FAF9F6", bg: "#FAF9F6" },
+  { label: "Đen Nhám", value: "#1E293B", bg: "#1E293B" },
+  { label: "Trắng Kem", value: "#F5EFE6", bg: "#F5EFE6" },
+  { label: "Hồng Pastel", value: "#FCE7F3", bg: "#FCE7F3" },
+  { label: "Xanh Mint", value: "#D1FAE5", bg: "#D1FAE5" },
+  { label: "Xanh Pastel", value: "#E0F2FE", bg: "#E0F2FE" },
+  { label: "Vàng Nhạt", value: "#FEF3C7", bg: "#FEF3C7" },
+];
+
 interface DesignDraft {
   materialType: CupMaterialType;
   style: CupStyle;
   size: CupSize;
+  cupColor?: string;
   printHeightPercent: number;
   layers: DesignArtworkLayer[];
   quantity: number;
@@ -184,10 +217,13 @@ function persistSavedDesigns(designs: any[]) {
   }
 }
 
-/** Merge local designs với API designs theo id, ưu tiên API data, local-only giữ nguyên */
+/** Merge local designs với API designs theo id & name, ưu tiên API data, loại bỏ trùng lặp */
 function mergeDesigns(local: any[], remote: any[]): any[] {
-  const remoteIds = new Set(remote.map((d) => d.id));
-  const localOnly = local.filter((d) => !remoteIds.has(d.id));
+  const remoteIds = new Set(remote.map((d) => String(d.id)));
+  const remoteNames = new Set(remote.map((d) => String(d.name).trim()));
+  const localOnly = local.filter(
+    (d) => !remoteIds.has(String(d.id)) && !remoteNames.has(String(d.name).trim()),
+  );
   return [...remote, ...localOnly];
 }
 
@@ -199,6 +235,8 @@ interface InStockVariant {
   inStock: boolean;
   sku?: string;
   price?: number;
+  productId?: string;
+  variantId?: string;
 }
 
 export function CupDesignerPage() {
@@ -219,7 +257,19 @@ export function CupDesignerPage() {
   const [materialType, setMaterialType] = useState<CupMaterialType>(() => loadDraft()?.materialType ?? DEFAULT_CUP_CONFIG.materialType);
   const [style, setStyle] = useState<CupStyle>(() => loadDraft()?.style ?? DEFAULT_CUP_CONFIG.style);
   const [size, setSize] = useState<CupSize>(() => loadDraft()?.size ?? DEFAULT_CUP_CONFIG.size);
-  const [cupColor] = useState(DEFAULT_CUP_CONFIG.cupColor);
+  const [baseCupColor, setBaseCupColor] = useState<string>(() => loadDraft()?.cupColor ?? DEFAULT_CUP_CONFIG.cupColor);
+  const [colorShadePercent, setColorShadePercent] = useState<number>(0);
+
+  const cupColor = useMemo(() => {
+    if (colorShadePercent === 0) return baseCupColor;
+    return adjustColorBrightness(baseCupColor, colorShadePercent);
+  }, [baseCupColor, colorShadePercent]);
+
+  function handleSetCupColor(newColor: string) {
+    setBaseCupColor(newColor);
+    setColorShadePercent(0);
+  }
+
   const [printHeightPercent, setPrintHeightPercent] = useState(() => loadDraft()?.printHeightPercent ?? DEFAULT_CUP_CONFIG.printHeightPercent);
 
 
@@ -332,10 +382,26 @@ export function CupDesignerPage() {
             prompt: promptLabel,
           };
 
+          // Nếu có brandName cụ thể trong prompt, tự động tạo Text Layer độc lập giúp khách hàng dễ tùy chỉnh chữ/màu chữ
+          let brandTextLayer: DesignArtworkLayer | null = null;
+          if (logoPromptInfo && logoPromptInfo.toUpperCase() !== "LOGO" && logoPromptInfo.trim().length > 0 && logoPromptInfo.trim().length <= 35) {
+            brandTextLayer = {
+              id: `txt_ai_${Date.now()}`,
+              type: "text",
+              text: logoPromptInfo.trim(),
+              x: dims.printArea.x + dims.printArea.width / 2 - 120,
+              y: dims.printArea.y + dims.printArea.height / 2 + 115,
+              color: "#059669",
+              fontSize: 28,
+              rotation: 0,
+            };
+          }
+
           setLayers((prev) => {
             const existingImageIndex = prev.findIndex(
               (l): l is DesignImageLayer => l.type === "image",
             );
+            let nextLayers = [...prev];
             if (existingImageIndex >= 0) {
               const oldLayer = prev[existingImageIndex] as DesignImageLayer;
               const updatedLayer: DesignImageLayer = {
@@ -344,11 +410,21 @@ export function CupDesignerPage() {
                 src,
                 prompt: promptLabel,
               };
-              const nextLayers = [...prev];
               nextLayers[existingImageIndex] = updatedLayer;
-              return nextLayers;
+            } else {
+              nextLayers.push(imageLayer);
             }
-            return [...prev, imageLayer];
+
+            if (brandTextLayer) {
+              const existingTextIdx = nextLayers.findIndex((l) => l.type === "text" && (l as any).id?.startsWith("txt_ai_"));
+              if (existingTextIdx >= 0) {
+                nextLayers[existingTextIdx] = brandTextLayer;
+              } else {
+                nextLayers.push(brandTextLayer);
+              }
+            }
+
+            return nextLayers;
           });
           setSelectedLayerId(newId);
 
@@ -362,7 +438,7 @@ export function CupDesignerPage() {
             artwork: {
               cup: { size, style, materialType, cupColor },
               artboard: { width: dims.width, height: dims.height, printHeightPercent },
-              layers: [imageLayer],
+              layers: brandTextLayer ? [imageLayer, brandTextLayer] : [imageLayer],
             },
           });
 
@@ -380,7 +456,10 @@ export function CupDesignerPage() {
             createdAt: new Date().toISOString(),
           };
 
-          setSavedDesigns((prev) => [autoDesignItem, ...prev.filter((d) => d.name !== designName)]);
+          setSavedDesigns((prev) => [
+            autoDesignItem,
+            ...prev.filter((d) => d.name !== designName && String(d.id) !== String(autoDesignItem.id)),
+          ]);
           setShowSavedPanel(true);
 
           if (user) {
@@ -388,7 +467,15 @@ export function CupDesignerPage() {
               name: designName,
               file: autoDesignItem.file,
               thumbnail: src,
-            }).catch((e) => console.warn("Auto save design API error:", e));
+            })
+              .then((remoteItem) => {
+                if (remoteItem && remoteItem.id) {
+                  setSavedDesigns((prev) =>
+                    prev.map((d) => (d.id === autoDesignItem.id ? remoteItem : d)),
+                  );
+                }
+              })
+              .catch((e) => console.warn("Auto save design API error:", e));
           }
         }
 
@@ -477,13 +564,13 @@ export function CupDesignerPage() {
   /* ── 0. AUTO-SAVE DRAFT VÀO LOCALSTORAGE ── */
   useEffect(() => {
     if (!isMounted) return;
-    const draft: DesignDraft = { materialType, style, size, printHeightPercent, layers, quantity };
+    const draft: DesignDraft = { materialType, style, size, cupColor, printHeightPercent, layers, quantity };
     try {
       localStorage.setItem(DESIGN_DRAFT_KEY, JSON.stringify(draft));
     } catch {
       // Bỏ qua nếu localStorage đầy
     }
-  }, [isMounted, materialType, style, size, printHeightPercent, layers, quantity]);
+  }, [isMounted, materialType, style, size, cupColor, printHeightPercent, layers, quantity]);
 
   /* ── 0b. AUTO-SAVE SAVED DESIGNS VÀO LOCALSTORAGE ── */
   useEffect(() => {
@@ -506,6 +593,8 @@ export function CupDesignerPage() {
           inStock: v.inStock,
           sku: v.sku,
           price: v.price,
+          productId: v.productId,
+          variantId: v.variantId,
         }));
         setInStockVariants(mapped);
       })
@@ -556,12 +645,30 @@ export function CupDesignerPage() {
   useEffect(() => {
     if (!productIdFromUrl) return;
 
-    setIsProductLocked(true);
-
     // Fetch product detail hoặc parse từ list để pre-fill material, style, size
     publicApiFetch<any>(`/catalog/products/${encodeURIComponent(productIdFromUrl)}`)
       .then((p) => {
         if (!p) return;
+
+        // RÀNG BUỘC: CHỈ LY CHƯA IN MỚI ĐƯỢC THIẾT KẾ
+        const isPrinted =
+          p.category === "printed_cup" ||
+          p.isPrinted === true ||
+          p.itemType === "CUP_PRINTED" ||
+          p.type === "CUP_PRINTED" ||
+          p.fulfillmentType === "PRE_PRINTED";
+
+        if (isPrinted) {
+          toast.error(
+            "Sản phẩm này là ly đã in sẵn của nhà sản xuất. Chỉ ly chưa in (phôi ly) mới được dùng để thiết kế!",
+            { duration: 5000 },
+          );
+          setIsProductLocked(false);
+          return;
+        }
+
+        setIsProductLocked(true);
+
         const attr = p.attributes ?? p.variants?.[0]?.attributes ?? {};
         const fullText = [
           p.name,
@@ -769,11 +876,26 @@ export function CupDesignerPage() {
     setSize(cup.size);
     setStyle(cup.style);
     setMaterialType(cup.materialType);
+    if (cup.cupColor) {
+      handleSetCupColor(cup.cupColor);
+    }
     setPrintHeightPercent(artboard.printHeightPercent);
     setLayers(savedLayers ?? []);
     setSelectedLayerId(null);
     setEditorKey((k) => k + 1);
     const shortName = design.name && design.name.length > 25 ? `${design.name.slice(0, 25)}...` : design.name;
+
+    // Báo cho Trợ lý AI nhận diện mẫu vừa tải để sẵn sàng chỉnh sửa theo yêu cầu
+    setAiMessages((prev) => [
+      ...prev,
+      {
+        id: `ai_load_${Date.now()}`,
+        sender: "ai",
+        text: `Đã tải mẫu "${shortName}". Tôi đã nhận diện toàn bộ hình ảnh và chữ trên ly! Bạn có thể nhập yêu cầu chỉnh sửa ngay (ví dụ: "đổi màu logo sang đỏ", "bỏ nền", "đổi thành hình tròn" hoặc "sửa chữ").`,
+        timestamp: new Date().toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+      },
+    ]);
+
     toast.success(`Đã tải mẫu "${shortName}" thành công!`);
     goToStep(2);
   }
@@ -836,8 +958,9 @@ export function CupDesignerPage() {
         addCustomPrintItem({
           product: {
             ...createCustomCupProduct({ size, price }),
+            id: selectedVariantInfo?.productId || productIdFromUrl || `custom-cup-${size.toLowerCase()}`,
             productRefId: currentCupSku,
-            name: `Ly in theo thiết kế ${CUP_MATERIAL_LABELS[materialType]} ${size} (${currentCupSku})`,
+            name: `Ly in theo thiết kế ${CUP_MATERIAL_LABELS[materialType]} ${CUP_SIZE_LABELS[size]} (${currentCupSku})`,
           },
           quantity,
           designId: savedDesign.id,
@@ -1221,7 +1344,6 @@ export function CupDesignerPage() {
                     <span>Tiếp tục: In Logo &amp; Xem 3D</span>
                     <ArrowRight className="size-4" />
                   </Button>
-
                 </div>
               </div>
 
@@ -1253,11 +1375,11 @@ export function CupDesignerPage() {
       {currentStep === 2 && (
         <div className="mx-auto w-full max-w-[1920px] px-3 sm:px-6 lg:px-8 py-3 lg:py-4 animate-in fade-in duration-300">
           {/* SINGLE UNIFIED MASTER CONTAINER CARD FOR STEP 2 */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-5 shadow-xs overflow-hidden">
-            <div className="grid gap-3.5 xl:gap-5 grid-cols-1 lg:grid-cols-[220px_minmax(0,1fr)_280px] xl:grid-cols-[250px_minmax(0,1fr)_340px] items-stretch min-w-0">
-              {/* LEFT PANEL: THÔNG SỐ LY & THIẾT KẾ ĐÃ LƯU */}
-              <div className="space-y-4">
-                <div className="space-y-3">
+          <div className="bg-white rounded-2xl border border-slate-200 p-2.5 sm:p-4 shadow-xs overflow-hidden">
+            <div className="grid gap-3 xl:gap-4.5 grid-cols-1 lg:grid-cols-[290px_1fr_290px] xl:grid-cols-[320px_1fr_340px] items-stretch min-w-0">
+              {/* LEFT PANEL: THÔNG SỐ LY, BẢNG MÀU & TRỢ LÝ AI THIẾT KẾ */}
+              <div className="flex flex-col justify-between h-full space-y-2">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs font-black uppercase tracking-wider text-[#253D4E]">
                     <span>Thông số ly</span>
                     <button
@@ -1268,18 +1390,91 @@ export function CupDesignerPage() {
                       Sửa
                     </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                  <div className="grid grid-cols-2 gap-1.5 text-[10.5px] font-semibold text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100">
                     <div>Dung tích: <strong className="text-foreground">{CUP_SIZE_LABELS[size]}</strong></div>
                     <div>Chất liệu: <strong className="text-foreground">{CUP_MATERIAL_LABELS[materialType]}</strong></div>
                     <div>Kiểu dáng: <strong className="text-foreground">{CUP_STYLE_LABELS[style]}</strong></div>
                     <div>Vùng in: <strong className="text-primary">{printHeightPercent}%</strong></div>
                   </div>
 
-                  {/* SLIDER CHIỀU CAO VÙNG IN TRONG GIAI ĐOẠN 2 */}
-                  <div className="pt-2 space-y-2">
+                  {/* BẢNG MÀU TỔNG HỢP IN NỀN LY TRONG GIAI ĐOẠN 2 */}
+                  <div className="pt-1.5 space-y-1.5 border-t border-slate-100">
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-600 text-[11px]">Chiều cao vùng in</span>
-                      <span className="text-primary text-xs font-black">{printHeightPercent}%</span>
+                      <span className="text-[#253D4E] text-[10.5px] font-black uppercase tracking-wider flex items-center gap-1">
+                        <Paintbrush className="size-3 text-primary" />
+                        Màu in nền ly
+                      </span>
+                      <span className="text-primary text-[9.5px] font-mono font-black bg-emerald-50 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                        <span
+                          className="size-2 rounded-full border border-slate-300 inline-block shrink-0"
+                          style={{ backgroundColor: cupColor }}
+                        />
+                        {cupColor.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* MẪU MÀU CHUẨN + NÚT CHỌN BẢNG MÀU TÙY CHỈNH (VÙNG MÀU) */}
+                    <div className="grid grid-cols-4 sm:grid-cols-8 gap-1 items-center">
+                      {CUP_COLORS.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => handleSetCupColor(c.value)}
+                          title={c.label}
+                          className={cn(
+                            "h-6 rounded-md border transition-all cursor-pointer select-none flex items-center justify-center relative",
+                            baseCupColor === c.value
+                              ? "ring-2 ring-primary ring-offset-1 scale-105 border-primary shadow-xs font-bold"
+                              : "border-slate-300 opacity-85 hover:opacity-100 hover:scale-105"
+                          )}
+                          style={{ backgroundColor: c.bg }}
+                        >
+                          {baseCupColor === c.value && (
+                            <CheckCircle2 className={cn("size-3", c.value === "#1E293B" ? "text-white" : "text-primary")} />
+                          )}
+                        </button>
+                      ))}
+
+                      {/* CHỌN MÀU TÙY CHỈNH THEO VÙNG MÀU (FULL SPECTRUM COLOR PICKER) */}
+                      <label
+                        title="Bảng màu tùy chỉnh (Chọn vùng màu)"
+                        className="h-6 rounded-md border border-dashed border-slate-300 hover:border-primary transition-all cursor-pointer flex items-center justify-center relative bg-gradient-to-tr from-rose-400 via-emerald-400 to-sky-400 shadow-2xs hover:scale-105"
+                      >
+                        <input
+                          type="color"
+                          value={baseCupColor}
+                          onChange={(e) => handleSetCupColor(e.target.value)}
+                          className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                        />
+                        <span className="text-[9px] font-black text-white drop-shadow-md">+</span>
+                      </label>
+                    </div>
+
+                    {/* THANH TRƯỢT KÉO TĂNG GIẢM ĐỘ ĐẬM NHẠT (SHADE / BRIGHTNESS SLIDER) */}
+                    <div className="space-y-1 bg-slate-50 p-1.5 rounded-lg border border-slate-200/60">
+                      <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
+                        <span>Tăng / Giảm độ đậm nhạt</span>
+                        <span className="text-primary font-black">
+                          {colorShadePercent > 0 ? `+${colorShadePercent}%` : colorShadePercent < 0 ? `${colorShadePercent}%` : "0%"}
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min={-50}
+                        max={50}
+                        step={2}
+                        value={colorShadePercent}
+                        onChange={(e) => setColorShadePercent(Number(e.target.value))}
+                        className="w-full accent-primary cursor-pointer h-1.5"
+                      />
+                    </div>
+                  </div>
+
+                  {/* SLIDER CHIỀU CAO VÙNG IN TRONG GIAI ĐOẠN 2 */}
+                  <div className="pt-1 space-y-1 border-t border-slate-100">
+                    <div className="flex items-center justify-between text-[10.5px] font-bold">
+                      <span className="text-slate-600">Chiều cao vùng in</span>
+                      <span className="text-primary font-black">{printHeightPercent}%</span>
                     </div>
                     <input
                       type="range"
@@ -1290,115 +1485,140 @@ export function CupDesignerPage() {
                       onChange={(e) => setPrintHeightPercent(Number(e.target.value))}
                       className="w-full accent-primary cursor-pointer h-1.5"
                     />
-                    <p className="text-[9px] text-slate-400 font-medium leading-tight">
-                      100% = in tràn viền · 70% = chừa khoảng cách an toàn
-                    </p>
                   </div>
                 </div>
 
-                {/* Saved designs section - Hiển thị mặc định cho mọi người dùng */}
-                <div className="pt-3 space-y-2 border-t border-slate-100">
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between py-1 text-left hover:bg-slate-50 transition cursor-pointer"
-                    onClick={() => setShowSavedPanel((v) => !v)}
-                  >
-                    <div className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-wide text-[#253D4E]">
-                      <History className="size-3.5 text-primary" />
-                      <span>Thiết kế đã lưu</span>
-                      {savedDesigns.length > 0 && (
-                        <span className="text-[9.5px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded-full">
-                          {savedDesigns.length}
-                        </span>
-                      )}
+                {/* AI DESIGN CHAT ASSISTANT PANEL */}
+                <div className="pt-1.5 border-t border-slate-100 flex-1 flex flex-col min-h-0">
+                  <div className="flex-1 flex flex-col justify-between rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-white via-emerald-50/30 to-emerald-50/60 p-3 space-y-2 shadow-2xs">
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b border-emerald-100 pb-2 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex size-6 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                          <Bot className="size-3.5" />
+                        </div>
+                        <div>
+                          <h4 className="text-[11.5px] font-black text-[#253D4E] uppercase tracking-wide flex items-center gap-1">
+                            Trợ lý AI Thiết kế
+                            <Sparkles className="size-3 text-emerald-600 animate-pulse" />
+                          </h4>
+                          <p className="text-[9px] font-medium text-emerald-700">Trò chuyện để AI tự vẽ &amp; dán logo lên ly</p>
+                        </div>
+                      </div>
+                      <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
+                        {imageLayerCount} hình
+                      </span>
                     </div>
-                    {showSavedPanel ? (
-                      <ChevronUp className="size-3.5 text-slate-400" />
-                    ) : (
-                      <ChevronDown className="size-3.5 text-slate-400" />
-                    )}
-                  </button>
 
-                  {showSavedPanel && (
-                    <div className="pt-1">
-                      {loadingDesigns ? (
-                        <div className="flex h-16 items-center justify-center gap-2">
-                          <Loader2 className="size-4 animate-spin text-primary" />
-                          <span className="text-[10px] text-slate-400 font-medium">Đang tải...</span>
-                        </div>
-                      ) : savedDesigns.length === 0 ? (
-                        <div className="py-3 text-center">
-                          <Paintbrush className="mx-auto size-5 text-slate-300 mb-1" />
-                          <p className="text-[10px] text-slate-400 font-bold">Chưa có thiết kế nào.</p>
-                          <p className="text-[9px] text-slate-400 mt-0.5">
-                            Các mẫu logo AI tạo ra sẽ tự động được lưu tại đây.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="max-h-[220px] overflow-y-auto pr-1 space-y-1.5 divide-y divide-slate-100">
-                          {savedDesigns.map((d) => (
-                            <div
-                              key={d.id}
-                              className="flex items-center gap-2 pt-1.5 first:pt-0 hover:bg-slate-50 p-1 rounded-lg transition"
-                            >
-                              <div className="size-8 shrink-0 overflow-hidden rounded-md border border-slate-200 bg-white">
-                                {d.thumbnail ? (
-                                  <img
-                                    src={d.thumbnail}
-                                    alt={d.name}
-                                    className="size-full object-contain"
-                                  />
-                                ) : (
-                                  <div className="flex size-full items-center justify-center">
-                                    <Paintbrush className="size-3 text-slate-300" />
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-[10px] font-bold text-[#253D4E]">{d.name}</p>
-                                <p className="text-[8.5px] text-slate-400">
-                                  {d.createdAt
-                                    ? new Date(d.createdAt).toLocaleDateString("vi-VN")
-                                    : ""}
-                                </p>
-                              </div>
-
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="outline"
-                                  title={`Tải thiết kế "${d.name}" vào ly để sửa tiếp`}
-                                  className="size-7 shrink-0 rounded-lg border-primary/30 text-primary hover:bg-emerald-50 cursor-pointer"
-                                  onClick={() => handleLoadDesign(d)}
-                                >
-                                  <FolderOpen className="size-3.5" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="outline"
-                                  title={`Xóa thiết kế "${d.name}"`}
-                                  className="size-7 shrink-0 rounded-lg border-red-200 text-red-400 hover:bg-red-50 hover:border-red-400 cursor-pointer"
-                                  onClick={() => setDesignToDelete(d)}
-                                >
-                                  <Trash2 className="size-3.5" />
-                                </Button>
-                              </div>
+                    {/* Chat Messages Stream (Flex grow to fill available height) */}
+                    <div className="flex-1 min-h-[100px] overflow-y-auto space-y-2 pr-1 text-xs my-1">
+                      {aiMessages.map((msg) => (
+                        <div
+                          key={msg.id}
+                          className={cn(
+                            "flex gap-2 text-[11px]",
+                            msg.sender === "user" ? "justify-end" : "justify-start",
+                          )}
+                        >
+                          {msg.sender === "ai" && (
+                            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white text-[9px]">
+                              <Bot className="size-3" />
                             </div>
-                          ))}
+                          )}
+
+                          <div
+                            className={cn(
+                              "max-w-[85%] rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed shadow-2xs space-y-1",
+                              msg.sender === "user"
+                                ? "bg-emerald-600 text-white font-medium rounded-tr-none"
+                                : "bg-white text-slate-700 border border-emerald-100 font-medium rounded-tl-none",
+                            )}
+                          >
+                            <p>{msg.text}</p>
+
+                            <span
+                              className={cn(
+                                "block text-[8.5px] text-right font-medium",
+                                msg.sender === "user" ? "text-emerald-100" : "text-slate-400",
+                              )}
+                            >
+                              {msg.timestamp}
+                            </span>
+                          </div>
+
+                          {msg.sender === "user" && (
+                            <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600 text-[9px]">
+                              <User className="size-3" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {isAiProcessing && (
+                        <div className="flex gap-2 text-[11px] justify-start items-center">
+                          <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                            <Bot className="size-3" />
+                          </div>
+                          <div className="bg-white border border-emerald-100 rounded-xl px-2.5 py-1 text-[10px] font-medium text-emerald-700 flex items-center gap-1.5 shadow-2xs">
+                            <Loader2 className="size-3 animate-spin text-emerald-600" />
+                            <span>AI đang vẽ họa tiết...</span>
+                          </div>
                         </div>
                       )}
                     </div>
-                  )}
+
+                    {/* Quick Tag Pills (1-Line Horizontal Scroll) */}
+                    <div className="flex items-center gap-1 overflow-x-auto scrollbar-none py-1 border-t border-emerald-100 shrink-0">
+                      <span className="text-[9px] text-slate-400 font-bold shrink-0 mr-0.5">Gợi ý:</span>
+                      {[
+                        "Tạo logo Bông Búp Tea",
+                        "Logo Cà Phê Mộc 1995",
+                        "Logo Mascot chú gấu",
+                        "Logo chữ M tối giản",
+                      ].map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          disabled={isAiProcessing}
+                          onClick={() => handleSendAiMessage(tag)}
+                          className="text-[9px] font-bold text-emerald-800 bg-white border border-emerald-200/90 hover:bg-emerald-100 px-2 py-0.5 rounded-md transition-all cursor-pointer disabled:opacity-50 shrink-0 whitespace-nowrap"
+                        >
+                          + {tag}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Chat Input Bar */}
+                    <div className="flex items-center gap-1.5 pt-1 shrink-0">
+                      <Input
+                        id="ai-chat-input"
+                        value={aiPrompt}
+                        onChange={(e) => setAiPrompt(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSendAiMessage()}
+                        disabled={isAiProcessing}
+                        placeholder="Gửi yêu cầu thiết kế cho AI..."
+                        className="h-8 rounded-xl bg-white text-xs px-3 flex-1 border-emerald-200 focus-visible:ring-emerald-500 font-medium"
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 w-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs p-0 shrink-0 cursor-pointer shadow-xs disabled:opacity-50 border-0"
+                        disabled={isAiProcessing || !aiPrompt.trim()}
+                        onClick={() => handleSendAiMessage()}
+                      >
+                        {isAiProcessing ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Send className="size-3.5" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* CENTER: 2D Canvas Editor */}
-              <div className="min-w-0">
-
-
+              {/* CENTER: 2D CANVAS EDITOR WITH INTEGRATED SAVED DESIGNS BUTTON IN TOOLBAR */}
+              <div className="min-w-0 w-full flex flex-col justify-between h-full">
                 <ArtworkEditor2D
                   key={editorKey}
                   size={size}
@@ -1409,152 +1629,120 @@ export function CupDesignerPage() {
                   onLayersChange={setLayers}
                   onSelectedLayerChange={setSelectedLayerId}
                   onTextureChange={handleTextureChange}
+                  savedDesignsNode={
+                    <div className="relative z-30">
+                      <button
+                        type="button"
+                        className="flex h-7 items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-2.5 text-[10.5px] font-bold text-emerald-800 hover:bg-emerald-100 transition cursor-pointer shadow-2xs"
+                        onClick={() => setShowSavedPanel((v) => !v)}
+                      >
+                        <History className="size-3 text-emerald-600" />
+                        <span>Mẫu đã lưu ({savedDesigns.length})</span>
+                        {showSavedPanel ? <ChevronUp className="size-3 text-emerald-600" /> : <ChevronDown className="size-3 text-emerald-600" />}
+                      </button>
+
+                      {/* FLOATING DROPDOWN POPUP ATTACHED TO TOOLBAR BUTTON */}
+                      {showSavedPanel && (
+                        <div className="absolute top-full left-0 mt-1.5 w-[290px] sm:w-[320px] max-w-[90vw] z-50 bg-white border border-slate-200 rounded-2xl p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
+                            <span className="text-xs font-bold text-slate-800">Mẫu đã lưu ({savedDesigns.length})</span>
+                            <button
+                              type="button"
+                              onClick={() => setShowSavedPanel(false)}
+                              className="text-[10px] font-bold text-slate-400 hover:text-slate-700 cursor-pointer"
+                            >
+                              Đóng [✕]
+                            </button>
+                          </div>
+
+                          {loadingDesigns ? (
+                            <div className="flex h-20 items-center justify-center gap-2">
+                              <Loader2 className="size-4 animate-spin text-primary" />
+                              <span className="text-xs text-slate-400 font-medium">Đang tải thiết kế...</span>
+                            </div>
+                          ) : savedDesigns.length === 0 ? (
+                            <div className="py-4 text-center text-xs text-slate-400 font-medium">
+                              Chưa có thiết kế nào được lưu.
+                            </div>
+                          ) : (
+                            <div className="max-h-[260px] overflow-y-auto pr-1 flex flex-col gap-1.5">
+                              {savedDesigns.map((d) => (
+                                <div
+                                  key={d.id}
+                                  className="flex items-center justify-between gap-2 bg-slate-50/90 hover:bg-emerald-50/80 border border-slate-200 hover:border-emerald-300 p-2 rounded-xl transition-all shadow-2xs group"
+                                >
+                                  <div className="size-9 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white p-0.5">
+                                    {d.thumbnail ? (
+                                      <img src={d.thumbnail} alt={d.name} className="size-full object-contain" />
+                                    ) : (
+                                      <div className="flex size-full items-center justify-center">
+                                        <Paintbrush className="size-3 text-slate-300" />
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-[11px] font-black text-[#253D4E] group-hover:text-primary transition-colors">{d.name}</p>
+                                    <p className="text-[9px] text-slate-400 font-medium mt-0.5">
+                                      {d.createdAt ? new Date(d.createdAt).toLocaleDateString("vi-VN") : "Hôm nay"}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="default"
+                                      title={`Dùng mẫu "${d.name}"`}
+                                      className="h-6.5 text-[10.5px] font-bold px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-all gap-1 border-0 shadow-2xs"
+                                      onClick={() => {
+                                        handleLoadDesign(d);
+                                        setShowSavedPanel(false);
+                                      }}
+                                    >
+                                      <FolderOpen className="size-3" />
+                                      Dùng
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      size="icon"
+                                      variant="outline"
+                                      title={`Xóa "${d.name}"`}
+                                      className="size-6.5 shrink-0 rounded-lg border-rose-200 text-rose-500 hover:bg-rose-50 hover:border-rose-400 cursor-pointer"
+                                      onClick={() => setDesignToDelete(d)}
+                                    >
+                                      <Trash2 className="size-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  }
                 />
               </div>
 
-
-              {/* RIGHT PANEL: MÔ PHỎNG LY 3D THỰC TẾ & TẠO HÌNH AI */}
-              <div className="space-y-3">
+              {/* RIGHT PANEL: MÔ PHỎNG LY 3D THỰC TẾ (STRETCHED TO MATCH ARTBOARD HEIGHT) */}
+              <div className="flex flex-col justify-between h-full space-y-2">
                 {/* 3D Preview */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs font-black text-[#253D4E] uppercase tracking-wider">
+                <div className="flex-1 flex flex-col justify-between space-y-1.5">
+                  <div className="flex items-center justify-between text-xs font-black text-[#253D4E] uppercase tracking-wider shrink-0">
                     <span>Mô phỏng ly 3D thực tế</span>
                     <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">Xoay 360°</span>
                   </div>
-                  <CupPreview3D
-                    size={size}
-                    style={style}
-                    materialType={materialType}
-                    cupColor={cupColor}
-                    artworkTextureUrl={artworkTextureUrl}
-                    printHeightPercent={printHeightPercent}
-                    heightClassName="h-[360px] sm:h-[400px] w-full"
-                  />
-                </div>
-
-                {/* AI DESIGN CHAT ASSISTANT PANEL */}
-                <div className="rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-white via-emerald-50/30 to-emerald-50/60 p-3 space-y-2.5 shadow-2xs">
-                  {/* Header */}
-                  <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex size-6 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
-                        <Bot className="size-3.5" />
-                      </div>
-                      <div>
-                        <h4 className="text-[11.5px] font-black text-[#253D4E] uppercase tracking-wide flex items-center gap-1">
-                          Trợ lý AI Thiết kế
-                          <Sparkles className="size-3 text-emerald-600 animate-pulse" />
-                        </h4>
-                        <p className="text-[9px] font-medium text-emerald-700">Trò chuyện để AI tự vẽ &amp; dán logo lên ly</p>
-                      </div>
-                    </div>
-                    <span className="text-[9.5px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full shrink-0">
-                      {imageLayerCount} hình trên ly
-                    </span>
-                  </div>
-
-                  {/* Chat Messages Stream */}
-                  <div className="max-h-[210px] min-h-[140px] overflow-y-auto space-y-2 pr-1 text-xs">
-                    {aiMessages.map((msg) => (
-                      <div
-                        key={msg.id}
-                        className={cn(
-                          "flex gap-2 text-[11px]",
-                          msg.sender === "user" ? "justify-end" : "justify-start",
-                        )}
-                      >
-                        {msg.sender === "ai" && (
-                          <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white text-[9px]">
-                            <Bot className="size-3" />
-                          </div>
-                        )}
-
-                        <div
-                          className={cn(
-                            "max-w-[85%] rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed shadow-2xs space-y-1.5",
-                            msg.sender === "user"
-                              ? "bg-emerald-600 text-white font-medium rounded-tr-none"
-                              : "bg-white text-slate-700 border border-emerald-100 font-medium rounded-tl-none",
-                          )}
-                        >
-                          <p>{msg.text}</p>
-
-                          <span
-                            className={cn(
-                              "block text-[8.5px] text-right font-medium",
-                              msg.sender === "user" ? "text-emerald-100" : "text-slate-400",
-                            )}
-                          >
-                            {msg.timestamp}
-                          </span>
-                        </div>
-
-                        {msg.sender === "user" && (
-                          <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-600 text-[9px]">
-                            <User className="size-3" />
-                          </div>
-                        )}
-                      </div>
-                    ))}
-
-                    {isAiProcessing && (
-                      <div className="flex gap-2 text-[11px] justify-start items-center">
-                        <div className="flex size-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
-                          <Bot className="size-3" />
-                        </div>
-                        <div className="bg-white border border-emerald-100 rounded-xl px-3 py-1.5 text-[10.5px] font-medium text-emerald-700 flex items-center gap-2 shadow-2xs">
-                          <Loader2 className="size-3.5 animate-spin text-emerald-600" />
-                          <span>AI đang vẽ họa tiết theo yêu cầu...</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Quick Tag Pills */}
-                  <div className="flex items-center gap-1 flex-wrap pt-1 border-t border-emerald-100">
-                    <span className="text-[9px] text-slate-400 font-bold mr-0.5">Gợi ý prompt:</span>
-                    {[
-                      "Tạo logo Bông Búp Tea",
-                      "Logo Cà Phê Mộc 1995",
-                      "Logo Mascot chú gấu",
-                      "Logo chữ M tối giản",
-                    ].map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        disabled={isAiProcessing}
-                        onClick={() => handleSendAiMessage(tag)}
-                        className="text-[9px] font-bold text-emerald-800 bg-white border border-emerald-200/90 hover:bg-emerald-100 px-2 py-0.5 rounded-md transition-all cursor-pointer disabled:opacity-50"
-                      >
-                        + {tag}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Chat Input Bar */}
-                  <div className="flex items-center gap-1.5 pt-0.5">
-                    <Input
-                      id="ai-chat-input"
-                      value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && handleSendAiMessage()}
-                      disabled={isAiProcessing}
-                      placeholder="Gửi yêu cầu thiết kế cho AI..."
-                      className="h-8 rounded-xl bg-white text-xs px-3 flex-1 border-emerald-200 focus-visible:ring-emerald-500 font-medium"
+                  <div className="flex-1 flex items-center justify-center min-h-[380px] sm:min-h-[440px]">
+                    <CupPreview3D
+                      size={size}
+                      style={style}
+                      materialType={materialType}
+                      cupColor={cupColor}
+                      artworkTextureUrl={artworkTextureUrl}
+                      printHeightPercent={printHeightPercent}
+                      heightClassName="h-full min-h-[380px] sm:min-h-[440px] w-full"
                     />
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 w-8 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs p-0 shrink-0 cursor-pointer shadow-xs disabled:opacity-50"
-                      disabled={isAiProcessing || !aiPrompt.trim()}
-                      onClick={() => handleSendAiMessage()}
-                    >
-                      {isAiProcessing ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        <Send className="size-3.5" />
-                      )}
-                    </Button>
                   </div>
                 </div>
               </div>

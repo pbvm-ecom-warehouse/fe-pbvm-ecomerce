@@ -1,112 +1,7 @@
 import { publicApiFetch } from "@/lib/public-api";
 import type { ApiListResponse, CatalogProduct, ProductVariant } from "@/types/api";
 
-export const fallbackCatalogProducts: CatalogProduct[] = [
-  {
-    id: "p1",
-    productRefId: "REF-TRA-01",
-    slug: "tra-den-co-thu-bao-1kg",
-    name: "Trà Đen Cổ Thụ chuyên pha trà sữa (Bao 1kg)",
-    category: "ingredient",
-    price: 150000,
-    b2bPrice: 120000,
-    unit: "bao",
-    stockSnapshot: 500,
-    imageUrl: "https://images.unsplash.com/photo-1597481499750-3e6b22637e12?auto=format&fit=crop&w=400&q=80",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "p2",
-    productRefId: "REF-BOT-SUA-01",
-    slug: "bot-sua-indo-kievit-vana-blanca-25kg",
-    name: "Bột sữa Indo Kievit Vana Blanca (Bao 25kg)",
-    category: "ingredient",
-    price: 1650000,
-    b2bPrice: 1450000,
-    unit: "bao",
-    stockSnapshot: 150,
-    imageUrl: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=400&q=80",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "p3",
-    productRefId: "REF-LY-PP500",
-    slug: "ly-nhua-pp-500ml-thung-1000",
-    name: "Ly nhựa PP 500ml dày dặn chuyên trà sữa (Thùng 1000 cái)",
-    category: "plain_cup",
-    price: 450000,
-    b2bPrice: 380000,
-    unit: "thùng",
-    stockSnapshot: 80,
-    imageUrl: "/images/clear_cups.png",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "p4",
-    productRefId: "REF-TRAN-CHAU-01",
-    slug: "tran-chau-den-gia-uy-3kg",
-    name: "Trân châu đen Gia Uy túi 3kg dai giòn sần sật",
-    category: "ingredient",
-    price: 75000,
-    b2bPrice: 65000,
-    unit: "túi",
-    stockSnapshot: 240,
-    imageUrl: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=400&q=80",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "p5",
-    productRefId: "REF-SIRO-01",
-    slug: "siro-duong-den-maulin-25kg",
-    name: "Siro Đường Đen Đài Loan Maulin 2.5kg",
-    category: "ingredient",
-    price: 230000,
-    b2bPrice: 195000,
-    unit: "chai",
-    stockSnapshot: 310,
-    imageUrl: "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=400&q=80",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "p6",
-    productRefId: "REF-LY-IN-500",
-    slug: "ly-nhua-pp-500ml-in-logo-thung-1000",
-    name: "Ly nhựa PP 500ml in sẵn logo phong cách hiện đại (Thùng 1000 cái)",
-    category: "printed_cup",
-    price: 520000,
-    b2bPrice: 460000,
-    unit: "thùng",
-    stockSnapshot: 45,
-    imageUrl: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?auto=format&fit=crop&w=400&q=80",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "p7",
-    productRefId: "REF-LY-PET700",
-    slug: "ly-nhua-pet-700ml-thung-1000",
-    name: "Ly nhựa PET 700ml trong suốt dày dặn (Thùng 1000 cái)",
-    category: "plain_cup",
-    price: 480000,
-    b2bPrice: 420000,
-    unit: "thùng",
-    stockSnapshot: 120,
-    imageUrl: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=400&q=80",
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: "p8",
-    productRefId: "REF-LY-IN-700",
-    slug: "ly-nhua-pet-700ml-in-logo-thung-1000",
-    name: "Ly nhựa PET 700ml in logo thiết kế theo yêu cầu (Thùng 1000 cái)",
-    category: "printed_cup",
-    price: 560000,
-    b2bPrice: 490000,
-    unit: "thùng",
-    stockSnapshot: 35,
-    imageUrl: "https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&w=400&q=80",
-    updatedAt: new Date().toISOString(),
-  }
-];
+export const fallbackCatalogProducts: CatalogProduct[] = [];
 
 // Map category ObjectId to slug string used in FE
 const CATEGORY_MAP: Record<string, CatalogProduct["category"]> = {
@@ -148,16 +43,71 @@ function getValidImageUrl(img: string | undefined): string {
  * Map một product detail (từ /catalog/products/:slug có variants)
  * thành CatalogProduct dùng ở FE.
  */
+/**
+ * Map một product detail (từ /catalog/products/:slug có variants)
+ * thành CatalogProduct dùng ở FE.
+ */
 function mapProductDetail(p: any): CatalogProduct {
-  const rawVariants: any[] = p.variants ?? [];
-  const activeVariant = rawVariants.find((v) => v.isActive !== false) ?? rawVariants[0];
-  const price = activeVariant?.price ?? 0;
-  const category: CatalogProduct["category"] = CATEGORY_MAP[p.categoryId] ?? "ingredient";
+  let ov: any = {};
+  if (typeof window !== "undefined") {
+    try {
+      const overridesMap = JSON.parse(localStorage.getItem("ecom_local_overrides") || "{}");
+      ov = overridesMap[p.id || p._id] || overridesMap[p.slug] || {};
+    } catch {
+      ov = {};
+    }
+  }
 
-  const mappedVariants: ProductVariant[] = rawVariants.map((v: any) => ({
+  const mergedP = { ...ov, ...p };
+
+  // Đọc danh sách variants gốc từ BE hoặc override
+  const baseVariants: any[] =
+    Array.isArray(p.variants) && p.variants.length > 0
+      ? p.variants
+      : (Array.isArray(ov.variants) && ov.variants.length > 0 ? ov.variants : []);
+
+  // Áp dụng giá đã cập nhật từ Admin (nếu có trong overrides)
+  const rawVariants = baseVariants.map((v: any) => {
+    let overridePrice = v.price;
+    if (ov.variants && Array.isArray(ov.variants)) {
+      const matchOv = ov.variants.find(
+        (ovV: any) => (ovV.id || ovV._id) === (v.id || v._id) || (ovV.sku && v.sku && ovV.sku === v.sku),
+      );
+      if (matchOv && matchOv.price !== undefined && Number(matchOv.price) > 0) {
+        overridePrice = Number(matchOv.price);
+      }
+    }
+    if (ov.price !== undefined && Number(ov.price) > 0 && (!overridePrice || overridePrice <= 0)) {
+      overridePrice = Number(ov.price);
+    }
+    return {
+      ...v,
+      price: overridePrice,
+    };
+  });
+
+  const activeVariant = rawVariants.find((v) => v.isActive !== false) ?? rawVariants[0];
+
+  const validVariantPrices = rawVariants
+    .map((v) => Number(v.price))
+    .filter((pr) => !isNaN(pr) && pr > 0);
+
+  const minVariantPrice = validVariantPrices.length > 0
+    ? Math.min(...validVariantPrices)
+    : (ov.price ?? p.price ?? activeVariant?.price ?? 0);
+
+  const price = minVariantPrice;
+
+  const rawCatId = mergedP.categoryId || p.categoryId || (typeof mergedP.category === "object" ? mergedP.category?.id || mergedP.category?._id : mergedP.category);
+  const rawCatSlug = typeof mergedP.category === "object" ? mergedP.category?.slug : (typeof mergedP.category === "string" ? mergedP.category : null);
+  const rawCatName = typeof mergedP.category === "object" ? mergedP.category?.name : null;
+
+  const mappedCategorySlug = rawCatSlug || CATEGORY_MAP[rawCatId] || rawCatId || "ingredient";
+
+  let mappedVariants: ProductVariant[] = rawVariants.map((v: any) => ({
     id: v.id ?? v._id,
-    sku: v.sku ?? p.slug.toUpperCase(),
-    productId: v.productId ?? p.id ?? p._id,
+    sku: v.sku ?? mergedP.slug.toUpperCase(),
+    productId: v.productId ?? mergedP.id ?? mergedP._id,
     attributes: v.attributes ?? {},
     price: v.price ?? price,
     availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
@@ -165,42 +115,170 @@ function mapProductDetail(p: any): CatalogProduct {
     isActive: v.isActive !== false,
   }));
 
+  if (mappedVariants.length === 0) {
+    mappedVariants = [
+      {
+        id: `var-${mergedP.id ?? mergedP._id ?? Date.now()}`,
+        sku: mergedP.productRefId ?? mergedP.sku ?? (mergedP.slug ? mergedP.slug.toUpperCase() : "SKU"),
+        productId: mergedP.id ?? mergedP._id,
+        attributes: mergedP.attributes || {},
+        price: price > 0 ? price : (mergedP.price || 0),
+        availableQty: mergedP.stockSnapshot ?? 0,
+        fulfillmentType: mergedP.fulfillmentType ?? "STANDARD",
+        isActive: true,
+      },
+    ];
+  }
+
+  const rawCandidates = [
+    ...(mergedP.images || []),
+    mergedP.imageUrl,
+    ...(p.images || []),
+    p.imageUrl,
+  ].filter((url): url is string => typeof url === "string" && Boolean(url.trim()));
+
+  const imageCandidates = Array.from(new Set(rawCandidates));
+
+  const activeAttributes = activeVariant?.attributes || mergedP.attributes || {};
+
   return {
-    id: p.id ?? p._id,
-    productRefId: activeVariant?.sku ?? p.slug.toUpperCase(),
-    slug: p.slug,
-    name: p.name,
-    category,
-    fulfillmentType: activeVariant?.fulfillmentType ?? "STANDARD",
+    id: mergedP.id ?? mergedP._id,
+    productRefId: activeVariant?.sku ?? mergedP.slug.toUpperCase(),
+    slug: mergedP.slug,
+    name: mergedP.name,
+    description: mergedP.description || "",
+    category: mappedCategorySlug,
+    categoryId: rawCatId,
+    categoryObj: typeof mergedP.category === "object" ? mergedP.category : undefined,
+    categoryName: rawCatName,
+    fulfillmentType: mergedP.fulfillmentType ?? activeVariant?.fulfillmentType ?? "STANDARD",
     price,
     b2bPrice: price,
-    unit: UNIT_MAP[category] ?? "bao",
+    unit: UNIT_MAP[mappedCategorySlug as keyof typeof UNIT_MAP] ?? "cái",
     stockSnapshot: mappedVariants.reduce((sum: number, v: ProductVariant) => sum + (v.availableQty ?? 0), 0),
-    imageUrl: getValidImageUrl(p.images?.[0]),
-    updatedAt: p.updatedAt ?? new Date().toISOString(),
+    imageUrl: getValidImageUrl(imageCandidates[0]),
+    images: imageCandidates,
+    updatedAt: mergedP.updatedAt ?? new Date().toISOString(),
     variants: mappedVariants,
-  };
+    attributes: activeAttributes,
+    capacity: activeAttributes.capacity || activeAttributes.size || activeAttributes.spec || "",
+    material: activeAttributes.material || "",
+    style: activeAttributes.style || "",
+    color: activeAttributes.color || "",
+  } as any;
 }
 
 /**
- * Map một product từ list API (không có variants) — dùng giá trị mặc định trống/0.
+ * Map một product từ list API (nếu có variants thì lấy giá variant thấp nhất).
  */
 function mapProductListItem(p: any): CatalogProduct {
-  const category: CatalogProduct["category"] = CATEGORY_MAP[p.categoryId] ?? "ingredient";
+  let ov: any = {};
+  if (typeof window !== "undefined") {
+    try {
+      const overridesMap = JSON.parse(localStorage.getItem("ecom_local_overrides") || "{}");
+      ov = overridesMap[p.id || p._id] || overridesMap[p.slug] || {};
+    } catch {
+      ov = {};
+    }
+  }
+
+  const mergedP = { ...ov, ...p };
+
+  const baseVariants: any[] =
+    Array.isArray(p.variants) && p.variants.length > 0
+      ? p.variants
+      : (Array.isArray(ov.variants) && ov.variants.length > 0 ? ov.variants : []);
+
+  // Áp dụng giá đã cập nhật từ Admin (nếu có trong overrides)
+  const rawVariants = baseVariants.map((v: any) => {
+    let overridePrice = v.price;
+    if (ov.variants && Array.isArray(ov.variants)) {
+      const matchOv = ov.variants.find(
+        (ovV: any) => (ovV.id || ovV._id) === (v.id || v._id) || (ovV.sku && v.sku && ovV.sku === v.sku),
+      );
+      if (matchOv && matchOv.price !== undefined && Number(matchOv.price) > 0) {
+        overridePrice = Number(matchOv.price);
+      }
+    }
+    if (ov.price !== undefined && Number(ov.price) > 0 && (!overridePrice || overridePrice <= 0)) {
+      overridePrice = Number(ov.price);
+    }
+    return {
+      ...v,
+      price: overridePrice,
+    };
+  });
+
+  const validVariantPrices = rawVariants
+    .map((v) => Number(v.price))
+    .filter((pr) => !isNaN(pr) && pr > 0);
+
+  const minVariantPrice = validVariantPrices.length > 0
+    ? Math.min(...validVariantPrices)
+    : (ov.price ?? p.price ?? 0);
+
+  const price = minVariantPrice;
+
+  const rawCatId = mergedP.categoryId || p.categoryId || (typeof mergedP.category === "object" ? mergedP.category?.id || mergedP.category?._id : mergedP.category);
+  const rawCatSlug = typeof mergedP.category === "object" ? mergedP.category?.slug : (typeof mergedP.category === "string" ? mergedP.category : null);
+  const rawCatName = typeof mergedP.category === "object" ? mergedP.category?.name : null;
+
+  const mappedCategorySlug = rawCatSlug || CATEGORY_MAP[rawCatId] || rawCatId || "ingredient";
+
+  let mappedVariants: ProductVariant[] = rawVariants.map((v: any) => ({
+    id: v.id ?? v._id,
+    sku: v.sku ?? mergedP.slug.toUpperCase(),
+    productId: v.productId ?? mergedP.id ?? mergedP._id,
+    attributes: v.attributes ?? {},
+    price: v.price ?? price,
+    availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
+    fulfillmentType: v.fulfillmentType ?? "STANDARD",
+    isActive: v.isActive !== false,
+  }));
+
+  if (mappedVariants.length === 0) {
+    mappedVariants = [
+      {
+        id: `var-${mergedP.id ?? mergedP._id ?? Date.now()}`,
+        sku: mergedP.productRefId ?? mergedP.sku ?? (mergedP.slug ? mergedP.slug.toUpperCase() : "SKU"),
+        productId: mergedP.id ?? mergedP._id,
+        attributes: mergedP.attributes || {},
+        price: price > 0 ? price : (mergedP.price || 0),
+        availableQty: mergedP.stockSnapshot ?? 0,
+        fulfillmentType: mergedP.fulfillmentType ?? "STANDARD",
+        isActive: true,
+      },
+    ];
+  }
+
+  const rawCandidates = [
+    ...(mergedP.images || []),
+    mergedP.imageUrl,
+    ...(p.images || []),
+    p.imageUrl,
+  ].filter((url): url is string => typeof url === "string" && Boolean(url.trim()));
+
+  const imageCandidates = Array.from(new Set(rawCandidates));
 
   return {
-    id: p.id ?? p._id,
-    productRefId: p.slug.toUpperCase(),
-    slug: p.slug,
-    name: p.name,
-    category,
-    fulfillmentType: "STANDARD",
-    price: 0,
-    b2bPrice: 0,
-    unit: UNIT_MAP[category] ?? "bao",
-    stockSnapshot: 0,
-    imageUrl: getValidImageUrl(p.images?.[0]),
-    updatedAt: p.updatedAt ?? new Date().toISOString(),
+    id: mergedP.id ?? mergedP._id,
+    productRefId: mappedVariants[0]?.sku ?? mergedP.slug.toUpperCase(),
+    slug: mergedP.slug,
+    name: mergedP.name,
+    category: mappedCategorySlug,
+    categoryId: rawCatId,
+    categoryObj: typeof mergedP.category === "object" ? mergedP.category : undefined,
+    categoryName: rawCatName,
+    fulfillmentType: mergedP.fulfillmentType ?? "STANDARD",
+    price,
+    b2bPrice: price,
+    unit: UNIT_MAP[mappedCategorySlug as keyof typeof UNIT_MAP] ?? "cái",
+    stockSnapshot: mappedVariants.length > 0
+      ? mappedVariants.reduce((sum: number, v: ProductVariant) => sum + (v.availableQty ?? 0), 0)
+      : (mergedP.stockSnapshot ?? 0),
+    imageUrl: getValidImageUrl(imageCandidates[0]),
+    updatedAt: mergedP.updatedAt ?? new Date().toISOString(),
+    variants: mappedVariants,
   };
 }
 
@@ -213,11 +291,20 @@ const emptyCatalogResponse: ApiListResponse<CatalogProduct> = {
  * Lấy danh sách sản phẩm từ BE. Vì list API không trả về variants/giá,
  * mình sẽ enrichment bằng cách gọi detail cho từng slug song song.
  * Nếu detail thất bại, dùng mapProductListItem.
+ *
+ * Lưu ý: không mời local drafts từ localStorage — hàm này chạy
+ * server-side nên không có window. Shop chỉ hiển thị sản phẩm từ BE.
  */
 export async function listCatalogProducts() {
   try {
-    const rawProducts = await publicApiFetch<any[]>("/catalog/products");
-    if (!rawProducts || !Array.isArray(rawProducts) || rawProducts.length === 0) {
+    let rawProducts: any[] = [];
+    try {
+      rawProducts = (await publicApiFetch<any[]>("/catalog/products")) ?? [];
+    } catch {
+      rawProducts = [];
+    }
+
+    if (rawProducts.length === 0) {
       return emptyCatalogResponse;
     }
 
@@ -225,21 +312,14 @@ export async function listCatalogProducts() {
     const enriched = await Promise.all(
       rawProducts.map(async (p) => {
         try {
+          if (Array.isArray(p.variants) && p.variants.length > 0) {
+            return mapProductDetail(p);
+          }
           const detail = await publicApiFetch<any>(
             `/catalog/products/${encodeURIComponent(p.slug)}`,
           );
-          
-          // Log pricing details for debug
-          console.log(`[API Price Log] Product: ${p.name} | Slug: ${p.slug}`);
-          if (detail?.variants) {
-            detail.variants.forEach((v: any) => {
-              console.log(`  -> Variant SKU: ${v.sku} | Price: ${v.price} | Available: ${v.availableQty}`);
-            });
-          }
-
-          return detail ? mapProductDetail(detail) : mapProductListItem(p);
-        } catch (err) {
-          console.error(`[API Price Log Error] Failed to fetch details for ${p.slug}:`, err);
+          return detail ? mapProductDetail({ ...p, ...detail }) : mapProductListItem(p);
+        } catch {
           return mapProductListItem(p);
         }
       }),
@@ -270,21 +350,23 @@ export async function getCatalogProductBySlug(slug: string) {
     const p = await publicApiFetch<any>(
       `/catalog/products/${encodeURIComponent(slug)}`,
     );
-    if (!p) return null;
-
-    // Log pricing details for debug
-    console.log(`[API Price Log] Detail for ${slug}:`);
-    if (p.variants) {
-      p.variants.forEach((v: any) => {
-        console.log(`  -> Variant SKU: ${v.sku} | Price: ${v.price} | Fulfillment: ${v.fulfillmentType}`);
-      });
-    }
-
-    return mapProductDetail(p);
+    if (p) return mapProductDetail(p);
   } catch (error) {
-    console.error(`getCatalogProductBySlug(${slug}): BE error:`, error);
-    return null;
+    console.warn(`getCatalogProductBySlug(${slug}): BE error:`, error);
   }
+
+  // Fallback check local drafts/overrides if backend detail is missing or stale
+  if (typeof window !== "undefined") {
+    try {
+      const drafts = JSON.parse(localStorage.getItem("ecom_local_drafts") || "[]");
+      const found = drafts.find((d: any) => d.slug === slug || d.id === slug || d._id === slug);
+      if (found) return mapProductDetail(found);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -473,9 +555,9 @@ export async function fetchAllCupVariantsFromApi(): Promise<
     inStock: boolean;
     price?: number;
     productId?: string;
+    variantId?: string;
     sku?: string;
   }>
-
 > {
   try {
     // ── Lấy danh sách sản phẩm từ DB (kể cả hết hàng nếu BE trả về) ──
@@ -496,16 +578,23 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       }
     }
 
-    // ── Lọc sản phẩm phôi ly / ly custom in theo yêu cầu từ DB ──
+    // ── Lọc sản phẩm phôi ly / ly custom in theo yêu cầu từ DB (CHỈ LY CHƯA IN) ──
     const allRaw = [...drafts, ...rawList];
     const cupRaw = allRaw.filter((p: any) => {
       const category = String(p.category ?? "").toLowerCase();
       const slug = String(p.slug ?? "").toLowerCase();
       const name = String(p.name ?? "").toLowerCase();
       const fulfillmentType = String(p.fulfillmentType ?? "").toLowerCase();
+      const itemType = String(p.itemType ?? p.type ?? "").toUpperCase();
 
-      // Bỏ qua ly in hình sẵn của NSX (printed_cup) nếu không phải phôi/custom
-      if (category === "printed_cup" && !name.includes("custom") && !name.includes("phôi")) {
+      // RÀNG BUỘC: Bỏ qua tất cả ly đã in sẵn của NSX (printed_cup / CUP_PRINTED / isPrinted === true)
+      if (
+        category === "printed_cup" ||
+        p.isPrinted === true ||
+        itemType === "CUP_PRINTED" ||
+        fulfillmentType === "pre_printed" ||
+        (fulfillmentType === "standard" && category === "printed_cup")
+      ) {
         return false;
       }
 
@@ -513,6 +602,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         category === "plain_cup" ||
         category === "custom_print" ||
         fulfillmentType === "custom_print" ||
+        itemType === "CUP_BLANK" ||
         name.includes("phôi") ||
         name.includes("custom") ||
         name.includes("tự thiết kế") ||
@@ -578,6 +668,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       inStock: boolean;
       price?: number;
       productId?: string;
+      variantId?: string;
       sku?: string;
     }> = [];
 
@@ -611,7 +702,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         const attrStyle = (attrObj.style ?? attrObj["kiểu dáng"] ?? attrObj["kieu dang"] ?? attrObj["dáng"] ?? "").toLowerCase();
         const attrSize = (attrObj.size ?? attrObj.capacity ?? attrObj["dung tích"] ?? attrObj["dung tich"] ?? attrObj["dungtich"] ?? "").toLowerCase();
 
-        const skuStr = String(v.sku ?? "").toLowerCase();
+        const skuStr = String(v.sku ?? p.sku ?? p.productRefId ?? "").toLowerCase();
 
         const fullText = [
           attrMaterial, attrStyle, attrSize,
@@ -623,6 +714,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         const style = parseStyle(attrStyle || fullText, skuStr);
         const size = parseSize(attrSize || fullText, skuStr);
 
+        const sku = v.sku || p.sku || p.productRefId;
 
         // Dedupe: nếu combo đã có với inStock=true thì ưu tiên thông tin còn hàng
         const existing = result.find(
@@ -633,7 +725,8 @@ export async function fetchAllCupVariantsFromApi(): Promise<
             existing.inStock = true;
             existing.availableQty = availableQty;
             existing.price = v.price ?? p.price;
-            if (v.sku) existing.sku = v.sku;
+            if (sku) existing.sku = sku;
+            if (v.id || v._id) existing.variantId = v.id || v._id;
           }
           return;
         }
@@ -646,13 +739,14 @@ export async function fetchAllCupVariantsFromApi(): Promise<
           inStock,
           price: v.price ?? p.price,
           productId: p.id || p._id,
-          sku: v.sku,
+          variantId: v.id || v._id || sku,
+          sku,
         });
       });
     });
 
-
-    console.log("[Cup DB All] Tất cả variants (kể cả hết hàng):", result);
+    console.log("[Cup DB All] Tất cả variants phôi ly chưa in:", result);
+    return result;
     return result;
   } catch (error) {
     console.error("fetchAllCupVariantsFromApi error:", error);

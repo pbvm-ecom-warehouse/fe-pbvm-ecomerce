@@ -45,7 +45,7 @@ async function translateAndExpandPromptWithLLM(
       .map((l) => (l.type === "image" ? `Existing Logo/Image Layer: "${l.prompt || "Logo thiết kế"}"` : `Text Layer: "${l.text}"`))
       .join("\n");
 
-    const promptForLLM = `You are an expert AI Art Director for high-end corporate logo design.
+    const promptForLLM = `You are an expert AI Art Director for high-end corporate graphic logo design.
 Your task is to analyze the user's Vietnamese request and output a detailed, highly specific English AI Image Generation Prompt for a Diffusion Model.
 
 Current Design/Logo on the Cup Canvas:
@@ -59,9 +59,10 @@ ${recentHistoryStr}
 Current User Request: "${userText}"
 
 Directives:
-1. Carefully extract ALL requested details: colors (e.g. red, gold, metallic, yellow, emerald green, dark navy), shapes (circle, square, triangle, emblem), icons/subjects, typography/text, and background requirements (e.g. solid black background, solid red background, transparent/white isolated background).
-2. IMPORTANT: If the user asks to edit/modify/change the current logo (e.g. "đổi sang màu đỏ", "bỏ nền", "đổi thành hình tròn", "sửa chữ thành Arknote", "thay chú gấu thành con rồng"), APPLY THAT MODIFICATION DIRECTLY ONTO THE EXISTING LOGO CONTEXT ("${currentCanvasSummary || ""}")! Maintain the subject, style, and brand identity unless explicitly told to change it.
-3. Output ONLY the final 1-sentence English prompt. No explanation, no markdown quotes.`;
+1. Focus on creating a clean, professional vector graphic logo motif/symbol with sharp contours and vibrant colors (e.g. red, gold, metallic, yellow, emerald green, dark navy).
+2. Specify isolated background (e.g. clean white background or solid dark background) for crisp alpha transparency extraction.
+3. IMPORTANT: If the user asks to edit/modify the current logo (e.g. "đổi sang màu đỏ", "bỏ nền", "đổi thành hình tròn", "sửa chữ thành Arknote", "thay chú gấu thành con rồng"), APPLY THAT MODIFICATION DIRECTLY ONTO THE EXISTING LOGO CONTEXT ("${currentCanvasSummary || ""}")!
+4. Output ONLY the final 1-sentence English prompt. No explanation, no markdown quotes.`;
 
 
     const response = await fetch(

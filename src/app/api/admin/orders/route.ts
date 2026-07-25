@@ -2,73 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { MongoClient, ObjectId } from "mongodb";
 import fs from "fs";
 
-const FALLBACK_ORDERS = [
-  {
-    id: "o1",
-    code: "ORD-92837",
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    total: 750000,
-    subtotal: 750000,
-    shippingFee: 0,
-    paymentMethod: "ONLINE",
-    paymentStatus: "PAID",
-    orderStatus: "CONFIRMED",
-    fulfillmentStatus: "READY_TO_PICK",
-    shippingAddress: {
-      recipientName: "Nguyễn Văn A",
-      phone: "0901234567",
-      line: "97 Đường số 7, KDC Trung Sơn",
-      ward: "Bình Hưng",
-      district: "Bình Chánh",
-      province: "TP. Hồ Chí Minh",
-    },
-    items: [
-      {
-        sku: "REF-TRA-01",
-        name: "Trà Đen Cổ Thụ chuyên pha trà sữa (Bao 1kg)",
-        price: 150000,
-        quantity: 2,
-        fulfillmentType: "STANDARD",
-      },
-      {
-        sku: "REF-LY-PP500",
-        name: "Ly nhựa PP 500ml dày dặn chuyên trà sữa (Thùng 1000 cái)",
-        price: 450000,
-        quantity: 1,
-        fulfillmentType: "STANDARD",
-      },
-    ],
-  },
-  {
-    id: "o2",
-    code: "ORD-12847",
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    total: 1650000,
-    subtotal: 1650000,
-    shippingFee: 0,
-    paymentMethod: "COD",
-    paymentStatus: "UNPAID",
-    orderStatus: "PLACED",
-    fulfillmentStatus: "NONE",
-    shippingAddress: {
-      recipientName: "Trần Thị B",
-      phone: "0918765432",
-      line: "123 Nguyễn Trãi",
-      ward: "Phường 2",
-      district: "Quận 5",
-      province: "TP. Hồ Chí Minh",
-    },
-    items: [
-      {
-        sku: "REF-BOT-SUA-01",
-        name: "Bột sữa Indo Kievit Vana Blanca (Bao 25kg)",
-        price: 1650000,
-        quantity: 1,
-        fulfillmentType: "STANDARD",
-      },
-    ],
-  },
-];
+
 
 function getBackendEnv() {
   try {
@@ -192,7 +126,7 @@ export async function GET(req: NextRequest) {
     await client.close();
 
     if (mappedOrders.length === 0) {
-      return NextResponse.json(FALLBACK_ORDERS);
+      return NextResponse.json([]);
     }
 
     return NextResponse.json(mappedOrders);
@@ -205,13 +139,9 @@ export async function GET(req: NextRequest) {
     }
 
     if (id) {
-      const order = FALLBACK_ORDERS.find((o) => o.id === id);
-      if (!order) {
-        return NextResponse.json({ message: "Order not found" }, { status: 404 });
-      }
-      return NextResponse.json(order);
+      return NextResponse.json({ message: "Order not found" }, { status: 404 });
     }
 
-    return NextResponse.json(FALLBACK_ORDERS);
+    return NextResponse.json([]);
   }
 }

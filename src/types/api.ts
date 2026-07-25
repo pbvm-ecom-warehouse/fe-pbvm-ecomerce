@@ -80,13 +80,17 @@ export type CatalogProduct = {
   productRefId: string;
   slug: string;
   name: string;
-  category: "ingredient" | "plain_cup" | "printed_cup" | "custom_print";
+  category: string;
+  categoryId?: string;
+  categoryObj?: any;
+  categoryName?: string;
   fulfillmentType?: FulfillmentType;
   price: number;
   b2bPrice: number;
   unit: string;
   stockSnapshot: number;
   imageUrl: string;
+  images?: string[];
   updatedAt: string;
   variants?: ProductVariant[];
 };

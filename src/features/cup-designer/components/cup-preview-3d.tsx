@@ -32,6 +32,8 @@ if (typeof window !== "undefined") {
   };
 }
 
+import * as THREE from "three";
+
 type CupPreview3DProps = {
   size: CupSize;
   style: CupStyle;
@@ -77,12 +79,20 @@ function ArtworkSleeve({
   printHeightPercent: number;
 }) {
   const texture = useTexture(textureUrl);
+
+  useEffect(() => {
+    if (texture) {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.needsUpdate = true;
+    }
+  }, [texture]);
+
   const cup = CUP_GEOMETRY[size];
   const sleeveHeight = cup.height * (printHeightPercent / 100);
   const topY = sleeveHeight / 2;
   const bottomY = -sleeveHeight / 2;
-  const topRadius = getRadiusAtY({ y: topY, ...cup }) + 0.012;
-  const bottomRadius = getRadiusAtY({ y: bottomY, ...cup }) + 0.012;
+  const topRadius = getRadiusAtY({ y: topY, ...cup }) + 0.015;
+  const bottomRadius = getRadiusAtY({ y: bottomY, ...cup }) + 0.015;
 
   return (
     <mesh position={[0, 0, 0]} rotation={[0, Math.PI / 2 + 0.9, 0]}>
@@ -92,8 +102,10 @@ function ArtworkSleeve({
       <meshStandardMaterial
         map={texture}
         transparent
-        opacity={0.96}
-        roughness={0.46}
+        opacity={1.0}
+        roughness={0.15}
+        metalness={0.05}
+        alphaTest={0.01}
       />
     </mesh>
   );
@@ -139,6 +151,12 @@ function CupModel({
   const groupRef = useRef<Group>(null);
   const cup = CUP_GEOMETRY[size];
   const material = useMemo(() => {
+    // Nếu người dùng chọn màu in nền ly (khác phôi trắng tự nhiên #FAF9F6)
+    const normColor = (cupColor || "").toUpperCase();
+    if (normColor && normColor !== "#FAF9F6" && normColor !== "#FFFFFF") {
+      return { opacity: 0.95, roughness: 0.18, metalness: 0.02 };
+    }
+
     if (materialType === "clear") {
       return { opacity: 0.36, roughness: 0.08, metalness: 0.02 };
     }
@@ -152,7 +170,7 @@ function CupModel({
     }
 
     return { opacity: 0.78, roughness: 0.38, metalness: 0.02 };
-  }, [materialType]);
+  }, [materialType, cupColor]);
 
   useFrame((_, delta) => {
     if (groupRef.current) {
@@ -262,9 +280,9 @@ export function CupPreview3D(props: CupPreview3DProps) {
         dpr={[1, 2]}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
       >
-        <ambientLight intensity={0.72} />
-        <directionalLight position={[3, 4, 5]} intensity={2.2} />
-        <pointLight position={[-3, 2, 3]} intensity={0.7} color="#DEF3E9" />
+        <ambientLight intensity={0.92} />
+        <directionalLight position={[3, 4, 5]} intensity={2.4} />
+        <pointLight position={[-3, 2, 3]} intensity={0.8} color="#FFFFFF" />
         <Suspense fallback={null}>
           <CupModel {...props} />
           <Environment preset="studio" />

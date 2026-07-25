@@ -1,6 +1,9 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Box, Paintbrush, Sparkles, Star } from "lucide-react";
+import { Box, Paintbrush } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +11,8 @@ import { AddToCartButton } from "@/features/catalog/components/add-to-cart-butto
 import type { CatalogProduct } from "@/types/api";
 import { formatCurrency } from "@/utils/format-currency";
 import { cn } from "@/lib/utils";
+
+import { subscribeProductSync } from "@/features/catalog/services/admin-catalog.service";
 
 const categoryCopy: Record<CatalogProduct["category"], string> = {
   ingredient: "Nguyên liệu",
@@ -25,26 +30,92 @@ function getVendorName(product: CatalogProduct) {
   return "PBVM Supplier";
 }
 
-// Pseudo-random rating based on product ID to make the storefront look lively and authentic
-function getProductRating(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const rating = 4.0 + (Math.abs(hash) % 11) / 10; // 4.0 to 5.0
-  const reviews = Math.abs(hash) % 15; // 0 to 14 reviews
-  return { rating, reviews };
-}
 
 export function ProductCard({
-  product,
+  product: initialProduct,
   priority = false,
 }: {
   product: CatalogProduct;
   priority?: boolean;
 }) {
+  const [product, setProduct] = useState<CatalogProduct>(initialProduct);
+
+  useEffect(() => {
+    const syncOverride = () => {
+      if (typeof window === "undefined") return;
+      try {
+        const overrides = JSON.parse(localStorage.getItem("ecom_local_overrides") || "{}");
+        const pId = initialProduct.id;
+        const pSlug = initialProduct.slug;
+        const pRef = initialProduct.productRefId;
+        const pNameKey = initialProduct.name ? initialProduct.name.toLowerCase().trim().replace(/\s+/g, "-") : "";
+
+        let ov =
+          (pId ? overrides[pId] : null) ||
+          (pSlug ? overrides[pSlug] : null) ||
+          (pRef ? overrides[pRef] : null) ||
+          (pNameKey ? overrides[pNameKey] : null);
+
+        if (!ov && typeof overrides === "object") {
+          ov = Object.values(overrides).find((item: any) => {
+            if (!item) return false;
+            const itemSlug = String(item.slug || "").toLowerCase();
+            const itemName = String(item.name || "").toLowerCase().trim().replace(/\s+/g, "-");
+            const itemId = String(item.id || item._id || "");
+            return (
+              (pSlug && itemSlug === pSlug.toLowerCase()) ||
+              (pNameKey && itemName === pNameKey) ||
+              (pId && itemId === pId)
+            );
+          });
+        }
+
+        if (ov) {
+          const newImg = (ov.images && ov.images[0]) || ov.imageUrl;
+          const newName = ov.name || initialProduct.name;
+
+          // BE là source of truth cho variants và price.
+          const beVariants = initialProduct.variants && initialProduct.variants.length > 0
+            ? initialProduct.variants
+            : null;
+          const newVariants = beVariants ?? ov.variants ?? [];
+
+          const validVariantPrices = newVariants
+            .map((v: any) => Number(v.price))
+            .filter((pr: number) => !isNaN(pr) && pr > 0);
+
+          const minVariantPrice = validVariantPrices.length > 0
+            ? Math.min(...validVariantPrices)
+            : (initialProduct.price ?? ov.price);
+
+          setProduct((prev) => ({
+            ...prev,
+            name: newName,
+            imageUrl: newImg || prev.imageUrl,
+            price: minVariantPrice,
+            b2bPrice: minVariantPrice,
+            variants: newVariants,
+          }));
+        } else {
+          setProduct(initialProduct);
+        }
+      } catch (e) {
+        console.error("ProductCard override error:", e);
+      }
+    };
+
+    syncOverride();
+    const unsubscribe = subscribeProductSync(syncOverride);
+    return () => {
+      unsubscribe();
+    };
+  }, [initialProduct]);
+
   const imageSrc = product.imageUrl || "/images/product-placeholder.svg";
-  const isCustomPrint = product.fulfillmentType === "CUSTOM_PRINT";
+  const isCustomPrint =
+    product.fulfillmentType === "CUSTOM_PRINT" &&
+    product.category !== "printed_cup" &&
+    !(product as any).isPrinted;
 
   // Determine badge text and background styles
   let badgeText = "";
@@ -70,9 +141,6 @@ export function ProductCard({
   } else if (isCustomPrint || product.slug.includes("in-logo")) {
     statusBadgeText = "Sale";
   }
-
-  const { rating, reviews } = getProductRating(product.id);
-  const hasReviews = reviews > 0;
 
   const isCupProduct =
     product.category === "plain_cup" ||
@@ -138,6 +206,11 @@ export function ProductCard({
         {/* Footer: Price & Actions */}
         <div className="flex items-center justify-between mt-2.5 pt-0.5">
           <div className="flex flex-col">
+            {Boolean(product.variants && product.variants.length > 0) && (
+              <span className="text-[10px] font-extrabold text-[#3BB77E]/80 uppercase tracking-wider leading-none mb-0.5">
+                Giá từ
+              </span>
+            )}
             <span className="text-base font-extrabold text-[#3BB77E] dark:text-[#3BB77E]">
               {formatCurrency(product.b2bPrice || product.price)}
             </span>

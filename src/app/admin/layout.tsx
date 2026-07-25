@@ -10,6 +10,7 @@ import {
   PackageOpen,
   ShoppingBag,
   User,
+  Wallet,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,10 @@ export default function AdminLayout({
   useEffect(() => {
     if (mounted && !isLoginPage) {
       if (!user || user.type !== "admin") {
-        router.push("/login");
+        const timer = setTimeout(() => {
+          router.push("/login");
+        }, 0);
+        return () => clearTimeout(timer);
       }
     }
   }, [user, pathname, mounted, isLoginPage, router]);
@@ -71,11 +75,6 @@ export default function AdminLayout({
 
   const menuItems = [
     {
-      href: "/admin/catalog/products",
-      label: "Quản lý sản phẩm",
-      icon: PackageOpen,
-    },
-    {
       href: "/admin/catalog/categories",
       label: "Quản lý danh mục",
       icon: FolderTree,
@@ -84,6 +83,11 @@ export default function AdminLayout({
       href: "/admin/orders",
       label: "Quản lý đơn hàng",
       icon: ShoppingBag,
+    },
+    {
+      href: "/admin/finance",
+      label: "Quản lý dòng tiền",
+      icon: Wallet,
     },
   ];
 
@@ -98,17 +102,20 @@ export default function AdminLayout({
                 <Logo size={28} />
               </div>
               <span className="text-sm font-black text-[#253D4E] tracking-tight">PBVM SHOP</span>
-              <span className="text-[9px] font-bold uppercase tracking-widest bg-emerald-500 text-white px-2 py-0.5 rounded-full">
-                Shop
+              <span className="text-[9px] font-bold uppercase tracking-widest bg-emerald-600 text-white px-2 py-0.5 rounded-full shadow-2xs">
+                Admin
               </span>
             </Link>
-            <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-[#E9E3DD]/60 bg-[#FAF8F6] p-2.5">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                <User className="size-5" />
+            <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-[#E9E3DD]/60 bg-[#FAF8F6] p-2.5 shadow-2xs">
+              <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
+                <User className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-slate-700 truncate">{user.name}</div>
-                <div className="text-[10px] text-slate-400 font-medium">Ecommerce Manager</div>
+                <div className="text-xs font-bold text-slate-800 truncate">{user.name}</div>
+                <div className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Ecommerce Manager
+                </div>
               </div>
             </div>
           </div>
@@ -124,15 +131,20 @@ export default function AdminLayout({
                   asChild
                   variant="ghost"
                   className={cn(
-                    "w-full justify-start gap-3 h-10 px-3 rounded-lg text-xs font-bold transition-all border-0",
+                    "w-full justify-start gap-3 h-10 px-3 rounded-xl text-xs font-bold transition-all border-0",
                     active
-                      ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-700"
+                      ? "bg-emerald-50 text-emerald-800 font-black shadow-2xs border border-emerald-200/80"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
                   )}
                 >
-                  <Link href={item.href}>
-                    <Icon className={cn("size-4", active ? "text-emerald-600" : "text-slate-400")} />
-                    {item.label}
+                  <Link href={item.href} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <Icon className={cn("size-4", active ? "text-emerald-600" : "text-slate-400")} />
+                      <span>{item.label}</span>
+                    </div>
+                    {active && (
+                      <span className="size-1.5 rounded-full bg-emerald-600" />
+                    )}
                   </Link>
                 </Button>
               );
