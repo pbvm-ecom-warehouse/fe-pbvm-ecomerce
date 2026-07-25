@@ -730,7 +730,7 @@ export async function adminUpdateVariant(
   if (data.price !== undefined) patchPayload.price = Number(data.price);
   if (data.fulfillmentType !== undefined) patchPayload.fulfillmentType = data.fulfillmentType;
 
-  const isLocalId = id.startsWith("local-") || id.startsWith("var-");
+  const isLocalId = id.startsWith("local-") || id.startsWith("var-") || id.startsWith("wms-");
   let updated: any = null;
 
   if (!isLocalId) {
@@ -744,17 +744,15 @@ export async function adminUpdateVariant(
       const errMessage = error?.response?.data?.message || error?.message || "PATCH /admin/catalog/variants failed";
       console.info(`[adminUpdateVariant] Backend PATCH call fallback (${errMessage}). Updating local variant...`);
       // Nếu variant chưa tồn tại trên BE (404 / NOT_FOUND), tự động POST tạo mới
-      if (
-        (error?.response?.status === 404 || error?.response?.data?.error?.code?.includes("NOT_FOUND")) &&
-        data.productId &&
-        data.price !== undefined
-      ) {
+      const is404 = error?.response?.status === 404 || error?.response?.data?.error?.code?.includes("NOT_FOUND") || String(error?.response?.data?.message).includes("NotFound");
+      if (is404 && (data.productId || patchPayload.productId)) {
         try {
+          const targetProdId = data.productId || patchPayload.productId;
           console.info(`[Auto-Persist Variant] Variant ${id} not found on BE. Creating variant via POST...`);
           updated = await adminCreateVariant({
             sku: data.sku || "SKU",
-            productId: data.productId,
-            price: Number(data.price),
+            productId: targetProdId,
+            price: Number(data.price ?? 0),
             attributes: data.attributes || {},
             fulfillmentType: data.fulfillmentType || "STANDARD",
           });

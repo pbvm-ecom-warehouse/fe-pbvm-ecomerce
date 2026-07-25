@@ -39,6 +39,54 @@ function getValidImageUrl(img: string | undefined): string {
   return "/images/product-placeholder.svg";
 }
 
+export function cleanProductName(name: string | undefined, sku?: string): string {
+  const target = (name || sku || "").trim();
+  if (!target) return "Sản phẩm E-Commerce";
+
+  // Check if target is a raw SKU (e.g. no spaces, uppercase with hyphens/numbers like CUP-HRT-GN-500-CLR)
+  const isRawSku = !target.includes(" ") && (/^[A-Z0-9_-]+$/i.test(target) || target.includes("-"));
+
+  if (!isRawSku && target !== sku) {
+    return target;
+  }
+
+  // Parse SKU code to build readable name
+  const upper = target.toUpperCase();
+
+  if (upper.includes("CUP-HRT") || upper.includes("CUP_HRT") || upper.includes("HRT")) {
+    const sizeMatch = upper.match(/(\d{3,4})/);
+    const size = sizeMatch ? `${sizeMatch[1]}ml` : "500ml";
+    return `Ly Nhựa Nắp Tim ${size} (Cao cấp)`;
+  }
+
+  if (upper.includes("CUP-PET") || upper.includes("PET")) {
+    const sizeMatch = upper.match(/(\d{3,4})/);
+    const size = sizeMatch ? `${sizeMatch[1]}ml` : "";
+    return `Ly Nhựa PET Trong Suốt ${size}`.trim();
+  }
+
+  if (upper.includes("CUP-PP") || upper.includes("PP")) {
+    const sizeMatch = upper.match(/(\d{3,4})/);
+    const size = sizeMatch ? `${sizeMatch[1]}ml` : "";
+    return `Ly Nhựa PP Ép Màng ${size}`.trim();
+  }
+
+  if (upper.includes("CUP") || upper.includes("LY")) {
+    const sizeMatch = upper.match(/(\d{3,4})/);
+    const size = sizeMatch ? `${sizeMatch[1]}ml` : "";
+    return `Ly Nhựa In Thương Hiệu ${size}`.trim();
+  }
+
+  if (upper.includes("ING") || upper.includes("BAO")) {
+    return `Bao Bì & Nguyên Liệu Pha Chế`;
+  }
+
+  // Fallback: replace hyphens/underscores with spaces and capitalize
+  return target
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 /**
  * Map một product detail (từ /catalog/products/:slug có variants)
  * thành CatalogProduct dùng ở FE.
@@ -145,7 +193,7 @@ export function mapProductDetail(p: any): CatalogProduct {
     id: mergedP.id ?? mergedP._id,
     productRefId: activeVariant?.sku ?? mergedP.slug.toUpperCase(),
     slug: mergedP.slug,
-    name: mergedP.name,
+    name: cleanProductName(mergedP.name, activeVariant?.sku ?? mergedP.productRefId),
     description: mergedP.description || "",
     category: mappedCategorySlug,
     categoryId: rawCatId,
@@ -264,7 +312,7 @@ function mapProductListItem(p: any): CatalogProduct {
     id: mergedP.id ?? mergedP._id,
     productRefId: mappedVariants[0]?.sku ?? mergedP.slug.toUpperCase(),
     slug: mergedP.slug,
-    name: mergedP.name,
+    name: cleanProductName(mergedP.name, mappedVariants[0]?.sku ?? mergedP.productRefId),
     category: mappedCategorySlug,
     categoryId: rawCatId,
     categoryObj: typeof mergedP.category === "object" ? mergedP.category : undefined,

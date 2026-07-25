@@ -9,7 +9,6 @@ import {
   LogOut,
   PackageOpen,
   ShoppingBag,
-  User,
   Wallet,
 } from "lucide-react";
 
@@ -106,18 +105,6 @@ export default function AdminLayout({
                 Admin
               </span>
             </Link>
-            <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-[#E9E3DD]/60 bg-[#FAF8F6] p-2.5 shadow-2xs">
-              <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
-                <User className="size-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-slate-800 truncate">{user.name}</div>
-                <div className="text-[10px] text-emerald-700 font-bold flex items-center gap-1">
-                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Ecommerce Manager
-                </div>
-              </div>
-            </div>
           </div>
 
           <nav className="space-y-1">

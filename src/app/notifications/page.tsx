@@ -23,52 +23,88 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCartStore } from "@/stores/cart-store";
 
+import { listOrders } from "@/features/order/services/order.service";
+
 function NotificationsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-
-  useEffect(() => {
-    router.replace("/orders");
-  }, [router]);
 
   const type = searchParams.get("type");
   const orderCode = searchParams.get("orderCode");
   const orderId = searchParams.get("orderId");
 
   const cartItems = useCartStore((state) => state.items);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
-  const [notifications] = useState([
-    {
-      id: "notif-1",
-      type: "PAYMENT_CANCELLED",
-      title: "Giao dịch thanh toán trực tuyến chưa hoàn tất",
-      description: orderCode
-        ? `Thanh toán cho đơn hàng #${orderCode} đã bị ngắt kết nối hoặc hủy bởi người dùng.`
-        : "Thanh toán trực tuyến bị hủy hoặc tạm dừng.",
-      time: "Vừa xong",
-      read: false,
-      actionType: "REPAY",
-      orderId: orderId || undefined,
-      orderCode: orderCode || undefined,
-    },
-    {
-      id: "notif-2",
-      type: "CART_NOTICE",
-      title: "Sản phẩm của bạn vẫn đang ở trong giỏ hàng",
-      description: "Do giao dịch chưa thanh toán thành công, các mặt hàng đã chọn được giữ nguyên để bạn có thể xem lại hoặc mua lại.",
-      time: "Vừa xong",
-      read: false,
-      actionType: "VIEW_CART",
-    },
-    {
-      id: "notif-3",
-      type: "SYSTEM",
-      title: "Chào mừng bạn đến với PBVM Ecommerce",
-      description: "Cảm ơn bạn đã lựa chọn sản phẩm bao bì & in ấn ly của PBVM. Đội ngũ chúng tôi sẵn sàng hỗ trợ 24/7.",
-      time: "1 ngày trước",
-      read: true,
-    },
-  ]);
+  useEffect(() => {
+    async function loadOrderNotifications() {
+      try {
+        const res = await listOrders();
+        const list = Array.isArray(res) ? res : res?.data || [];
+
+        const dynamicNotifs: any[] = [];
+
+        if (type === "payment_cancelled" || orderCode) {
+          dynamicNotifs.push({
+            id: "notif-payment-cancel",
+            type: "PAYMENT_CANCELLED",
+            title: "Giao dịch thanh toán chưa hoàn tất",
+            description: orderCode
+              ? `Thanh toán cho đơn hàng #${orderCode} đã bị hủy hoặc ngắt kết nối.`
+              : "Thanh toán trực tuyến bị hủy hoặc tạm dừng.",
+            time: "Vừa xong",
+            read: false,
+            actionType: "REPAY",
+            orderId: orderId || undefined,
+            orderCode: orderCode || undefined,
+          });
+        }
+
+        list.forEach((ord: any) => {
+          const code = ord.code || ord.id || ord._id;
+          if (ord.paymentStatus === "UNPAID" || ord.status === "PLACED") {
+            dynamicNotifs.push({
+              id: `notif-unpaid-${ord.id || ord._id}`,
+              type: "PAYMENT_CANCELLED",
+              title: `Đơn hàng #${code} đang chờ thanh toán`,
+              description: `Đơn hàng trị giá ${ord.totalAmount ? ord.totalAmount.toLocaleString("vi-VN") + "đ" : ""} đang chờ thanh toán.`,
+              time: ord.createdAt ? new Date(ord.createdAt).toLocaleDateString("vi-VN") : "Gần đây",
+              read: false,
+              actionType: "REPAY",
+              orderId: ord.id || ord._id,
+              orderCode: code,
+            });
+          } else if (ord.status === "CONFIRMED" || ord.status === "COMPLETED") {
+            dynamicNotifs.push({
+              id: `notif-success-${ord.id || ord._id}`,
+              type: "ORDER_SUCCESS",
+              title: `Đơn hàng #${code} đã được xác nhận`,
+              description: "Đơn hàng của bạn đã được xác nhận thành công và đang chuẩn bị đóng gói.",
+              time: ord.createdAt ? new Date(ord.createdAt).toLocaleDateString("vi-VN") : "Gần đây",
+              read: true,
+              orderId: ord.id || ord._id,
+              orderCode: code,
+            });
+          }
+        });
+
+        dynamicNotifs.push({
+          id: "notif-welcome",
+          type: "SYSTEM",
+          title: "Chào mừng bạn đến với PBVM Ecommerce",
+          description: "Cảm ơn bạn đã lựa chọn sản phẩm bao bì & in ấn ly của PBVM. Đội ngũ chúng tôi sẵn sàng hỗ trợ 24/7.",
+          time: "Hệ thống",
+          read: true,
+        });
+
+        setNotifications(dynamicNotifs);
+      } catch (err) {
+        console.warn("Could not fetch order notifications:", err);
+      }
+    }
+
+    loadOrderNotifications();
+  }, [type, orderCode, orderId]);
 
   return (
     <div className="min-h-[85vh] bg-gradient-to-b from-slate-50 via-background to-background py-10 px-4 sm:px-6 lg:px-8">

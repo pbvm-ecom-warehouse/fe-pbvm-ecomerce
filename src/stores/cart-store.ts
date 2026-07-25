@@ -10,6 +10,7 @@ import {
   removeCartItem,
   clearBackendCart,
 } from "@/features/cart/services/cart.service";
+import { listCatalogProducts, cleanProductName } from "@/features/catalog/services/catalog.service";
 import { useAuthStore } from "@/stores/auth-store";
 
 type AddProductOptions = {
@@ -88,7 +89,7 @@ export const useCartStore = create<CartState>()(
             cartItemId,
             productId: product.id,
             productRefId: product.productRefId,
-            name: product.name,
+            name: cleanProductName(product.name, product.productRefId || product.id),
             slug: product.slug,
             price: product.price,
             quantity,
@@ -114,7 +115,7 @@ export const useCartStore = create<CartState>()(
             cartItemId,
             productId: product.id,
             productRefId: product.productRefId,
-            name: product.name,
+            name: cleanProductName(product.name, product.productRefId || product.id),
             slug: product.slug,
             price: product.price,
             quantity,
@@ -281,6 +282,16 @@ export const useCartStore = create<CartState>()(
           if (!updatedCart?.items) return;
 
           if (updatedCart.items.length > 0) {
+            let catalogList: CatalogProduct[] = [];
+            try {
+              const catRes = await listCatalogProducts();
+              catalogList = catRes?.data || [];
+            } catch {
+              catalogList = [];
+            }
+
+            const currentLocalItems = useCartStore.getState().items;
+
             set((state) => {
               state.items = updatedCart.items.map((item) => {
                 const isCustom = item.isPrintItem;
@@ -293,21 +304,57 @@ export const useCartStore = create<CartState>()(
                   }
                 }
 
+                // 1. Find existing item in current local items
+                const localMatch = currentLocalItems.find(
+                  (li) => li.productRefId === item.sku || li.productId === item.sku || li.slug === item.sku || li.cartItemId.includes(item.sku)
+                );
+
+                // 2. Find product in catalogList matching SKU or variant SKU
+                const catalogMatch = catalogList.find((p) => {
+                  if (p.productRefId === item.sku || p.id === item.sku || p.slug === item.sku) return true;
+                  if (Array.isArray(p.variants) && p.variants.some((v: any) => v.sku === item.sku)) return true;
+                  return false;
+                });
+
+                // Resolve product name
+                let resolvedName = localMatch?.name;
+                if (!resolvedName || resolvedName === item.sku) {
+                  resolvedName = catalogMatch?.name || (item as any).name;
+                }
+                if (!resolvedName || resolvedName === item.sku) {
+                  if (designFileSnapshot?.artwork?.cup?.size) {
+                    resolvedName = `Ly In Custom ${designFileSnapshot.artwork.cup.size}`;
+                  } else if (item.sku.includes("CUP") || item.sku.includes("HRT") || item.sku.includes("LY")) {
+                    const sizeMatch = item.sku.match(/(\d{3,4})/);
+                    const size = sizeMatch ? `${sizeMatch[1]}ml` : "";
+                    resolvedName = `Ly Nhựa Nắp Tim ${size}`.trim();
+                  } else {
+                    resolvedName = item.sku;
+                  }
+                }
+
+                const resolvedSlug = catalogMatch?.slug || localMatch?.slug || item.sku;
+                const resolvedImage = designFileSnapshot?.previewDataUrl || localMatch?.imageUrl || catalogMatch?.imageUrl || "/images/product-placeholder.svg";
+                const resolvedUnit = localMatch?.unit || catalogMatch?.unit || "cái";
+
                 return {
                   cartItemId: isCustom
                     ? `custom:${item.sku}:${item.designId || ""}:${Date.now()}`
                     : `standard:${item.sku}`,
-                  productId: item.sku,
+                  productId: catalogMatch?.id || localMatch?.productId || item.sku,
                   productRefId: item.sku,
-                  name: item.sku,
-                  slug: item.sku,
+                  name: cleanProductName(resolvedName, item.sku),
+                  slug: resolvedSlug,
                   price: item.unitPrice,
                   quantity: item.quantity,
-                  unit: "cái",
-                  imageUrl: designFileSnapshot?.previewDataUrl || "/images/product-placeholder.svg",
-                  fulfillmentType: isCustom ? "CUSTOM_PRINT" : "STANDARD",
+                  unit: resolvedUnit,
+                  imageUrl: resolvedImage,
+                  fulfillmentType: isCustom ? "CUSTOM_PRINT" : (catalogMatch?.fulfillmentType || localMatch?.fulfillmentType || "STANDARD"),
                   designId: item.designId ?? undefined,
                   designFile: designFileSnapshot,
+                  selectedSize: localMatch?.selectedSize || designFileSnapshot?.artwork?.cup?.size,
+                  selectedMaterial: localMatch?.selectedMaterial || designFileSnapshot?.artwork?.cup?.materialType,
+                  selectedStyle: localMatch?.selectedStyle || designFileSnapshot?.artwork?.cup?.style,
                 } satisfies CartItem;
               });
             });
@@ -317,6 +364,15 @@ export const useCartStore = create<CartState>()(
         }
       },
     })),
-    { name: "pbvm-shop-cart" },
+    {
+      name: "pbvm-shop-cart",
+      onRehydrateStorage: () => (state) => {
+        if (state?.items && Array.isArray(state.items)) {
+          state.items.forEach((item) => {
+            item.name = cleanProductName(item.name, item.productRefId || item.productId);
+          });
+        }
+      },
+    },
   ),
 );

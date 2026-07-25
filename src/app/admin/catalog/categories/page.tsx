@@ -541,13 +541,8 @@ export default function AdminCategoriesPage() {
           <div>
             <CardTitle className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
               <Layers className="size-4 text-emerald-600" />
-              <span>Quản lý danh mục &amp; Sản phẩm Ecommerce</span>
+              <span>Quản lý danh mục</span>
             </CardTitle>
-            <CardDescription className="text-xs mt-0.5">
-              {activeCategory
-                ? `Đang xem sản phẩm thuộc danh mục "${activeCategory.name}". Bấm nút 'Quay lại' để xem toàn bộ danh mục.`
-                : "Danh mục sản phẩm được đồng bộ từ Kho (WMS). Nhấp vào danh mục để xem & chỉnh sửa sản phẩm trong danh mục đó."}
-            </CardDescription>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap shrink-0">
@@ -982,67 +977,67 @@ export default function AdminCategoriesPage() {
                         </div>
                       ) : (
                         prodVariants.map((varItem, idx) => {
-                        const attrs = varItem.attributes || {};
-                        const capacityVal = attrs.capacity || attrs.size || attrs.spec || "";
-                        const styleVal = attrs.style || "";
-                        const materialVal = attrs.material || "";
-                        const colorVal = attrs.color || "";
+                          const attrs = varItem.attributes || {};
+                          const capacityVal = attrs.capacity || attrs.size || attrs.spec || "";
+                          const styleVal = attrs.style || "";
+                          const materialVal = attrs.material || "";
+                          const colorVal = attrs.color || "";
 
-                        return (
-                          <div key={varItem.id ? `${varItem.id}-${idx}` : `variant-key-${idx}`} className="p-3 rounded-2xl bg-white border border-slate-200/90 space-y-3 text-xs shadow-2xs">
-                            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                              <div className="flex items-center gap-2">
-                                <Badge className="bg-emerald-600 text-white text-[10px] font-extrabold px-2 py-0.5">
-                                  Variant #{idx + 1}
+                          return (
+                            <div key={varItem.id ? `${varItem.id}-${idx}` : `variant-key-${idx}`} className="p-3 rounded-2xl bg-white border border-slate-200/90 space-y-3 text-xs shadow-2xs">
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge className="bg-emerald-600 text-white text-[10px] font-extrabold px-2 py-0.5">
+                                    Variant #{idx + 1}
+                                  </Badge>
+                                  <span className="font-mono text-[11px] font-bold text-slate-700">Mã SKU: {varItem.sku}</span>
+                                </div>
+                                <Badge variant="outline" className="text-[10px] font-semibold text-slate-500 bg-slate-50 border-slate-200">
+                                  DB Auto-Sync
                                 </Badge>
-                                <span className="font-mono text-[11px] font-bold text-slate-700">Mã SKU: {varItem.sku}</span>
                               </div>
-                              <Badge variant="outline" className="text-[10px] font-semibold text-slate-500 bg-slate-50 border-slate-200">
-                                DB Auto-Sync
-                              </Badge>
-                            </div>
 
-                            {/* KHU VỰC THÔNG SỐ TỪ DB (READ-ONLY) */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2.5 rounded-xl bg-slate-50/80 border border-slate-100 text-[11px]">
-                              <div>
-                                <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Dung tích</span>
-                                <span className="font-bold text-slate-800">{capacityVal || "-"}</span>
+                              {/* KHU VỰC THÔNG SỐ TỪ DB (READ-ONLY) */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2.5 rounded-xl bg-slate-50/80 border border-slate-100 text-[11px]">
+                                <div>
+                                  <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Dung tích</span>
+                                  <span className="font-bold text-slate-800">{capacityVal || "-"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Kiểu dáng</span>
+                                  <span className="font-semibold text-slate-700">{styleVal || "-"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Chất liệu</span>
+                                  <span className="font-semibold text-slate-700">{materialVal || "-"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Tồn kho DB</span>
+                                  <span className="font-bold text-slate-800">{varItem.availableQty ?? 0} sp</span>
+                                </div>
                               </div>
-                              <div>
-                                <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Kiểu dáng</span>
-                                <span className="font-semibold text-slate-700">{styleVal || "-"}</span>
-                              </div>
-                              <div>
-                                <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Chất liệu</span>
-                                <span className="font-semibold text-slate-700">{materialVal || "-"}</span>
-                              </div>
-                              <div>
-                                <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Tồn kho DB</span>
-                                <span className="font-bold text-slate-800">{varItem.availableQty ?? 0} sp</span>
-                              </div>
-                            </div>
 
-                            {/* Ô CHỈNH SỬA GIÁ BÁN VARIANT (EDITABLE) */}
-                            <div className="pt-1">
-                              <Label className="text-[11px] font-extrabold text-emerald-800 block mb-1 uppercase tracking-wide">
-                                Giá bán Variant mới (VNĐ) *
-                              </Label>
-                              <div className="relative">
-                                <Input
-                                  type="number"
-                                  value={varItem.price}
-                                  onChange={(e) => handleVariantPriceChange(idx, Number(e.target.value))}
-                                  className="h-10 text-xs font-black text-emerald-700 bg-emerald-50/40 border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500 rounded-xl"
-                                  placeholder="50000"
-                                />
-                                <span className="absolute right-3 top-2.5 text-xs font-bold text-emerald-600 pointer-events-none">
-                                  VNĐ
-                                </span>
+                              {/* Ô CHỈNH SỬA GIÁ BÁN VARIANT (EDITABLE) */}
+                              <div className="pt-1">
+                                <Label className="text-[11px] font-extrabold text-emerald-800 block mb-1 uppercase tracking-wide">
+                                  Giá bán Variant mới (VNĐ) *
+                                </Label>
+                                <div className="relative">
+                                  <Input
+                                    type="number"
+                                    value={varItem.price}
+                                    onChange={(e) => handleVariantPriceChange(idx, Number(e.target.value))}
+                                    className="h-10 text-xs font-black text-emerald-700 bg-emerald-50/40 border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500 rounded-xl"
+                                    placeholder="50000"
+                                  />
+                                  <span className="absolute right-3 top-2.5 text-xs font-bold text-emerald-600 pointer-events-none">
+                                    VNĐ
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        );
-                      }))}
+                          );
+                        }))}
                     </div>
                   </div>
 
