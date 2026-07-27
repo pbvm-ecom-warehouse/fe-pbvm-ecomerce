@@ -19,6 +19,8 @@ import {
   AlertCircle,
   Building2,
   Info,
+  Pencil,
+  X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -159,6 +161,9 @@ export default function ProductVariantManagementPage() {
       fulfillmentType: FulfillmentType;
     }>
   >([]);
+
+  // Which variant row is currently being edited (-1 = none)
+  const [editingVariantIdx, setEditingVariantIdx] = useState<number>(-1);
 
   // Load product data & variants from DB API
   const loadData = async () => {
@@ -403,7 +408,7 @@ export default function ProductVariantManagementPage() {
       <div className="flex flex-col items-center justify-center py-24 space-y-3">
         <Loader2 className="size-8 animate-spin text-emerald-600" />
         <span className="text-sm font-bold text-slate-600">
-          Đang gọi API lấy danh sách Variant từ CSDL Database...
+          Đang tải danh sách sản phẩm
         </span>
       </div>
     );
@@ -422,75 +427,69 @@ export default function ProductVariantManagementPage() {
   }
 
   return (
-    <div className="space-y-6 pb-12 max-w-6xl mx-auto">
-      {/* Navigation Header / Breadcrumbs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-[#E9E3DD] shadow-2xs">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/admin/catalog/categories")}
-            className="h-9 px-3 rounded-xl border-slate-200 text-slate-700 font-bold hover:bg-slate-50 gap-1.5 cursor-pointer"
-          >
-            <ArrowLeft className="size-4 text-emerald-600" />
-            <span>Quay lại danh mục</span>
-          </Button>
+    <div className="pb-10">
+      {/* ONE SINGLE MASTER CARD CONTAINER FOR THE ENTIRE PAGE */}
+      <Card className="rounded-2xl border border-[#E9E3DD] bg-white shadow-sm overflow-hidden divide-y divide-[#E9E3DD]">
+        {/* SECTION 1: Top Navigation Header */}
+        <div className="py-4 px-6 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/admin/catalog/categories")}
+              className="h-9 px-3 rounded-xl border-slate-200 text-slate-700 font-bold hover:bg-slate-50 gap-1.5 cursor-pointer"
+            >
+              <ArrowLeft className="size-4 text-emerald-600" />
+              <span>Quay lại danh mục</span>
+            </Button>
 
-          <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+            <div className="h-4 w-px bg-slate-200 hidden sm:block" />
 
-          <div>
-            <h1 className="text-base font-black text-slate-800 flex items-center gap-2">
-              <span>{product.name}</span>
-              <Badge
-                className={
-                  product.status === "ACTIVE"
-                    ? "bg-emerald-100 text-emerald-800 border-emerald-300 font-bold text-[10px]"
-                    : "bg-amber-100 text-amber-800 border-amber-300 font-bold text-[10px]"
-                }
+            <div>
+              <h1 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <span>{product.name}</span>
+                <Badge
+                  className={
+                    product.status === "ACTIVE"
+                      ? "bg-emerald-100 text-emerald-800 border-emerald-300 font-bold text-[10px]"
+                      : "bg-amber-100 text-amber-800 border-amber-300 font-bold text-[10px]"
+                  }
+                >
+                  {product.status === "ACTIVE" ? "Đã lên kệ" : "Bản nháp (Draft)"}
+                </Badge>
+              </h1>
+              <p className="text-xs text-slate-500 font-medium">
+                Mã ID: <span className="font-mono">{product.id || product._id}</span> · Slug:{" "}
+                <span className="font-mono text-slate-600">{product.slug}</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {product.status === "DRAFT" && (
+              <Button
+                type="button"
+                onClick={handlePublish}
+                className="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs gap-1.5 cursor-pointer border-0"
               >
-                {product.status === "ACTIVE" ? "Đã lên kệ" : "Bản nháp (Draft)"}
-              </Badge>
-            </h1>
-            <p className="text-xs text-slate-500 font-medium">
-              Mã ID: <span className="font-mono">{product.id || product._id}</span> · Slug:{" "}
-              <span className="font-mono text-slate-600">{product.slug}</span>
-            </p>
+                <Rocket className="size-4" />
+                <span>Đưa lên kệ ngay</span>
+              </Button>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {product.status === "DRAFT" && (
-            <Button
-              onClick={handlePublish}
-              className="h-9 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs gap-1.5 cursor-pointer"
-            >
-              <Rocket className="size-4" />
-              <span>Đưa lên kệ ngay</span>
-            </Button>
-          )}
-
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="h-9 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs rounded-xl shadow-md gap-2 cursor-pointer"
-          >
-            {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
-            <span>Lưu thay đổi Variant &amp; Sản phẩm</span>
-          </Button>
-        </div>
-      </div>
-
-      <form onSubmit={handleSave} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* COLUMN 1: PRODUCT INFO & IMAGE */}
-        <div className="space-y-6">
-          <Card className="rounded-2xl border-[#E9E3DD] shadow-sm bg-white overflow-hidden">
-            <CardHeader className="border-b border-[#E9E3DD] py-4 bg-slate-50/50">
-              <CardTitle className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+        {/* SECTION 2: Master Form Body */}
+        <form onSubmit={handleSave} className="p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 divide-y lg:divide-y-0 lg:divide-x divide-[#E9E3DD]">
+            {/* COLUMN 1: PRODUCT INFO & IMAGE (5 cols) */}
+            <div className="lg:col-span-5 space-y-5 lg:pr-4">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
                 <Tag className="size-4 text-emerald-600" />
                 <span>Thông tin sản phẩm</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
+              </h3>
+
               <div className="space-y-1.5">
                 <Label htmlFor="pName" className="text-xs font-bold text-slate-700">
                   Tên sản phẩm *
@@ -506,7 +505,7 @@ export default function ProductVariantManagementPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="pSlug" className="text-xs font-bold text-slate-700">
-                  Slug URL *
+                  Slug *
                 </Label>
                 <Input
                   id="pSlug"
@@ -519,7 +518,7 @@ export default function ProductVariantManagementPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="pCat" className="text-xs font-bold text-slate-700">
-                  Danh mục thuộc về *
+                  Danh mục *
                 </Label>
                 <select
                   id="pCat"
@@ -540,7 +539,7 @@ export default function ProductVariantManagementPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="pPrice" className="text-xs font-bold text-slate-700">
-                  Giá hiển thị (Tự động từ Variant thấp nhất)
+                  Giá hiển thị
                 </Label>
                 <Input
                   id="pPrice"
@@ -613,170 +612,189 @@ export default function ProductVariantManagementPage() {
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
 
-        {/* COLUMN 2 & 3: VARIANT MANAGEMENT FROM DATABASE */}
-        <div className="lg:col-span-2 space-y-6">
-          <Card className="rounded-2xl border-[#E9E3DD] shadow-sm bg-white overflow-hidden">
-            <CardHeader className="border-b border-[#E9E3DD] py-4 bg-slate-50/50 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+            {/* COLUMN 2: VARIANT LIST */}
+            <div className="lg:col-span-7 space-y-4 pt-6 lg:pt-0 lg:pl-8">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
                   <Layers className="size-4 text-emerald-600" />
-                  <span>Danh sách Variant từ Database CSDL ({prodVariants.length} loại)</span>
-                </CardTitle>
-                <CardDescription className="text-xs mt-0.5">
-                  Dữ liệu được tải trực tiếp từ API CSDL. Bạn có thể thay đổi giá bán mới cho từng Variant bên dưới.
-                </CardDescription>
+                  <span>Danh sách variant ({prodVariants.length})</span>
+                </h3>
               </div>
 
-              <Badge className="text-xs font-black text-emerald-800 bg-emerald-100 border-emerald-200 px-3 py-1">
-                API Live Sync
-              </Badge>
-            </CardHeader>
+              {/* READ-ONLY LIST */}
+              <div className="rounded-2xl border border-[#E9E3DD] overflow-hidden">
+                {prodVariants.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-slate-400 font-medium bg-slate-50">
+                    Không tìm thấy variant nào từ CSDL.
+                  </div>
+                ) : (
+                  prodVariants.map((varItem, idx) => {
+                    const attrs = varItem.attributes || {};
+                    const pType = getProductType(product, varItem.sku);
+                    const info = getVariantInfoLabels(pType, attrs);
+                    const isEditing = editingVariantIdx === idx;
 
-            <CardContent className="p-5 space-y-4">
-              {prodVariants.length === 0 ? (
-                <div className="py-12 text-center text-xs text-slate-400 font-medium bg-slate-50 rounded-2xl border border-dashed">
-                  Không tìm thấy variant nào từ CSDL.
-                </div>
-              ) : (
-                prodVariants.map((varItem, idx) => {
-                  const attrs = varItem.attributes || {};
-                  const capacityVal = attrs.capacity || attrs.size || attrs.spec || "";
-                  const styleVal = attrs.style || "";
-                  const materialVal = attrs.material || "";
-                  const colorVal = attrs.color || "";
-
-                  return (
-                    <div
-                      key={varItem.id ? `${varItem.id}-${idx}` : `variant-key-${idx}`}
-                      className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-emerald-300 transition-all space-y-3.5 shadow-2xs"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <Badge className="bg-emerald-600 text-white text-xs font-black px-2.5 py-0.5 rounded-lg">
-                            Variant #{idx + 1}
+                    return (
+                      <div
+                        key={varItem.id ? `${varItem.id}-${idx}` : `variant-key-${idx}`}
+                        className={`border-b border-[#E9E3DD] last:border-b-0 transition-colors ${isEditing ? "bg-emerald-50/40" : "bg-white hover:bg-slate-50/60"
+                          }`}
+                      >
+                        {/* ROW: Read-only summary */}
+                        <div className="flex items-center gap-3 px-4 py-3">
+                          <Badge className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md shrink-0">
+                            #{idx + 1}
                           </Badge>
 
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-slate-500">SKU:</span>
-                            <Input
-                              value={varItem.sku}
-                              onChange={(e) => handleVariantSkuChange(idx, e.target.value)}
-                              className="h-8 text-xs font-mono font-bold text-slate-800 w-44 rounded-lg bg-slate-50 border-slate-200"
-                            />
-                          </div>
-                        </div>
+                          <span className="font-mono text-xs font-bold text-slate-700 shrink-0 w-36 truncate">
+                            {varItem.sku}
+                          </span>
 
-                        <div className="flex items-center gap-2">
-                          <Badge
-                            variant="outline"
-                            className="text-[10.5px] font-bold text-slate-600 bg-slate-50 border-slate-200"
-                          >
-                            {FULFILLMENT_LABELS[varItem.fulfillmentType] || varItem.fulfillmentType}
-                          </Badge>
-                        </div>
-                      </div>
-
-                      {/* THÔNG SỐ TỪ CSDL DATABASE */}
-                      {(() => {
-                        const pType = getProductType(product, varItem.sku);
-                        const info = getVariantInfoLabels(pType, attrs);
-                        return (
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
-                            <div>
-                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                                {info.col1Label}
-                              </span>
-                              <span className="font-bold text-slate-900">{info.col1Val}</span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                                {info.col2Label}
-                              </span>
-                              <span className="font-bold text-slate-800">{info.col2Val}</span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                                {info.col3Label}
-                              </span>
-                              <span className="font-bold text-slate-800">{info.col3Val}</span>
-                            </div>
-
-                            <div>
-                              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                                Tồn kho DB
-                              </span>
-                              <span className="font-black text-emerald-700">
-                                {varItem.availableQty ?? 0} sản phẩm
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-
-                      {/* CHỈNH SỬA GIÁ BÁN VARIANT */}
-                      <div className="pt-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex-1">
-                          <Label className="text-xs font-black text-emerald-800 block mb-1 uppercase tracking-wide">
-                            Giá bán Variant mới (VNĐ) *
-                          </Label>
-                          <div className="relative max-w-sm">
-                            <Input
-                              type="number"
-                              value={varItem.price}
-                              onChange={(e) =>
-                                handleVariantPriceChange(idx, Number(e.target.value))
-                              }
-                              className="h-10 text-sm font-black text-emerald-700 bg-emerald-50/50 border-emerald-300 focus:border-emerald-600 focus:ring-emerald-500 rounded-xl"
-                              placeholder="50000"
-                            />
-                            <span className="absolute right-3.5 top-2.5 text-xs font-bold text-emerald-600 pointer-events-none">
-                              VNĐ
+                          <div className="flex-1 flex items-center gap-4 min-w-0">
+                            <span className="text-xs text-slate-500 truncate hidden sm:block">
+                              {[info.col1Val, info.col2Val, info.col3Val].filter(Boolean).join(" · ")}
                             </span>
                           </div>
-                        </div>
 
-                        <div className="text-right shrink-0">
-                          <span className="text-[10px] font-bold text-slate-400 uppercase block">
-                            Định dạng hiển thị
-                          </span>
-                          <span className="text-sm font-black text-emerald-700">
+                          <span className="text-xs font-black text-emerald-700 font-mono shrink-0">
                             {formatCurrency(Number(varItem.price || 0))}
                           </span>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
 
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                          <Badge variant="outline" className="text-[10px] font-bold text-slate-500 border-slate-200 bg-white shrink-0 hidden sm:flex">
+                            {varItem.availableQty ?? 0} sp
+                          </Badge>
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isEditing ? "outline" : "ghost"}
+                            onClick={() => setEditingVariantIdx(isEditing ? -1 : idx)}
+                            className={`h-7 px-2.5 text-[11px] font-bold rounded-lg shrink-0 cursor-pointer ${isEditing
+                              ? "border-slate-300 text-slate-600"
+                              : "text-emerald-700 hover:bg-emerald-50"
+                              }`}
+                          >
+                            {isEditing ? (
+                              <><X className="size-3.5 mr-1" />Đóng</>
+                            ) : (
+                              <><Pencil className="size-3.5 mr-1" />Sửa</>
+                            )}
+                          </Button>
+                        </div>
+
+                        {/* INLINE EDIT PANEL */}
+                        {isEditing && (
+                          <div className="px-4 pb-4 space-y-3 border-t border-emerald-200/60">
+                            {/* Attributes preview */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 p-3 rounded-xl bg-white border border-slate-100 text-xs">
+                              <div>
+                                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">{info.col1Label}</span>
+                                <span className="font-bold text-slate-900">{info.col1Val || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">{info.col2Label}</span>
+                                <span className="font-bold text-slate-800">{info.col2Val || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">{info.col3Label}</span>
+                                <span className="font-bold text-slate-800">{info.col3Val || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">Tồn kho</span>
+                                <span className="font-black text-emerald-700">{varItem.availableQty ?? 0} sp</span>
+                              </div>
+                            </div>
+
+                            {/* SKU + Price edit */}
+                            <div className="flex flex-col sm:flex-row gap-3">
+                              <div className="flex-1 space-y-1">
+                                <Label className="text-[10.5px] font-bold text-slate-600 uppercase tracking-wide">SKU</Label>
+                                <Input
+                                  value={varItem.sku}
+                                  onChange={(e) => handleVariantSkuChange(idx, e.target.value)}
+                                  className="h-9 text-xs font-mono font-bold text-slate-800 rounded-lg bg-white border-slate-200"
+                                />
+                              </div>
+
+                              <div className="flex-1 space-y-1">
+                                <Label className="text-[10.5px] font-bold text-emerald-800 uppercase tracking-wide">Giá bán (VNĐ) *</Label>
+                                <div className="relative">
+                                  <Input
+                                    type="number"
+                                    value={varItem.price}
+                                    onChange={(e) => handleVariantPriceChange(idx, Number(e.target.value))}
+                                    className="h-9 text-sm font-black text-emerald-700 bg-emerald-50/50 border-emerald-300 focus:border-emerald-600 rounded-lg"
+                                    placeholder="50000"
+                                  />
+                                  <span className="absolute right-3 top-2 text-xs font-bold text-emerald-600 pointer-events-none">VNĐ</span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-end gap-2 shrink-0">
+                                <Button
+                                  type="button"
+                                  onClick={async () => {
+                                    setSaving(true);
+                                    try {
+                                      if (varItem.id && !varItem.id.startsWith("local-var-")) {
+                                        await adminUpdateVariant(varItem.id, { sku: varItem.sku, price: varItem.price });
+                                      }
+                                      toast.success(`Đã lưu Variant #${idx + 1}`);
+                                      setEditingVariantIdx(-1);
+                                    } catch (err: any) {
+                                      toast.error(err?.response?.data?.message || "Lưu variant thất bại.");
+                                    } finally {
+                                      setSaving(false);
+                                    }
+                                  }}
+                                  disabled={saving}
+                                  className="h-9 px-3 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg border-0 cursor-pointer gap-1.5"
+                                >
+                                  {saving ? <RefreshCw className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
+                                  Lưu
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => setEditingVariantIdx(-1)}
+                                  className="h-9 px-3 text-xs font-bold rounded-lg cursor-pointer"
+                                >
+                                  Hủy
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="pt-2 flex justify-end gap-3">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.push("/admin/catalog/categories")}
-                  className="h-10 text-xs font-bold rounded-xl"
+                  className="h-9 text-xs font-bold rounded-xl cursor-pointer"
                 >
-                  Hủy bỏ
+                  Quay lại
                 </Button>
                 <Button
                   type="submit"
                   disabled={saving}
-                  className="h-10 px-5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-2 cursor-pointer"
+                  className="h-9 px-5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-2 cursor-pointer border-0"
                 >
-                  {saving ? <RefreshCw className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
-                  <span>Lưu Thay Đổi Variant &amp; Sản Phẩm</span>
+                  {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
+                  <span>Lưu thông tin sản phẩm</span>
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </form>
+            </div>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 }

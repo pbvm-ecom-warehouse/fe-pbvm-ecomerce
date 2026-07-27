@@ -1,5 +1,6 @@
-import { initializeApp, getApps, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getMessaging, type Messaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -15,17 +16,22 @@ export const isFirebaseConfigured = Boolean(
     process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
 );
 
-let app;
+let app: FirebaseApp | undefined;
 let auth: any = null;
+let messaging: Messaging | null = null;
 
 if (isFirebaseConfigured) {
   try {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
     auth = getAuth(app);
+    // Messaging chỉ khởi tạo được ở browser (không chạy trên server/SSR)
+    if (typeof window !== "undefined" && "serviceWorker" in navigator && app) {
+      messaging = getMessaging(app);
+    }
   } catch (error) {
     console.error("Failed to initialize Firebase:", error);
   }
 }
 
-export { auth };
+export { auth, messaging };
 export const googleProvider = new GoogleAuthProvider();

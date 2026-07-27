@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Wallet,
@@ -18,6 +19,7 @@ import {
   PieChart as PieChartIcon,
   BarChart3,
   Boxes,
+  LogOut,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -50,23 +52,75 @@ import {
   type DailyRevenueItem,
   type TopSellingItem,
 } from "@/features/analytics/services/analytics.service";
+import { logout } from "@/features/auth/services/auth.service";
+
+type PeriodPreset = "day" | "week" | "month" | "year" | "custom";
+
+function getPeriodRange(preset: PeriodPreset): { from: string; to: string } {
+  const now = new Date();
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const today = fmt(now);
+
+  if (preset === "day") return { from: today, to: today };
+
+  if (preset === "week") {
+    const day = now.getDay(); // 0=Sun
+    const diffToMon = (day === 0 ? -6 : 1 - day);
+    const mon = new Date(now);
+    mon.setDate(now.getDate() + diffToMon);
+    return { from: fmt(mon), to: today };
+  }
+
+  if (preset === "month") {
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: fmt(first), to: today };
+  }
+
+  if (preset === "year") {
+    const first = new Date(now.getFullYear(), 0, 1);
+    return { from: fmt(first), to: today };
+  }
+
+  return { from: "", to: "" };
+}
+
+const PERIOD_TABS: { id: PeriodPreset; label: string }[] = [
+  { id: "day", label: "Hôm nay" },
+  { id: "week", label: "Tuần này" },
+  { id: "month", label: "Tháng này" },
+  { id: "year", label: "Năm nay" },
+];
 
 export default function AdminFinancePage() {
+  const router = useRouter();
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [timeline, setTimeline] = useState<DailyRevenueItem[]>([]);
   const [topSelling, setTopSelling] = useState<TopSellingItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Date filters
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  // Period preset
+  const [period, setPeriod] = useState<PeriodPreset>("month");
 
-  const fetchData = async () => {
+  // Custom date range (only used when period === 'custom')
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const { from: fromDate, to: toDate } =
+    period === "custom"
+      ? { from: customFrom, to: customTo }
+      : getPeriodRange(period);
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
+
+  const fetchData = async (from = fromDate, to = toDate) => {
     setLoading(true);
     try {
       const [ovData, tlData, topData] = await Promise.all([
         getAnalyticsOverview(),
-        getRevenueTimeline(fromDate || undefined, toDate || undefined),
+        getRevenueTimeline(from || undefined, to || undefined),
         getTopSelling(5),
       ]);
 
@@ -81,8 +135,11 @@ export default function AdminFinancePage() {
     }
   };
 
+  // Refetch whenever the resolved date range changes
   useEffect(() => {
-    fetchData();
+    if (period === "custom" && (!customFrom || !customTo)) return; // wait until both are set
+    fetchData(fromDate, toDate);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fromDate, toDate]);
 
   const totalRevenue = overview?.totalRevenue ?? 0;
@@ -91,6 +148,17 @@ export default function AdminFinancePage() {
   const paidOrdersCount = overview?.ordersByPaymentStatus?.find((p) => p.status === "PAID")?.count ?? 0;
   const unpaidOrdersCount = overview?.ordersByPaymentStatus?.find((p) => p.status === "UNPAID")?.count ?? 0;
   const pendingCashflowEstimate = unpaidOrdersCount * averageOrderValue;
+
+  // Doanh thu từ đơn đã thanh toán online (PayOS) — ước tính từ kỳ timeline
+  const timelineTotal = timeline.reduce((sum, d) => sum + d.revenue, 0);
+  const timelineOrders = timeline.reduce((sum, d) => sum + d.orderCount, 0);
+
+  // Tỷ lệ thanh toán thực tế
+  const paidRate = totalOrders > 0 ? Math.round((paidOrdersCount / totalOrders) * 100) : 0;
+
+  // Label kỳ đang xem
+  const periodLabel = PERIOD_TABS.find((t) => t.id === period)?.label ?? "";
+
 
   return (
     <div className="pb-10">
@@ -110,27 +178,48 @@ export default function AdminFinancePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
-              <Calendar className="size-3.5 text-slate-400 ml-2" />
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-                className="h-7 text-xs border-0 bg-transparent w-32 p-0 focus-visible:ring-0"
-                placeholder="Từ ngày"
-              />
-              <span className="text-xs text-slate-300">-</span>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-                className="h-7 text-xs border-0 bg-transparent w-32 p-0 focus-visible:ring-0"
-                placeholder="Đến ngày"
-              />
+            {/* ── Quick period tabs ── */}
+            <div className="flex items-center gap-0.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
+              {PERIOD_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  id={`period-tab-${tab.id}`}
+                  onClick={() => setPeriod(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === tab.id
+                      ? "bg-white text-emerald-700 shadow-sm border border-emerald-200"
+                      : "text-slate-500 hover:text-slate-700"
+                    }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
+            {/* ── Custom range pickers (only visible when 'Tùy chỉnh' active) ── */}
+            {period === "custom" && (
+              <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
+                <Calendar className="size-3.5 text-slate-400 ml-2" />
+                <Input
+                  type="date"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                  className="h-7 text-xs border-0 bg-transparent w-32 p-0 focus-visible:ring-0"
+                  placeholder="Từ ngày"
+                />
+                <span className="text-xs text-slate-300">—</span>
+                <Input
+                  type="date"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                  className="h-7 text-xs border-0 bg-transparent w-32 p-0 focus-visible:ring-0"
+                  placeholder="Đến ngày"
+                />
+              </div>
+            )}
+
+            {/* ── Refresh ── */}
             <Button
-              onClick={fetchData}
+              onClick={() => fetchData(fromDate, toDate)}
               variant="outline"
               size="sm"
               disabled={loading}
@@ -146,6 +235,16 @@ export default function AdminFinancePage() {
             >
               <Download className="size-3.5" />
               Xuất báo cáo
+            </Button>
+
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              size="sm"
+              className="h-9 text-xs font-bold rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 gap-1.5 cursor-pointer"
+            >
+              <LogOut className="size-3.5" />
+              Đăng xuất
             </Button>
           </div>
         </div>
@@ -166,9 +265,8 @@ export default function AdminFinancePage() {
               <div className="text-2xl font-black text-slate-800 font-mono">
                 {formatCurrency(totalRevenue)}
               </div>
-              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-emerald-600">
-                <ArrowUpRight className="size-3.5" />
-                <span>+18.4% so với tháng trước</span>
+              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-slate-500">
+                <span>Tích lũy toàn bộ đơn đã thanh toán</span>
               </div>
             </div>
           </div>
@@ -209,7 +307,7 @@ export default function AdminFinancePage() {
               </div>
               <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-blue-600">
                 <CheckCircle2 className="size-3.5" />
-                <span>Tỷ lệ hoàn tất thanh toán 90.6%</span>
+                <span>Tỷ lệ hoàn tất thanh toán {paidRate}%</span>
               </div>
             </div>
           </div>
@@ -228,9 +326,8 @@ export default function AdminFinancePage() {
               <div className="text-2xl font-black text-slate-800 font-mono">
                 {formatCurrency(averageOrderValue)}
               </div>
-              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-purple-600">
-                <ArrowUpRight className="size-3.5" />
-                <span>+6.2% giá trị trung bình đơn</span>
+              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-slate-500">
+                <span>{timelineOrders > 0 ? `${timelineOrders} đơn trong kỳ ${periodLabel}` : "Chưa có đơn trong kỳ"}</span>
               </div>
             </div>
           </div>
@@ -244,10 +341,12 @@ export default function AdminFinancePage() {
               <div>
                 <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                   <BarChart3 className="size-4 text-emerald-600" />
-                  Biểu đồ Biến động Dòng Tiền Theo Ngày
+                  Biểu đồ Biến động Dòng Tiền — {periodLabel}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Theo dõi tổng số tiền thực thu phát sinh theo thời gian thực
+                  {timeline.length > 0
+                    ? `${timeline.length} mốc dữ liệu · Tổng ${formatCurrency(timelineTotal)}`
+                    : "Chưa có dữ liệu doanh thu trong kỳ này"}
                 </p>
               </div>
               <Badge variant="outline" className="text-emerald-700 border-emerald-200 bg-emerald-50 font-mono text-xs">
@@ -296,37 +395,37 @@ export default function AdminFinancePage() {
             </div>
 
             <div className="space-y-3">
-              {/* PayOS / Online Transfer */}
+              {/* PayOS / Online — đơn đã PAID */}
               <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3.5 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-emerald-900 flex items-center gap-1.5">
-                    <CreditCard className="size-4 text-emerald-600" /> Chuyển khoản QR (PayOS)
+                    <CreditCard className="size-4 text-emerald-600" /> Đơn Đã Thanh Toán (PAID)
                   </span>
-                  <Badge className="bg-emerald-600 text-white font-bold text-[10px]">Tự động đối soát</Badge>
+                  <Badge className="bg-emerald-600 text-white font-bold text-[10px]">Đã thu tiền</Badge>
                 </div>
                 <div className="text-lg font-black text-emerald-800 font-mono">
-                  {formatCurrency(Math.round(totalRevenue * 0.72))}
+                  {formatCurrency(totalRevenue)}
                 </div>
                 <div className="text-[10px] text-emerald-700 font-semibold">
-                  Chiếm 72% tổng dòng tiền thực thu (Tiền về tài khoản ngay)
+                  {paidOrdersCount} đơn · {paidRate}% tổng đơn hàng
                 </div>
               </div>
 
-              {/* COD Receipt */}
+              {/* COD — đơn chưa PAID */}
               <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3.5 space-y-2">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <Building2 className="size-4 text-amber-600" /> Thu Hộ COD Vận Chuyển
+                    <Building2 className="size-4 text-amber-600" /> Đơn Chưa Thanh Toán (UNPAID)
                   </span>
                   <Badge variant="outline" className="border-amber-300 text-amber-700 text-[10px] font-bold">
-                    Đối soát hàng tuần
+                    Chờ thu tiền
                   </Badge>
                 </div>
                 <div className="text-lg font-black text-amber-800 font-mono">
-                  {formatCurrency(Math.round(totalRevenue * 0.28))}
+                  {formatCurrency(pendingCashflowEstimate)}
                 </div>
                 <div className="text-[10px] text-amber-700 font-semibold">
-                  Chiếm 28% tổng dòng tiền (Chờ hãng chuyển tiền đối soát)
+                  {unpaidOrdersCount} đơn · ước tính {totalOrders > 0 ? Math.round((unpaidOrdersCount / totalOrders) * 100) : 0}% tổng đơn hàng
                 </div>
               </div>
             </div>

@@ -382,6 +382,7 @@ export async function adminUpdateProduct(
       const uiMetadata = {
         ...(data.name ? { name: data.name } : {}),
         ...(data.slug ? { slug: data.slug } : {}),
+        ...(data.categoryId ? { categoryId: data.categoryId } : {}),
         ...imgPayload,
       };
 
@@ -886,19 +887,9 @@ export async function adminCreateCategory(data: {
     cleanData.parentId = data.parentId;
   }
 
-  try {
-    const response = await apiClient.post<any>("/admin/catalog/categories", cleanData);
-    return unwrapApiData(response.data);
-  } catch (error: any) {
-    console.warn("adminCreateCategory backend call fallback:", error?.response?.data || error?.message || error);
-    return {
-      id: `local-cat-${Date.now()}`,
-      name: data.name,
-      slug: data.slug,
-      parentId: data.parentId || null,
-      position: data.position || 1,
-    };
-  }
+  // Không dùng fallback — throw để caller hiển thị toast lỗi thực tế
+  const response = await apiClient.post<any>("/admin/catalog/categories", cleanData);
+  return unwrapApiData(response.data);
 }
 
 export async function adminUpdateCategory(
@@ -920,49 +911,115 @@ export async function adminUpdateCategory(
 
   const isLocalId = id.startsWith("local-") || !/^[0-9a-fA-F]{24}$/.test(id);
 
-  if (!isLocalId) {
-    try {
-      const response = await apiClient.patch<any>(`/admin/catalog/categories/${id}`, cleanData);
-      return unwrapApiData(response.data);
-    } catch (error: any) {
-      const errCode = error?.response?.data?.error?.code || error?.response?.data?.message;
-      console.warn("adminUpdateCategory backend call fallback:", error?.response?.data || error?.message || error);
+  // ID cục bộ (chưa tồn tại trong DB) — cần tạo mới qua POST
+  if (isLocalId) {
+    if (cleanData.name && cleanData.slug) {
+      return await adminCreateCategory({
+        name: cleanData.name,
+        slug: cleanData.slug,
+        position: cleanData.position || 1,
+        parentId: cleanData.parentId,
+      });
+    }
+    return { id, ...data };
+  }
 
-      // Nếu danh mục chưa tồn tại trong DB MongoDB (do thuộc dữ liệu fallback),
-      // tự động gọi POST /admin/catalog/categories để tạo mới danh mục trong DB
-      if ((errCode === "CATALOG_CATEGORY_NOT_FOUND" || error?.response?.status === 404) && cleanData.name && cleanData.slug) {
+  // Gọi PATCH lên BE — không fallback im lặng
+  try {
+    const response = await apiClient.patch<any>(`/admin/catalog/categories/${id}`, cleanData);
+    return unwrapApiData(response.data);
+  } catch (error: any) {
+    const errCode = error?.response?.data?.error?.code || error?.response?.data?.message;
+
+    // Nếu danh mục chưa tồn tại trong DB — tự động tạo mới
+    if ((errCode === "CATALOG_CATEGORY_NOT_FOUND" || error?.response?.status === 404) && cleanData.name && cleanData.slug) {
+      console.info(`[Auto-Persist] Category ${id} not found in DB. Creating "${cleanData.name}"...`);
+      return await adminCreateCategory({
+        name: cleanData.name,
+        slug: cleanData.slug,
+        position: cleanData.position || 1,
+        parentId: cleanData.parentId,
+      });
+    }
+
+    // Lỗi khác — throw để caller hiển toast lỗi thực tế
+    throw error;
+  }
+}
+
+export async function adminDeleteCategory(
+  id: string,
+  /** Danh sách sản phẩm đang hiển thị, dùng để ẩn các sản phẩm thuộc danh mục */
+  currentProducts: any[] = [],
+) {
+  const isLocalId = id.startsWith("local-") || !/^[0-9a-fA-F]{24}$/.test(id);
+
+  // ID cục bộ — không cần gọi BE
+  if (isLocalId) {
+    return { id, success: true, hiddenProductCount: 0 };
+  }
+
+  // ── Bước 1: Ẩn tất cả sản phẩm thuộc danh mục này (soft delete) ──────────
+  const productsInCat = currentProducts.filter((p) => {
+    const catId = p.categoryId || p.category?._id || p.category?.id;
+    return catId && String(catId) === String(id);
+  });
+
+  let hiddenProductCount = 0;
+  for (const product of productsInCat) {
+    const prodId = product.id || product._id;
+    const prodSlug = product.slug;
+    if (!prodId || prodId.startsWith("local-")) continue;
+
+    try {
+      // Set status = HIDDEN thay vì xóa hẳn (sản phẩm vẫn còn trong DB)
+      await apiClient.patch<any>(`/admin/catalog/products/${prodId}`, {
+        status: "HIDDEN",
+      });
+      hiddenProductCount++;
+
+      // Cập nhật local cache để FE ẩn ngay lập tức
+      if (typeof window !== "undefined") {
         try {
-          console.info(`[Auto-Persist] Category ${id} not found in DB. Creating category "${cleanData.name}"...`);
-          return await adminCreateCategory({
-            name: cleanData.name,
-            slug: cleanData.slug,
-            position: cleanData.position || 1,
-            parentId: cleanData.parentId,
+          const keysToRemove = new Set(
+            [prodId, prodSlug, product.productRefId, product.sku, product._id]
+              .filter(Boolean)
+              .map(String),
+          );
+
+          let drafts = JSON.parse(localStorage.getItem("ecom_local_drafts") || "[]");
+          drafts = drafts.filter((d: any) => {
+            const dId = String(d.id || d._id || "");
+            const dSlug = String(d.slug || "");
+            return !keysToRemove.has(dId) && !keysToRemove.has(dSlug);
           });
-        } catch (createErr) {
-          console.warn("Auto-create fallback category failed:", createErr);
+          localStorage.setItem("ecom_local_drafts", JSON.stringify(drafts));
+
+          let deleted = JSON.parse(localStorage.getItem("ecom_local_deleted") || "[]");
+          keysToRemove.forEach((key) => {
+            if (!deleted.includes(key)) deleted.push(key);
+          });
+          localStorage.setItem("ecom_local_deleted", JSON.stringify(deleted));
+        } catch (cacheErr) {
+          console.warn("[adminDeleteCategory] Failed to update product cache:", cacheErr);
         }
       }
-
-      return { id, ...data };
+    } catch (prodErr) {
+      console.warn(
+        `[adminDeleteCategory] Failed to hide product ${prodId}:`,
+        prodErr,
+      );
     }
   }
-  return { id, ...data };
+
+  // ── Bước 2: Xóa (ẩn) danh mục trên BE — không fallback im lặng ───────────
+  const response = await apiClient.delete<any>(`/admin/catalog/categories/${id}`);
+  return {
+    ...(unwrapApiData(response.data) || {}),
+    hiddenProductCount,
+  };
 }
 
-export async function adminDeleteCategory(id: string) {
-  const isLocalId = id.startsWith("local-") || !/^[0-9a-fA-F]{24}$/.test(id);
-  if (!isLocalId) {
-    try {
-      const response = await apiClient.delete<any>(`/admin/catalog/categories/${id}`);
-      return unwrapApiData(response.data);
-    } catch (error) {
-      console.warn("adminDeleteCategory backend call fallback:", error);
-      return { id, success: true };
-    }
-  }
-  return { id, success: true };
-}
 
 /**
  * Upload ảnh sản phẩm lên Cloudinary qua Backend NestJS endpoint `POST /catalog/products/images` hoặc `POST /designs/upload`.
@@ -981,6 +1038,25 @@ export async function adminUploadProductImage(dataUrl: string): Promise<string> 
     u8arr[n] = bstr.charCodeAt(n);
   }
   const fileObj = new File([u8arr], "product-image.png", { type: mime });
+
+  // ── Validate trước khi gửi lên BE ────────────────────────────────────────
+  const MAX_SIZE_MB = 5;
+  const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+  const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+  if (!ALLOWED_MIME_TYPES.includes(fileObj.type)) {
+    throw new Error(
+      `Định dạng ảnh không hỗ trợ: ${fileObj.type}. Chỉ chấp nhận JPEG, PNG, WEBP, GIF.`,
+    );
+  }
+
+  if (fileObj.size > MAX_SIZE_BYTES) {
+    const sizeMB = (fileObj.size / (1024 * 1024)).toFixed(2);
+    throw new Error(
+      `Ảnh quá lớn (${sizeMB}MB). Vui lòng chọn ảnh nhỏ hơn ${MAX_SIZE_MB}MB.`,
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const formData = new FormData();
   formData.append("file", fileObj);

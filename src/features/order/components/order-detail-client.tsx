@@ -18,7 +18,11 @@ import {
   Clock,
   ExternalLink,
   ChevronRight,
-  QrCode
+  QrCode,
+  ShoppingCart,
+  Banknote,
+  PackageCheck,
+  CircleDot,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -228,57 +232,148 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
     }
   };
 
-  const getStatusSteps = () => {
-    const steps = [
-      { label: "Đặt đơn", desc: "Tạo đơn hàng thành công", done: true, current: order.status === "PLACED" && order.paymentStatus === "UNPAID" },
-    ];
+  // ─── Build timeline steps ─────────────────────────────────────────────────
+  type StepStatus = "done" | "active" | "pending" | "cancelled";
+  type TimelineStep = {
+    id: string;
+    label: string;
+    desc: string;
+    icon: React.ReactNode;
+    status: StepStatus;
+    timestamp?: string;
+  };
 
-    // Payment Step
-    const isPaid = order.paymentStatus === "PAID";
+  const buildTimeline = (): TimelineStep[] => {
+    const isCancelled = order.orderStatus === "CANCELLED" || order.status === "CANCELLED";
+    const orderStatus  = order.orderStatus || order.status;
+    const payStatus    = order.paymentStatus;
+    const fulfillment  = order.fulfillmentStatus;
+
+    const isPaid      = payStatus === "PAID";
+    const isConfirmed = orderStatus === "CONFIRMED" || orderStatus === "COMPLETED";
+    const isCompleted = orderStatus === "COMPLETED";
+    const isShipped   = fulfillment === "SHIPPED" || fulfillment === "DELIVERED";
+    const isDelivered = fulfillment === "DELIVERED";
+
+    const steps: TimelineStep[] = [];
+
+    // Step 1 — Đặt đơn
     steps.push({
-      label: "Thanh toán",
-      desc: isPaid 
-        ? `Thanh toán qua ${order.paymentMethod}`
-        : order.paymentMethod === "ONLINE" 
-          ? "Chờ thanh toán online" 
-          : "COD - Trả tiền mặt khi nhận hàng",
-      done: isPaid || order.paymentMethod === "COD",
-      current: !isPaid && order.paymentMethod === "ONLINE" && order.status !== "CANCELLED",
+      id: "placed",
+      label: "Đặt đơn",
+      desc: "Đơn hàng đã được tạo",
+      icon: <ShoppingCart className="size-4" />,
+      status: isCancelled ? "cancelled" : "done",
+      timestamp: order.createdAt,
     });
 
-    // Custom Printing Step (if applicable)
+    // Step 2 — Thanh toán
+    const payDone = isPaid || order.paymentMethod === "COD";
+    steps.push({
+      id: "payment",
+      label: "Thanh toán",
+      desc: isPaid
+        ? `Đã thanh toán qua ${order.paymentMethod}`
+        : order.paymentMethod === "COD"
+          ? "COD — Trả khi nhận hàng"
+          : "Đang chờ thanh toán online",
+      icon: <Banknote className="size-4" />,
+      status: isCancelled
+        ? "cancelled"
+        : payDone
+          ? "done"
+          : "active",
+      timestamp: order.paidAt,
+    });
+
+    // Step 3 — Xác nhận (điều kiện: đã thanh toán hoặc COD)
+    steps.push({
+      id: "confirmed",
+      label: "Xác nhận",
+      desc: isConfirmed ? "Shop đã xác nhận đơn" : "Chờ shop xác nhận",
+      icon: <PackageCheck className="size-4" />,
+      status: isCancelled
+        ? "cancelled"
+        : isConfirmed
+          ? "done"
+          : payDone ? "active" : "pending",
+    });
+
+    // Step 4 — Sản xuất (chỉ khi có đơn in)
     if (order.hasPrintItems) {
-      const isPrinted = order.fulfillmentStatus !== "NONE" && order.fulfillmentStatus !== "PRINTING" && order.fulfillmentStatus !== "PENDING";
+      const isPrinted =
+        fulfillment !== "NONE" &&
+        fulfillment !== "PRINTING" &&
+        fulfillment !== "PENDING" &&
+        fulfillment !== undefined;
+      const isPrinting = fulfillment === "PRINTING";
       steps.push({
-        label: "Sản xuất ly in",
-        desc: isPrinted 
-          ? "Hoàn thành in thiết kế" 
-          : order.status === "CONFIRMED" 
-            ? "Đang tiến hành in logo" 
-            : "Chờ in ly",
-        done: isPrinted,
-        current: !isPrinted && order.status === "CONFIRMED" && order.status !== "CANCELLED",
+        id: "printing",
+        label: "Sản xuất",
+        desc: isPrinted
+          ? "In ly hoàn thành"
+          : isPrinting
+            ? "Đang tiến hành in"
+            : "Chờ in ly custom",
+        icon: <Printer className="size-4" />,
+        status: isCancelled
+          ? "cancelled"
+          : isPrinted
+            ? "done"
+            : isPrinting
+              ? "active"
+              : "pending",
       });
     }
 
-    // Shipment Step
-    const isShipped = order.fulfillmentStatus === "SHIPPED" || order.fulfillmentStatus === "DELIVERED";
-    const isDelivered = order.fulfillmentStatus === "DELIVERED";
+    // Step 5 — Vận chuyển
     steps.push({
+      id: "shipping",
       label: isDelivered ? "Đã nhận" : "Vận chuyển",
-      desc: isDelivered 
-        ? "Đơn hàng đã được giao" 
-        : isShipped 
-          ? "Đang giao hàng" 
-          : "Chờ đóng gói giao xe",
-      done: isDelivered,
-      current: !isDelivered && isShipped && order.status !== "CANCELLED",
+      desc: isDelivered
+        ? "Đơn hàng đã được giao"
+        : isShipped
+          ? "Đang giao hàng"
+          : "Chưa xuất kho",
+      icon: <Truck className="size-4" />,
+      status: isCancelled
+        ? "cancelled"
+        : isDelivered
+          ? "done"
+          : isShipped
+            ? "active"
+            : "pending",
+      timestamp: order.deliveredAt,
+    });
+
+    // Step 6 — Hoàn thành
+    steps.push({
+      id: "completed",
+      label: "Hoàn thành",
+      desc: isCompleted ? "Đơn hàng hoàn tất" : "Chưa hoàn thành",
+      icon: <CheckCircle2 className="size-4" />,
+      status: isCancelled
+        ? "cancelled"
+        : isCompleted
+          ? "done"
+          : "pending",
+      timestamp: order.completedAt,
     });
 
     return steps;
   };
 
-  const steps = getStatusSteps();
+  const timelineSteps = buildTimeline();
+  const isCancelledOrder = order.orderStatus === "CANCELLED" || order.status === "CANCELLED";
+
+  // Helper: color classes per status
+  const stepColors = {
+    done:      { dot: "bg-emerald-500 ring-emerald-100",      text: "text-emerald-700",  line: "bg-emerald-400" },
+    active:    { dot: "bg-amber-500 ring-amber-100 animate-pulse", text: "text-amber-700", line: "bg-slate-200" },
+    pending:   { dot: "bg-slate-200 ring-slate-50",           text: "text-slate-400",  line: "bg-slate-200" },
+    cancelled: { dot: "bg-rose-300 ring-rose-100",            text: "text-rose-400",   line: "bg-rose-200" },
+  };
+
 
   return (
     <div className="w-full space-y-6">
@@ -328,46 +423,100 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
         <CardContent className="p-6 space-y-5 divide-y divide-slate-100">
           {/* SECTION 1: TIMELINE & SHIPPING ADDRESS */}
           <div className="grid gap-4 md:grid-cols-2 pb-1">
-            {/* Timeline */}
+            {/* ── Timeline — Horizontal Stepper ── */}
             <div className="space-y-4">
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 flex items-center gap-2">
                 <Truck className="size-3.5 text-slate-500" />
                 Hành trình đơn hàng
               </h3>
-              
-              {order.status === "CANCELLED" ? (
-                <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 flex items-start gap-3 text-xs text-rose-900">
-                  <XCircle className="size-5 text-rose-600 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-bold">Đơn hàng này đã bị hủy bỏ</p>
-                    <p className="leading-relaxed text-rose-700">
-                      Lý do hủy đơn: {order.cancelReason || "Người dùng hoặc hệ thống tự động hủy."}
+
+              {isCancelledOrder ? (
+                // ─ CANCELLED STATE ─
+                <div className="rounded-2xl border border-rose-200 bg-gradient-to-br from-rose-50 to-rose-50/30 p-5 flex items-start gap-4">
+                  <div className="size-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+                    <XCircle className="size-5 text-rose-600" />
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <p className="font-black text-rose-900 text-sm">Đơn hàng đã bị hủy</p>
+                    <p className="text-rose-700 leading-relaxed">
+                      Lý do: <span className="font-semibold">{order.cancelReason || "Người dùng hoặc hệ thống tự động hủy."}</span>
                     </p>
+                    {order.cancelledAt && (
+                      <p className="text-rose-400 font-mono text-[10px]">
+                        {formatDateTime(order.cancelledAt)}
+                      </p>
+                    )}
                   </div>
                 </div>
               ) : (
-                <div className="relative pl-6 space-y-6 border-l-2 border-slate-100 ml-3">
-                  {steps.map((step, idx) => (
-                    <div key={idx} className="relative">
-                      <span 
-                        className={`absolute -left-[31px] top-0.5 size-4 rounded-full flex items-center justify-center ring-4 ring-white transition-all ${
-                          step.done 
-                            ? "bg-primary text-white" 
-                            : step.current 
-                              ? "bg-amber-500 animate-pulse ring-amber-100" 
-                              : "bg-slate-200"
-                        }`}
-                      >
-                        {step.done && <CheckCircle2 className="size-3 text-white fill-primary" />}
-                      </span>
-                      <div className="text-xs">
-                        <p className={`font-bold ${step.done ? "text-foreground" : step.current ? "text-amber-600" : "text-slate-400"}`}>
-                          {step.label}
-                        </p>
-                        <p className="text-muted-foreground mt-0.5 leading-relaxed">{step.desc}</p>
-                      </div>
-                    </div>
-                  ))}
+                // ─ STEPPER ─
+                <div className="relative">
+                  {/* Mobile: vertical stepper */}
+                  <div className="flex flex-col gap-0 md:hidden">
+                    {timelineSteps.map((step, idx) => {
+                      const col = stepColors[step.status];
+                      const isLast = idx === timelineSteps.length - 1;
+                      return (
+                        <div key={step.id} className="flex gap-4 relative">
+                          {/* Left dot + line */}
+                          <div className="flex flex-col items-center">
+                            <div className={`size-8 rounded-full flex items-center justify-center ring-4 shrink-0 z-10 ${col.dot}`}>
+                              <span className={step.status === "done" ? "text-white" : step.status === "active" ? "text-white" : "text-slate-400"}>
+                                {step.icon}
+                              </span>
+                            </div>
+                            {!isLast && (
+                              <div className={`w-0.5 flex-1 min-h-[28px] mt-1 ${col.line}`} />
+                            )}
+                          </div>
+                          {/* Content */}
+                          <div className={`pb-6 pt-1 ${isLast ? "" : ""}`}>
+                            <p className={`text-xs font-black ${col.text}`}>{step.label}</p>
+                            <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">{step.desc}</p>
+                            {step.timestamp && (
+                              <p className="text-[10px] text-slate-400 font-mono mt-0.5">{formatDateTime(step.timestamp)}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Desktop: horizontal stepper */}
+                  <div className="hidden md:flex items-start">
+                    {timelineSteps.map((step, idx) => {
+                      const col = stepColors[step.status];
+                      const isLast = idx === timelineSteps.length - 1;
+                      return (
+                        <div key={step.id} className="flex-1 flex flex-col items-center relative">
+                          {/* Connector line (left side, skip first) */}
+                          {idx > 0 && (
+                            <div
+                              className={`absolute top-4 right-1/2 h-0.5 w-full -translate-y-1/2 ${
+                                timelineSteps[idx - 1].status === "done" ? "bg-emerald-400" : "bg-slate-200"
+                              }`}
+                            />
+                          )}
+
+                          {/* Dot */}
+                          <div className={`size-8 rounded-full flex items-center justify-center ring-4 z-10 shrink-0 ${col.dot}`}>
+                            <span className={step.status === "done" || step.status === "active" ? "text-white" : "text-slate-400"}>
+                              {step.icon}
+                            </span>
+                          </div>
+
+                          {/* Label */}
+                          <div className="text-center mt-2 px-1">
+                            <p className={`text-[11px] font-black leading-tight ${col.text}`}>{step.label}</p>
+                            <p className="text-[10px] text-slate-400 leading-relaxed mt-0.5 max-w-[90px] mx-auto">{step.desc}</p>
+                            {step.timestamp && (
+                              <p className="text-[9px] text-slate-400 font-mono mt-0.5">{formatDateTime(step.timestamp)}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>

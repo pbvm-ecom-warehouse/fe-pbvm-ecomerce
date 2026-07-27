@@ -44,7 +44,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-import { listOrders } from "@/features/order/services/order.service";
+import {
+  listNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+} from "@/features/notification/services/notification.service";
 
 const AUTH_PATHS = ["/login", "/register"];
 
@@ -111,109 +115,52 @@ export function StoreHeader() {
       .catch((err) => console.error("Header categories fetch failed:", err));
   }, []);
 
-  // FETCH REAL DYNAMIC NOTIFICATIONS FROM BACKEND ORDERS & SAVED DESIGNS
+  // FETCH REAL NOTIFICATIONS from backend API
   useEffect(() => {
     let isMounted = true;
 
-    async function loadRealNotifications() {
-      const realNotifs: any[] = [];
+    function iconForType(type: string) {
+      if (type === "PAYMENT_SUCCESS") return CreditCard;
+      if (type === "PAYMENT_FAILED" || type === "PAYMENT_CANCELLED") return CreditCard;
+      if (type === "ORDER_CONFIRMED" || type === "ORDER_FULFILLED") return PackageCheck;
+      if (type === "DESIGN_SAVED") return Sparkles;
+      return ShoppingCart;
+    }
+    function colorForType(type: string) {
+      if (type === "PAYMENT_SUCCESS") return "bg-emerald-100 text-emerald-700";
+      if (type === "PAYMENT_FAILED" || type === "PAYMENT_CANCELLED") return "bg-rose-100 text-rose-700";
+      if (type === "ORDER_CONFIRMED" || type === "ORDER_FULFILLED") return "bg-emerald-100 text-emerald-700";
+      if (type === "DESIGN_SAVED") return "bg-amber-100 text-amber-700";
+      return "bg-blue-100 text-blue-700";
+    }
 
-      // 1. Fetch real Backend Orders (only for customer users)
-      if (user?.type === "customer") {
-        try {
-          const orderRes = await listOrders();
-          const ordersList = Array.isArray(orderRes) ? orderRes : orderRes?.data || [];
-
-          ordersList.forEach((o: any) => {
-            const codeStr = o.code || (o.id ? o.id.slice(-6).toUpperCase() : "ECOM");
-            const orderCode = String(codeStr).startsWith("ORD-") ? codeStr : `ORD-${codeStr}`;
-            const rawDate = o.placedAt || o.createdAt || o.updatedAt;
-            const timeStr = formatRelativeTime(rawDate);
-            const totalVal = formatCurrency(o.totalAmount || o.total || 0);
-
-            if (o.paymentStatus === "PAID") {
-              realNotifs.push({
-                id: `notif-order-paid-${o.id || o._id}`,
-                title: `Thanh toán PayOS thành công`,
-                description: `Đơn hàng #${orderCode} (${totalVal}) đã thanh toán thành công qua PayOS.`,
-                time: timeStr,
-                rawTime: rawDate ? new Date(rawDate).getTime() : 0,
-                read: false,
-                link: o.id || o._id ? `/orders/${o.id || o._id}` : "/orders",
-                icon: CreditCard,
-                color: "bg-emerald-100 text-emerald-700",
-              });
-            } else {
-              realNotifs.push({
-                id: `notif-order-placed-${o.id || o._id}`,
-                title: `Đơn hàng mới #${orderCode}`,
-                description: `Đơn hàng giá trị ${totalVal} đã được ghi nhận vào hệ thống.`,
-                time: timeStr,
-                rawTime: rawDate ? new Date(rawDate).getTime() : 0,
-                read: false,
-                link: o.id || o._id ? `/orders/${o.id || o._id}` : "/orders",
-                icon: ShoppingCart,
-                color: "bg-blue-100 text-blue-700",
-              });
-            }
-
-            if (o.orderStatus === "CONFIRMED" || o.orderStatus === "FULFILLED") {
-              realNotifs.push({
-                id: `notif-order-ship-${o.id || o._id}`,
-                title: `Đơn hàng #${orderCode} đang xử lý`,
-                description: `Bộ phận WMS kho đã nhận yêu cầu đóng gói và vận chuyển.`,
-                time: timeStr,
-                rawTime: rawDate ? new Date(rawDate).getTime() : 0,
-                read: true,
-                link: o.id || o._id ? `/orders/${o.id || o._id}` : "/orders",
-                icon: PackageCheck,
-                color: "bg-emerald-100 text-emerald-700",
-              });
-            }
-          });
-        } catch (err) {
-          console.error("Error loading real order notifications:", err);
-        }
-      }
-
-      // 2. Fetch real Saved Cup Designs
-      if (typeof window !== "undefined") {
-        try {
-          const savedStr = localStorage.getItem("pbvm_saved_cup_designs");
-          if (savedStr) {
-            const savedList = JSON.parse(savedStr);
-            if (Array.isArray(savedList)) {
-              savedList.slice(0, 3).forEach((d: any) => {
-                realNotifs.push({
-                  id: `notif-design-${d.id}`,
-                  title: `Đã lưu mẫu thiết kế mới`,
-                  description: `Mẫu thiết kế "${d.name || "Chưa đặt tên"}" đã lưu vào bộ sưu tập của bạn.`,
-                  time: formatRelativeTime(d.createdAt),
-                  rawTime: d.createdAt ? new Date(d.createdAt).getTime() : 0,
-                  read: true,
-                  link: "/design-cup",
-                  icon: Sparkles,
-                  color: "bg-amber-100 text-amber-700",
-                });
-              });
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-
-      // Sort by newest first
-      realNotifs.sort((a, b) => (b.rawTime || 0) - (a.rawTime || 0));
-
-      if (isMounted) {
-        setNotifications(realNotifs);
+    async function load() {
+      try {
+        const res = await listNotifications({ pageSize: 20 });
+        if (!isMounted) return;
+        setNotifications(
+          res.data.map((n) => ({
+            id: n.id,
+            title: n.title,
+            description: n.description,
+            time: formatRelativeTime(n.createdAt),
+            rawTime: new Date(n.createdAt).getTime(),
+            read: n.isRead,
+            link: n.link ?? "/orders",
+            icon: iconForType(n.type),
+            color: colorForType(n.type),
+          }))
+        );
+      } catch (err) {
+        console.error("Failed to load notifications:", err);
+        if (isMounted) setNotifications([]);
       }
     }
 
     if (user && user.type === "customer") {
-      loadRealNotifications();
+      load();
     }
+    return () => { isMounted = false; };
   }, [user]);
 
   const filteredProducts = useMemo(() => {
@@ -231,12 +178,18 @@ export function StoreHeader() {
 
   const markAllAsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    // Fire-and-forget API call
+    markAllNotificationsRead().catch(() => {});
   };
 
   const markAsRead = (id: string) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
     );
+    // Fire-and-forget API call (only for IDs that look like real backend IDs)
+    if (!id.startsWith("notif-order-") && !id.startsWith("notif-design-")) {
+      markNotificationRead(id).catch(() => {});
+    }
   };
 
   if (!mounted || !pathname || AUTH_PATHS.includes(pathname) || pathname.startsWith("/admin")) {
@@ -582,15 +535,6 @@ export function StoreHeader() {
           </div>
 
           {/* Hotline */}
-          <div className="flex items-center gap-2 text-right">
-            <div className="rounded-full bg-primary/10 p-2 text-primary md:block hidden">
-              <PhoneCall className="size-4" />
-            </div>
-            <div className="md:block hidden">
-              <div className="text-xs font-bold text-primary leading-none">1900-8888</div>
-              <div className="text-[9px] text-muted-foreground font-medium mt-0.5">Hỗ trợ 24/7</div>
-            </div>
-          </div>
         </div>
       </div>
     </header>

@@ -1,4 +1,5 @@
 import { publicApiFetch } from "@/lib/public-api";
+import { apiClient } from "@/lib/api-client";
 import type { ApiListResponse, CatalogProduct, ProductVariant } from "@/types/api";
 
 export const fallbackCatalogProducts: CatalogProduct[] = [];
@@ -616,12 +617,29 @@ export async function fetchAllCupVariantsFromApi(): Promise<
   }>
 > {
   try {
-    // ── Lấy danh sách sản phẩm từ DB (kể cả hết hàng nếu BE trả về) ──
+    // ── Ưu tiên admin API (có JWT) để lấy TẤT CẢ sản phẩm kể cả hết hàng/chưa publish ──
     let rawList: any[] = [];
     try {
-      rawList = (await publicApiFetch<any[]>("/catalog/products")) ?? [];
+      // Admin endpoint trả về toàn bộ products không lọc status
+      const adminRes = await apiClient.get<any>("/admin/catalog/products", {
+        params: { page: 1, pageSize: 200 },
+      });
+      const adminData = adminRes?.data;
+      // Xử lý cả dạng array lẫn paginated { data: [...] }
+      if (Array.isArray(adminData)) {
+        rawList = adminData;
+      } else if (adminData?.data && Array.isArray(adminData.data)) {
+        rawList = adminData.data;
+      } else if (adminData?.items && Array.isArray(adminData.items)) {
+        rawList = adminData.items;
+      }
     } catch {
-      rawList = [];
+      // Fallback: public catalog (chỉ active products)
+      try {
+        rawList = (await publicApiFetch<any[]>("/catalog/products")) ?? [];
+      } catch {
+        rawList = [];
+      }
     }
 
     // ── Lấy local drafts từ admin ──
@@ -802,7 +820,6 @@ export async function fetchAllCupVariantsFromApi(): Promise<
     });
 
     console.log("[Cup DB All] Tất cả variants phôi ly chưa in:", result);
-    return result;
     return result;
   } catch (error) {
     console.error("fetchAllCupVariantsFromApi error:", error);
