@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -42,12 +42,14 @@ import {
   adminUpdateProduct,
   adminUpdateVariant,
   adminPublishProduct,
+  adminActivateVariant,
   adminUploadProductImage,
   adminListProducts,
 } from "@/features/catalog/services/admin-catalog.service";
 import { publicApiFetch } from "@/lib/public-api";
 import { formatCurrency } from "@/utils/format-currency";
 import type { FulfillmentType } from "@/types/api";
+import { normalizeVariantAttributes } from "@/features/catalog/utils/variant-attributes";
 
 const FULFILLMENT_LABELS: Record<string, string> = {
   STANDARD: "Hàng sẵn kho",
@@ -95,9 +97,11 @@ function getProductType(product: any, sku: string = ""): "CUP" | "MATERIAL" | "P
 }
 
 function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Record<string, any> = {}) {
-  const capacityVal = attrs.capacity || attrs.size || attrs.spec || attrs.weight || "";
-  const styleVal = attrs.style || attrs.packaging || attrs.specification || "";
-  const materialVal = attrs.material || attrs.origin || attrs.type || attrs.brand || "";
+  const normalizedAttrs = normalizeVariantAttributes(attrs, String(attrs.sku || ""));
+  const capacityVal = normalizedAttrs.capacity || attrs.weight || "";
+  const styleVal = normalizedAttrs.style || attrs.specification || "";
+  const materialVal = normalizedAttrs.material || attrs.type || attrs.brand || "";
+  const colorVal = normalizedAttrs.color || attrs.color || attrs.colour || attrs.mauSac || attrs.mau_sac || "";
 
   if (type === "MATERIAL") {
     return {
@@ -107,6 +111,8 @@ function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Rec
       col2Val: styleVal || "-",
       col3Label: "NGUỒN GỐC",
       col3Val: materialVal || "-",
+      col4Label: "MÀU SẮC",
+      col4Val: colorVal || "-",
     };
   }
 
@@ -118,6 +124,8 @@ function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Rec
       col2Val: styleVal || "-",
       col3Label: "CHẤT LIỆU",
       col3Val: materialVal || "-",
+      col4Label: "MÀU SẮC",
+      col4Val: colorVal || "-",
     };
   }
 
@@ -129,13 +137,17 @@ function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Rec
     col2Val: styleVal || "-",
     col3Label: "CHẤT LIỆU",
     col3Val: materialVal || "-",
+    col4Label: "MÀU SẮC",
+    col4Val: colorVal || "-",
   };
 }
 
 export default function ProductVariantManagementPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const productId = (params.id as string) || "";
+  const categoryIdFromUrl = searchParams.get("categoryId") || "";
 
   const [categories, setCategories] = useState<any[]>([]);
   const [product, setProduct] = useState<any | null>(null);
@@ -234,26 +246,21 @@ export default function ProductVariantManagementPage() {
 
       if (rawVars.length > 0) {
         setProdVariants(
-          rawVars.map((v: any) => ({
-            id: v.id || v._id,
-            sku: v.sku || (foundProd?.slug ? foundProd.slug.toUpperCase() : "SKU"),
-            price: v.price !== undefined ? Number(v.price) : Number(foundProd?.price || 0),
-            availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
-            attributes: v.attributes || {},
-            fulfillmentType: v.fulfillmentType || "STANDARD",
-          }))
+          rawVars.map((v: any) => {
+            const sku = v.sku || (foundProd?.slug ? foundProd.slug.toUpperCase() : "SKU");
+            const normalizedAttrs = normalizeVariantAttributes(v.attributes || {}, sku);
+            return {
+              id: v.id || v._id,
+              sku,
+              price: v.price !== undefined ? Number(v.price) : Number(foundProd?.price || 0),
+              availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
+              attributes: { ...(v.attributes || {}), ...normalizedAttrs },
+              fulfillmentType: v.fulfillmentType || "STANDARD",
+            };
+          })
         );
       } else {
-        setProdVariants([
-          {
-            id: `local-var-${Date.now()}`,
-            sku: (foundProd.slug || "SKU").toUpperCase(),
-            price: Number(foundProd.price || 0),
-            availableQty: foundProd.stockSnapshot || 0,
-            attributes: foundProd.attributes || {},
-            fulfillmentType: foundProd.fulfillmentType || "STANDARD",
-          },
-        ]);
+        setProdVariants([]);
       }
     } catch (error) {
       console.error("Error loading product variants page:", error);
@@ -280,6 +287,20 @@ export default function ProductVariantManagementPage() {
       next[index] = { ...next[index], price: val };
       return next;
     });
+  };
+
+  const activateAllProductVariants = async () => {
+    await Promise.all(
+      prodVariants
+        .map((variant) => variant.id)
+        .filter((id): id is string => Boolean(id))
+        .map((variantId) =>
+          adminActivateVariant(variantId).catch((error) => {
+            console.warn("adminActivateVariant warning:", variantId, error);
+            return null;
+          }),
+        ),
+    );
   };
 
   const handleVariantSkuChange = (index: number, val: string) => {
@@ -333,14 +354,22 @@ export default function ProductVariantManagementPage() {
     setSaving(true);
     try {
       const pId = product.id || product._id || productId;
-      const updatedSlug = prodSlug.trim().toLowerCase().replace(/\s+/g, "-");
+      const updatedSlug = prodSlug
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-+|-+$/g, "");
       const imageToSave = prodImage.trim();
 
       // Cập nhật từng variant qua adminUpdateVariant API
       const updatedVariantsList: any[] = [];
       for (const v of prodVariants) {
         let savedVar = v;
-        if (v.id && !v.id.startsWith("local-")) {
+        if (v.id) {
           try {
             savedVar = await adminUpdateVariant(v.id, {
               sku: v.sku.trim(),
@@ -370,6 +399,7 @@ export default function ProductVariantManagementPage() {
         categoryId: prodCategoryId,
         images: imageToSave ? [imageToSave] : [],
       });
+      await activateAllProductVariants();
 
       toast.success(
         `Đã lưu cập nhật sản phẩm "${prodName.trim()}" & ${updatedVariantsList.length} Variant từ API CSDL!`
@@ -388,6 +418,7 @@ export default function ProductVariantManagementPage() {
     const pId = product.id || product._id || productId;
     try {
       await adminPublishProduct(pId);
+      await activateAllProductVariants();
       toast.success("Đã đưa sản phẩm lên kệ Ecommerce thành công!");
       loadData();
     } catch (error: any) {
@@ -402,6 +433,17 @@ export default function ProductVariantManagementPage() {
       .filter((pr) => !isNaN(pr) && pr > 0);
     return validPrices.length > 0 ? Math.min(...validPrices) : Number(product?.price || 0);
   }, [prodVariants, product]);
+
+  const handleBackToCategory = () => {
+    const backCategoryId =
+      categoryIdFromUrl ||
+      prodCategoryId ||
+      product?.categoryId ||
+      product?.category?._id ||
+      product?.category?.id;
+    const categoryQuery = backCategoryId ? `?categoryId=${encodeURIComponent(String(backCategoryId))}` : "";
+    router.push(`/admin/catalog/categories${categoryQuery}`);
+  };
 
   if (loading) {
     return (
@@ -419,7 +461,7 @@ export default function ProductVariantManagementPage() {
       <div className="p-8 text-center space-y-4">
         <AlertCircle className="size-12 text-rose-500 mx-auto" />
         <h2 className="text-lg font-bold text-slate-800">Sản phẩm không tồn tại</h2>
-        <Button onClick={() => router.push("/admin/catalog/categories")}>
+        <Button onClick={handleBackToCategory}>
           <ArrowLeft className="size-4 mr-2" /> Quay lại quản lý danh mục
         </Button>
       </div>
@@ -437,11 +479,11 @@ export default function ProductVariantManagementPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => router.push("/admin/catalog/categories")}
+              onClick={handleBackToCategory}
               className="h-9 px-3 rounded-xl border-slate-200 text-slate-700 font-bold hover:bg-slate-50 gap-1.5 cursor-pointer"
             >
               <ArrowLeft className="size-4 text-emerald-600" />
-              <span>Quay lại danh mục</span>
+              <span>Quay lại</span>
             </Button>
 
             <div className="h-4 w-px bg-slate-200 hidden sm:block" />
@@ -688,7 +730,7 @@ export default function ProductVariantManagementPage() {
                         {isEditing && (
                           <div className="px-4 pb-4 space-y-3 border-t border-emerald-200/60">
                             {/* Attributes preview */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 p-3 rounded-xl bg-white border border-slate-100 text-xs">
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 p-3 rounded-xl bg-white border border-slate-100 text-xs">
                               <div>
                                 <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">{info.col1Label}</span>
                                 <span className="font-bold text-slate-900">{info.col1Val || "-"}</span>
@@ -700,6 +742,10 @@ export default function ProductVariantManagementPage() {
                               <div>
                                 <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">{info.col3Label}</span>
                                 <span className="font-bold text-slate-800">{info.col3Val || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">{info.col4Label}</span>
+                                <span className="font-bold text-slate-800">{info.col4Val || "-"}</span>
                               </div>
                               <div>
                                 <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">Tồn kho</span>
@@ -735,25 +781,14 @@ export default function ProductVariantManagementPage() {
                               <div className="flex items-end gap-2 shrink-0">
                                 <Button
                                   type="button"
-                                  onClick={async () => {
-                                    setSaving(true);
-                                    try {
-                                      if (varItem.id && !varItem.id.startsWith("local-var-")) {
-                                        await adminUpdateVariant(varItem.id, { sku: varItem.sku, price: varItem.price });
-                                      }
-                                      toast.success(`Đã lưu Variant #${idx + 1}`);
-                                      setEditingVariantIdx(-1);
-                                    } catch (err: any) {
-                                      toast.error(err?.response?.data?.message || "Lưu variant thất bại.");
-                                    } finally {
-                                      setSaving(false);
-                                    }
+                                  onClick={() => {
+                                    toast.info("Đã cập nhật variant tạm thời. Bấm Lưu thông tin sản phẩm để lưu lên hệ thống.");
+                                    setEditingVariantIdx(-1);
                                   }}
-                                  disabled={saving}
                                   className="h-9 px-3 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg border-0 cursor-pointer gap-1.5"
                                 >
-                                  {saving ? <RefreshCw className="size-3.5 animate-spin" /> : <CheckCircle2 className="size-3.5" />}
-                                  Lưu
+                                  <CheckCircle2 className="size-3.5" />
+                                  OK
                                 </Button>
                                 <Button
                                   type="button"
@@ -773,25 +808,18 @@ export default function ProductVariantManagementPage() {
                 )}
               </div>
 
-              <div className="pt-2 flex justify-end gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => router.push("/admin/catalog/categories")}
-                  className="h-9 text-xs font-bold rounded-xl cursor-pointer"
-                >
-                  Quay lại
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  className="h-9 px-5 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-2 cursor-pointer border-0"
-                >
-                  {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
-                  <span>Lưu thông tin sản phẩm</span>
-                </Button>
-              </div>
             </div>
+          </div>
+
+          <div className="mt-8 flex flex-col-reverse gap-3 border-t border-[#E9E3DD] pt-5 sm:flex-row sm:items-center sm:justify-end">
+            <Button
+              type="submit"
+              disabled={saving}
+              className="h-10 px-6 text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md flex items-center gap-2 cursor-pointer border-0"
+            >
+              {saving ? <RefreshCw className="size-4 animate-spin" /> : <Save className="size-4" />}
+              <span>Lưu thông tin sản phẩm</span>
+            </Button>
           </div>
         </form>
       </Card>

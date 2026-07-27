@@ -29,7 +29,7 @@ import { formatCurrency } from "@/utils/format-currency";
 import {
   listCatalogProducts,
 } from "@/features/catalog/services/catalog.service";
-import { adminListCategories } from "@/features/catalog/services/admin-catalog.service";
+import { adminListCategories, subscribeProductSync } from "@/features/catalog/services/admin-catalog.service";
 import { publicApiFetch } from "@/lib/public-api";
 import type { CatalogProduct } from "@/types/api";
 import {
@@ -94,25 +94,33 @@ export function StoreHeader() {
 
   useEffect(() => {
     setMounted(true);
-    listCatalogProducts()
-      .then((res) => {
-        if (res && res.data && res.data.length > 0) {
-          setAllProducts(res.data);
-        } else {
-          setAllProducts([]);
-        }
-      })
-      .catch(() => {
-        setAllProducts([]);
-      });
 
-    adminListCategories()
-      .then((res) => {
-        if (Array.isArray(res) && res.length > 0) {
-          setHeaderCategories(res);
-        }
-      })
-      .catch((err) => console.error("Header categories fetch failed:", err));
+    const syncHeaderData = () => {
+      listCatalogProducts()
+        .then((res) => {
+          if (res && res.data && res.data.length > 0) {
+            setAllProducts(res.data);
+          } else {
+            setAllProducts([]);
+          }
+        })
+        .catch(() => {
+          setAllProducts([]);
+        });
+
+      adminListCategories()
+        .then((res) => {
+          setHeaderCategories(Array.isArray(res) ? res : []);
+        })
+        .catch((err) => console.error("Header categories fetch failed:", err));
+    };
+
+    syncHeaderData();
+
+    const unsubscribe = subscribeProductSync(syncHeaderData);
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // FETCH REAL NOTIFICATIONS from backend API

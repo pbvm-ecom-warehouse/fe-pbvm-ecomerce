@@ -118,7 +118,19 @@ export default function RegisterPage() {
       router.push("/login");
     } catch (error: any) {
       console.error(error);
-      const errorMsg = error.response?.data?.message || "Đăng ký thất bại. Vui lòng kiểm tra lại.";
+      const status = error.response?.status;
+      const beMessage = error.response?.data?.message;
+
+      let errorMsg = "Đăng ký tài khoản thất bại. Vui lòng kiểm tra lại.";
+      if (
+        status === 409 ||
+        (typeof beMessage === "string" && (beMessage.includes("exist") || beMessage.includes("đã tồn tại")))
+      ) {
+        errorMsg = "Email này đã được đăng ký. Vui lòng chọn Đăng nhập hoặc sử dụng email khác.";
+      } else if (beMessage) {
+        errorMsg = typeof beMessage === "string" ? beMessage : Array.isArray(beMessage) ? beMessage[0] : "Đăng ký thất bại.";
+      }
+
       toast.error(errorMsg);
     }
   };

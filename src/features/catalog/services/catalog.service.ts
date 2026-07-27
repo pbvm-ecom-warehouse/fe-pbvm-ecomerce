@@ -1,25 +1,12 @@
 import { publicApiFetch } from "@/lib/public-api";
-import { apiClient } from "@/lib/api-client";
 import type { ApiListResponse, CatalogProduct, ProductVariant } from "@/types/api";
+import {
+  coerceVariantAttributes,
+  normalizeVariantAttributes,
+} from "@/features/catalog/utils/variant-attributes";
 
-export const fallbackCatalogProducts: CatalogProduct[] = [];
-
-// Map category ObjectId to slug string used in FE
-const CATEGORY_MAP: Record<string, CatalogProduct["category"]> = {
-  "685ba0cb233b28b7fa99c262": "ingredient",
-  "685ba0cb233b28b7fa99c263": "plain_cup",
-  "685ba0cb233b28b7fa99c264": "printed_cup",
-};
-
-const UNIT_MAP: Record<CatalogProduct["category"], string> = {
-  ingredient: "bao",
-  plain_cup: "thùng",
-  printed_cup: "thùng",
-  custom_print: "cái",
-};
-
-function getValidImageUrl(img: string | undefined): string {
-  if (!img) return "/images/product-placeholder.svg";
+function getValidImageUrl(img: string | undefined): string | undefined {
+  if (!img) return undefined;
   const lowercase = img.toLowerCase().trim();
   if (
     lowercase === "string" ||
@@ -27,7 +14,7 @@ function getValidImageUrl(img: string | undefined): string {
     lowercase === "null" ||
     lowercase === ""
   ) {
-    return "/images/product-placeholder.svg";
+    return undefined;
   }
   if (
     img.startsWith("http://") ||
@@ -37,55 +24,172 @@ function getValidImageUrl(img: string | undefined): string {
   ) {
     return img;
   }
-  return "/images/product-placeholder.svg";
+  return undefined;
 }
 
 export function cleanProductName(name: string | undefined, sku?: string): string {
-  const target = (name || sku || "").trim();
-  if (!target) return "Sản phẩm E-Commerce";
+  return (name || sku || "").trim();
+}
 
-  // Check if target is a raw SKU (e.g. no spaces, uppercase with hyphens/numbers like CUP-HRT-GN-500-CLR)
-  const isRawSku = !target.includes(" ") && (/^[A-Z0-9_-]+$/i.test(target) || target.includes("-"));
+function unwrapShopPayload(payload: any): any {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "data" in payload &&
+    !("id" in payload) &&
+    !("_id" in payload) &&
+    !("slug" in payload)
+  ) {
+    return payload.data;
+  }
+  return payload;
+}
 
-  if (!isRawSku && target !== sku) {
-    return target;
+function readArrayPayload(payload: any): any[] | null {
+  const data = unwrapShopPayload(payload);
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.variants)) return data.variants;
+  return null;
+}
+
+function getCategoryId(category: any) {
+  return category?.id ?? category?._id;
+}
+
+function normalizeCatalogText(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .toLowerCase()
+    .trim();
+}
+
+async function readCatalogCategoriesById() {
+  try {
+    const response = await publicApiFetch<any>("/catalog/categories");
+    const categories = readArrayPayload(response) ?? [];
+    const byId = new Map<string, any>();
+    for (const category of categories) {
+      const id = getCategoryId(category);
+      if (id) byId.set(String(id), category);
+    }
+    return byId;
+  } catch {
+    return new Map<string, any>();
+  }
+}
+
+async function readBlankCupCategoryIds() {
+  const categoriesById = await readCatalogCategoriesById();
+  const ids = new Set<string>();
+
+  for (const [id, category] of categoriesById.entries()) {
+    const slug = normalizeCatalogText(String(category?.slug ?? ""));
+    const name = normalizeCatalogText(String(category?.name ?? ""));
+    const code = normalizeCatalogText(String(category?.code ?? ""));
+
+    if (
+      slug === "ly-chua-in" ||
+      slug === "plain-cup" ||
+      slug === "plain_cup" ||
+      name === "ly chua in" ||
+      code === "ly-chua-in" ||
+      code === "plain_cup"
+    ) {
+      ids.add(id);
+    }
   }
 
-  // Parse SKU code to build readable name
-  const upper = target.toUpperCase();
+  return { ids, categoriesById };
+}
 
-  if (upper.includes("CUP-HRT") || upper.includes("CUP_HRT") || upper.includes("HRT")) {
-    const sizeMatch = upper.match(/(\d{3,4})/);
-    const size = sizeMatch ? `${sizeMatch[1]}ml` : "500ml";
-    return `Ly Nhựa Nắp Tim ${size} (Cao cấp)`;
+function attachCategory(product: any, categoriesById: Map<string, any>) {
+  const categoryId = String(
+    product?.categoryId ||
+      (typeof product?.category === "object" ? getCategoryId(product.category) : "") ||
+      "",
+  );
+  if (!categoryId) return product;
+  const category = categoriesById.get(categoryId);
+  if (!category) return product;
+
+  return {
+    ...product,
+    category,
+    categoryId,
+  };
+}
+
+function readVariantAttributeSource(variant: any) {
+  return {
+    ...coerceVariantAttributes(variant?.attributes),
+    ...coerceVariantAttributes(variant?.attributeValues),
+    ...coerceVariantAttributes(variant?.variantAttributes),
+    ...(variant?.capacity ? { capacity: variant.capacity } : {}),
+    ...(variant?.size ? { size: variant.size } : {}),
+    ...(variant?.style ? { style: variant.style } : {}),
+    ...(variant?.material ? { material: variant.material } : {}),
+    ...(variant?.color ? { color: variant.color } : {}),
+  };
+}
+
+async function withFreshProductVariants(product: any) {
+  product = unwrapShopPayload(product);
+  if (!product) return product;
+
+  const identifiers = Array.from(
+    new Set(
+      [product?.id, product?._id, product?.slug, product?.productRefId, product?.sku]
+        .filter((value) => value !== undefined && value !== null && String(value).trim())
+        .map((value) => String(value).trim()),
+    ),
+  );
+  if (identifiers.length === 0) return product;
+
+  let variants: any[] | null = null;
+  for (const identifier of identifiers) {
+    try {
+      const response = await publicApiFetch<any>(
+        `/catalog/products/${encodeURIComponent(identifier)}/variants`,
+      );
+      const data = readArrayPayload(response);
+      if (data && data.length > 0) {
+        variants = data;
+        break;
+      }
+    } catch {}
+  }
+  if (!variants) return product;
+
+  const variantsFromDetail = Array.isArray(product.variants) ? product.variants : [];
+  const detailVariantById = new Map<string, any>();
+  const detailVariantBySku = new Map<string, any>();
+  for (const variant of variantsFromDetail) {
+    const id = variant?.id ?? variant?._id;
+    if (id) detailVariantById.set(String(id), variant);
+    if (variant?.sku) detailVariantBySku.set(String(variant.sku), variant);
   }
 
-  if (upper.includes("CUP-PET") || upper.includes("PET")) {
-    const sizeMatch = upper.match(/(\d{3,4})/);
-    const size = sizeMatch ? `${sizeMatch[1]}ml` : "";
-    return `Ly Nhựa PET Trong Suốt ${size}`.trim();
-  }
+  const mergedVariants = variants.map((variant) => {
+    const detailVariant =
+      detailVariantById.get(String(variant?.id ?? variant?._id ?? "")) ||
+      detailVariantBySku.get(String(variant?.sku ?? "")) ||
+      {};
+    return {
+      ...detailVariant,
+      ...variant,
+      attributes: {
+        ...readVariantAttributeSource(detailVariant),
+        ...readVariantAttributeSource(variant),
+      },
+    };
+  });
 
-  if (upper.includes("CUP-PP") || upper.includes("PP")) {
-    const sizeMatch = upper.match(/(\d{3,4})/);
-    const size = sizeMatch ? `${sizeMatch[1]}ml` : "";
-    return `Ly Nhựa PP Ép Màng ${size}`.trim();
-  }
-
-  if (upper.includes("CUP") || upper.includes("LY")) {
-    const sizeMatch = upper.match(/(\d{3,4})/);
-    const size = sizeMatch ? `${sizeMatch[1]}ml` : "";
-    return `Ly Nhựa In Thương Hiệu ${size}`.trim();
-  }
-
-  if (upper.includes("ING") || upper.includes("BAO")) {
-    return `Bao Bì & Nguyên Liệu Pha Chế`;
-  }
-
-  // Fallback: replace hyphens/underscores with spaces and capitalize
-  return target
-    .replace(/[-_]+/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
+  return { ...product, variants: mergedVariants };
 }
 
 /**
@@ -97,43 +201,15 @@ export function cleanProductName(name: string | undefined, sku?: string): string
  * thành CatalogProduct dùng ở FE.
  */
 export function mapProductDetail(p: any): CatalogProduct {
-  let ov: any = {};
-  if (typeof window !== "undefined") {
-    try {
-      const overridesMap = JSON.parse(localStorage.getItem("ecom_local_overrides") || "{}");
-      ov = overridesMap[p.id || p._id] || overridesMap[p.slug] || {};
-    } catch {
-      ov = {};
-    }
-  }
-
-  const mergedP = { ...ov, ...p };
+  const mergedP = unwrapShopPayload(p);
 
   // Đọc danh sách variants gốc từ BE hoặc override
   const baseVariants: any[] =
-    Array.isArray(p.variants) && p.variants.length > 0
-      ? p.variants
-      : (Array.isArray(ov.variants) && ov.variants.length > 0 ? ov.variants : []);
+    Array.isArray(mergedP.variants) && mergedP.variants.length > 0
+      ? mergedP.variants
+      : [];
 
-  // Áp dụng giá đã cập nhật từ Admin (nếu có trong overrides)
-  const rawVariants = baseVariants.map((v: any) => {
-    let overridePrice = v.price;
-    if (ov.variants && Array.isArray(ov.variants)) {
-      const matchOv = ov.variants.find(
-        (ovV: any) => (ovV.id || ovV._id) === (v.id || v._id) || (ovV.sku && v.sku && ovV.sku === v.sku),
-      );
-      if (matchOv && matchOv.price !== undefined && Number(matchOv.price) > 0) {
-        overridePrice = Number(matchOv.price);
-      }
-    }
-    if (ov.price !== undefined && Number(ov.price) > 0 && (!overridePrice || overridePrice <= 0)) {
-      overridePrice = Number(ov.price);
-    }
-    return {
-      ...v,
-      price: overridePrice,
-    };
-  });
+  const rawVariants = baseVariants;
 
   const activeVariant = rawVariants.find((v) => v.isActive !== false) ?? rawVariants[0];
 
@@ -143,58 +219,47 @@ export function mapProductDetail(p: any): CatalogProduct {
 
   const minVariantPrice = validVariantPrices.length > 0
     ? Math.min(...validVariantPrices)
-    : (ov.price ?? p.price ?? activeVariant?.price ?? 0);
+    : (mergedP.price ?? activeVariant?.price ?? 0);
 
   const price = minVariantPrice;
 
-  const rawCatId = mergedP.categoryId || p.categoryId || (typeof mergedP.category === "object" ? mergedP.category?.id || mergedP.category?._id : mergedP.category);
+  const rawCatId = mergedP.categoryId || (typeof mergedP.category === "object" ? mergedP.category?.id || mergedP.category?._id : mergedP.category);
   const rawCatSlug = typeof mergedP.category === "object" ? mergedP.category?.slug : (typeof mergedP.category === "string" ? mergedP.category : null);
   const rawCatName = typeof mergedP.category === "object" ? mergedP.category?.name : null;
 
-  const mappedCategorySlug = rawCatSlug || CATEGORY_MAP[rawCatId] || rawCatId || "ingredient";
+  const mappedCategorySlug = rawCatSlug || rawCatId || "";
 
-  let mappedVariants: ProductVariant[] = rawVariants.map((v: any) => ({
-    id: v.id ?? v._id,
-    sku: v.sku ?? mergedP.slug.toUpperCase(),
-    productId: v.productId ?? mergedP.id ?? mergedP._id,
-    attributes: v.attributes ?? {},
-    price: v.price ?? price,
-    availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
-    fulfillmentType: v.fulfillmentType ?? "STANDARD",
-    isActive: v.isActive !== false,
-  }));
+  let mappedVariants: ProductVariant[] = rawVariants.map((v: any) => {
+    const sku = v.sku ?? "";
+    const rawAttrs = readVariantAttributeSource(v);
+    const normalizedAttrs = normalizeVariantAttributes(rawAttrs, sku);
+    return {
+      id: v.id ?? v._id,
+      sku,
+      productId: v.productId ?? mergedP.id ?? mergedP._id,
+      attributes: { ...rawAttrs, ...normalizedAttrs },
+      price: v.price ?? price,
+      availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
+      fulfillmentType: v.fulfillmentType ?? "STANDARD",
+      isActive: v.isActive !== false,
+    };
+  });
 
-  if (mappedVariants.length === 0) {
-    mappedVariants = [
-      {
-        id: `var-${mergedP.id ?? mergedP._id ?? Date.now()}`,
-        sku: mergedP.productRefId ?? mergedP.sku ?? (mergedP.slug ? mergedP.slug.toUpperCase() : "SKU"),
-        productId: mergedP.id ?? mergedP._id,
-        attributes: mergedP.attributes || {},
-        price: price > 0 ? price : (mergedP.price || 0),
-        availableQty: mergedP.stockSnapshot ?? 0,
-        fulfillmentType: mergedP.fulfillmentType ?? "STANDARD",
-        isActive: true,
-      },
-    ];
-  }
 
   const rawCandidates = [
     ...(mergedP.images || []),
     mergedP.imageUrl,
-    ...(p.images || []),
-    p.imageUrl,
   ].filter((url): url is string => typeof url === "string" && Boolean(url.trim()));
 
   const imageCandidates = Array.from(new Set(rawCandidates));
 
-  const activeAttributes = activeVariant?.attributes || mergedP.attributes || {};
+  const activeAttributes = mappedVariants[0]?.attributes || activeVariant?.attributes || mergedP.attributes || {};
 
   return {
     id: mergedP.id ?? mergedP._id,
-    productRefId: activeVariant?.sku ?? mergedP.slug.toUpperCase(),
-    slug: mergedP.slug,
-    name: cleanProductName(mergedP.name, activeVariant?.sku ?? mergedP.productRefId),
+    productRefId: mergedP.productRefId ?? mergedP.sku ?? mergedP.code ?? mergedP.productSku ?? "",
+    slug: mergedP.slug ?? "",
+    name: cleanProductName(mergedP.name, mergedP.productRefId ?? mergedP.sku),
     description: mergedP.description || "",
     category: mappedCategorySlug,
     categoryId: rawCatId,
@@ -203,10 +268,10 @@ export function mapProductDetail(p: any): CatalogProduct {
     fulfillmentType: mergedP.fulfillmentType ?? activeVariant?.fulfillmentType ?? "STANDARD",
     price,
     b2bPrice: price,
-    unit: UNIT_MAP[mappedCategorySlug as keyof typeof UNIT_MAP] ?? "cái",
+    unit: mergedP.unit ?? activeVariant?.unit ?? "",
     stockSnapshot: mappedVariants.reduce((sum: number, v: ProductVariant) => sum + (v.availableQty ?? 0), 0),
-    imageUrl: getValidImageUrl(imageCandidates[0]),
-    images: imageCandidates,
+    imageUrl: getValidImageUrl(imageCandidates[0]) ?? "",
+    images: imageCandidates.filter((url) => getValidImageUrl(url)),
     updatedAt: mergedP.updatedAt ?? new Date().toISOString(),
     variants: mappedVariants,
     attributes: activeAttributes,
@@ -221,42 +286,13 @@ export function mapProductDetail(p: any): CatalogProduct {
  * Map một product từ list API (nếu có variants thì lấy giá variant thấp nhất).
  */
 function mapProductListItem(p: any): CatalogProduct {
-  let ov: any = {};
-  if (typeof window !== "undefined") {
-    try {
-      const overridesMap = JSON.parse(localStorage.getItem("ecom_local_overrides") || "{}");
-      ov = overridesMap[p.id || p._id] || overridesMap[p.slug] || {};
-    } catch {
-      ov = {};
-    }
-  }
-
-  const mergedP = { ...ov, ...p };
+  const mergedP = p;
 
   const baseVariants: any[] =
     Array.isArray(p.variants) && p.variants.length > 0
-      ? p.variants
-      : (Array.isArray(ov.variants) && ov.variants.length > 0 ? ov.variants : []);
+      ? p.variants: [];
 
-  // Áp dụng giá đã cập nhật từ Admin (nếu có trong overrides)
-  const rawVariants = baseVariants.map((v: any) => {
-    let overridePrice = v.price;
-    if (ov.variants && Array.isArray(ov.variants)) {
-      const matchOv = ov.variants.find(
-        (ovV: any) => (ovV.id || ovV._id) === (v.id || v._id) || (ovV.sku && v.sku && ovV.sku === v.sku),
-      );
-      if (matchOv && matchOv.price !== undefined && Number(matchOv.price) > 0) {
-        overridePrice = Number(matchOv.price);
-      }
-    }
-    if (ov.price !== undefined && Number(ov.price) > 0 && (!overridePrice || overridePrice <= 0)) {
-      overridePrice = Number(ov.price);
-    }
-    return {
-      ...v,
-      price: overridePrice,
-    };
-  });
+  const rawVariants = baseVariants;
 
   const validVariantPrices = rawVariants
     .map((v) => Number(v.price))
@@ -264,7 +300,7 @@ function mapProductListItem(p: any): CatalogProduct {
 
   const minVariantPrice = validVariantPrices.length > 0
     ? Math.min(...validVariantPrices)
-    : (ov.price ?? p.price ?? 0);
+    : (p.price ?? 0);
 
   const price = minVariantPrice;
 
@@ -272,33 +308,24 @@ function mapProductListItem(p: any): CatalogProduct {
   const rawCatSlug = typeof mergedP.category === "object" ? mergedP.category?.slug : (typeof mergedP.category === "string" ? mergedP.category : null);
   const rawCatName = typeof mergedP.category === "object" ? mergedP.category?.name : null;
 
-  const mappedCategorySlug = rawCatSlug || CATEGORY_MAP[rawCatId] || rawCatId || "ingredient";
+  const mappedCategorySlug = rawCatSlug || rawCatId || "";
 
-  let mappedVariants: ProductVariant[] = rawVariants.map((v: any) => ({
-    id: v.id ?? v._id,
-    sku: v.sku ?? mergedP.slug.toUpperCase(),
-    productId: v.productId ?? mergedP.id ?? mergedP._id,
-    attributes: v.attributes ?? {},
-    price: v.price ?? price,
-    availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
-    fulfillmentType: v.fulfillmentType ?? "STANDARD",
-    isActive: v.isActive !== false,
-  }));
+  let mappedVariants: ProductVariant[] = rawVariants.map((v: any) => {
+    const sku = v.sku ?? "";
+    const rawAttrs = readVariantAttributeSource(v);
+    const normalizedAttrs = normalizeVariantAttributes(rawAttrs, sku);
+    return {
+      id: v.id ?? v._id,
+      sku,
+      productId: v.productId ?? mergedP.id ?? mergedP._id,
+      attributes: { ...rawAttrs, ...normalizedAttrs },
+      price: v.price ?? price,
+      availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
+      fulfillmentType: v.fulfillmentType ?? "STANDARD",
+      isActive: v.isActive !== false,
+    };
+  });
 
-  if (mappedVariants.length === 0) {
-    mappedVariants = [
-      {
-        id: `var-${mergedP.id ?? mergedP._id ?? Date.now()}`,
-        sku: mergedP.productRefId ?? mergedP.sku ?? (mergedP.slug ? mergedP.slug.toUpperCase() : "SKU"),
-        productId: mergedP.id ?? mergedP._id,
-        attributes: mergedP.attributes || {},
-        price: price > 0 ? price : (mergedP.price || 0),
-        availableQty: mergedP.stockSnapshot ?? 0,
-        fulfillmentType: mergedP.fulfillmentType ?? "STANDARD",
-        isActive: true,
-      },
-    ];
-  }
 
   const rawCandidates = [
     ...(mergedP.images || []),
@@ -311,9 +338,9 @@ function mapProductListItem(p: any): CatalogProduct {
 
   return {
     id: mergedP.id ?? mergedP._id,
-    productRefId: mappedVariants[0]?.sku ?? mergedP.slug.toUpperCase(),
-    slug: mergedP.slug,
-    name: cleanProductName(mergedP.name, mappedVariants[0]?.sku ?? mergedP.productRefId),
+    productRefId: mergedP.productRefId ?? mergedP.sku ?? mergedP.code ?? mergedP.productSku ?? "",
+    slug: mergedP.slug ?? "",
+    name: cleanProductName(mergedP.name, mergedP.productRefId ?? mergedP.sku),
     category: mappedCategorySlug,
     categoryId: rawCatId,
     categoryObj: typeof mergedP.category === "object" ? mergedP.category : undefined,
@@ -321,11 +348,11 @@ function mapProductListItem(p: any): CatalogProduct {
     fulfillmentType: mergedP.fulfillmentType ?? "STANDARD",
     price,
     b2bPrice: price,
-    unit: UNIT_MAP[mappedCategorySlug as keyof typeof UNIT_MAP] ?? "cái",
+    unit: mergedP.unit ?? "",
     stockSnapshot: mappedVariants.length > 0
       ? mappedVariants.reduce((sum: number, v: ProductVariant) => sum + (v.availableQty ?? 0), 0)
       : (mergedP.stockSnapshot ?? 0),
-    imageUrl: getValidImageUrl(imageCandidates[0]),
+    imageUrl: getValidImageUrl(imageCandidates[0]) ?? "",
     updatedAt: mergedP.updatedAt ?? new Date().toISOString(),
     variants: mappedVariants,
   };
@@ -341,7 +368,6 @@ const emptyCatalogResponse: ApiListResponse<CatalogProduct> = {
  * mình sẽ enrichment bằng cách gọi detail cho từng slug song song.
  * Nếu detail thất bại, dùng mapProductListItem.
  *
- * Lưu ý: không mời local drafts từ localStorage — hàm này chạy
  * server-side nên không có window. Shop chỉ hiển thị sản phẩm từ BE.
  */
 export async function listCatalogProducts() {
@@ -357,12 +383,21 @@ export async function listCatalogProducts() {
       return emptyCatalogResponse;
     }
 
-    const enriched = rawProducts.map((p) => {
-      if (Array.isArray(p.variants) && p.variants.length > 0) {
-        return mapProductDetail(p);
-      }
-      return mapProductListItem(p);
-    });
+    const filtered = rawProducts;
+    const categoriesById = await readCatalogCategoriesById();
+
+    const enriched = await Promise.all(
+      filtered.map(async (p) => {
+        const productWithVariants = attachCategory(
+          await withFreshProductVariants(p),
+          categoriesById,
+        );
+        if (Array.isArray(productWithVariants.variants) && productWithVariants.variants.length > 0) {
+          return mapProductDetail(productWithVariants);
+        }
+        return mapProductListItem(productWithVariants);
+      }),
+    );
 
     return {
       data: enriched,
@@ -394,32 +429,29 @@ export async function getCatalogProductBySlug(slug: string) {
     const p = await publicApiFetch<any>(
       `/catalog/products/${encodeURIComponent(targetSlug)}`,
     );
-    if (p) return mapProductDetail(p);
+    const product = unwrapShopPayload(p);
+    if (product) {
+      const productWithVariants = await withFreshProductVariants(product);
+      const categoriesById = await readCatalogCategoriesById();
+      return mapProductDetail(
+        attachCategory(productWithVariants, categoriesById),
+      );
+    }
   } catch {
     if (decodedSlug !== targetSlug) {
       try {
         const p = await publicApiFetch<any>(
           `/catalog/products/${encodeURIComponent(decodedSlug)}`,
         );
-        if (p) return mapProductDetail(p);
+        const product = unwrapShopPayload(p);
+        if (product) {
+          const productWithVariants = await withFreshProductVariants(product);
+          const categoriesById = await readCatalogCategoriesById();
+          return mapProductDetail(
+            attachCategory(productWithVariants, categoriesById),
+          );
+        }
       } catch {}
-    }
-  }
-
-  // Fallback check local drafts/overrides if backend detail is missing or stale
-  if (typeof window !== "undefined") {
-    try {
-      const drafts = JSON.parse(localStorage.getItem("ecom_local_drafts") || "[]");
-      const found = drafts.find(
-        (d: any) =>
-          d.slug === decodedSlug ||
-          d.slug === hyphenatedSlug ||
-          d.id === decodedSlug ||
-          d._id === decodedSlug
-      );
-      if (found) return mapProductDetail(found);
-    } catch (e) {
-      console.error(e);
     }
   }
 
@@ -427,7 +459,6 @@ export async function getCatalogProductBySlug(slug: string) {
 }
 
 /**
- * Gọi API lấy đúng các variant ly từ DB — không fallback, không fix cứng.
  * Flow:
  *  1. GET /catalog/products → danh sách sản phẩm
  *  2. Lọc sản phẩm ly (plain_cup / printed_cup / slug/name chứa "ly")
@@ -453,18 +484,7 @@ export async function fetchInStockCupVariantsFromApi() {
       rawList = [];
     }
 
-    // ── BƯỚC 2: lấy local drafts từ admin ──
-    let drafts: any[] = [];
-    if (typeof window !== "undefined") {
-      try {
-        drafts = JSON.parse(localStorage.getItem("ecom_local_drafts") ?? "[]");
-      } catch {
-        drafts = [];
-      }
-    }
-
-    // ── BƯỚC 3: gộp rồi lọc sản phẩm ly ──
-    const allRaw = [...drafts, ...rawList];
+    const allRaw = rawList;
     const cupRaw = allRaw.filter(
       (p: any) =>
         p.category === "plain_cup" ||
@@ -486,9 +506,9 @@ export async function fetchInStockCupVariantsFromApi() {
         if (Array.isArray(p.variants) && p.variants.length > 0) return p;
         if (!p.slug) return p;
         try {
-          const detail = await publicApiFetch<any>(
+          const detail = unwrapShopPayload(await publicApiFetch<any>(
             `/catalog/products/${encodeURIComponent(p.slug)}`,
-          );
+          ));
           return detail ?? p;
         } catch {
           return p;
@@ -614,17 +634,17 @@ export async function fetchAllCupVariantsFromApi(): Promise<
     productId?: string;
     variantId?: string;
     sku?: string;
+    productName?: string;
+    color?: string;
+    attributes?: Record<string, string>;
   }>
 > {
   try {
-    // ── Ưu tiên admin API (có JWT) để lấy TẤT CẢ sản phẩm kể cả hết hàng/chưa publish ──
+    const { ids: blankCupCategoryIds, categoriesById } = await readBlankCupCategoryIds();
+    // ── Lấy sản phẩm đang bán từ public catalog và lọc phôi ly theo category API ──
     let rawList: any[] = [];
     try {
-      // Admin endpoint trả về toàn bộ products không lọc status
-      const adminRes = await apiClient.get<any>("/admin/catalog/products", {
-        params: { page: 1, pageSize: 200 },
-      });
-      const adminData = adminRes?.data;
+      const adminData = await publicApiFetch<any>("/catalog/products");
       // Xử lý cả dạng array lẫn paginated { data: [...] }
       if (Array.isArray(adminData)) {
         rawList = adminData;
@@ -634,7 +654,6 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         rawList = adminData.items;
       }
     } catch {
-      // Fallback: public catalog (chỉ active products)
       try {
         rawList = (await publicApiFetch<any[]>("/catalog/products")) ?? [];
       } catch {
@@ -642,22 +661,33 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       }
     }
 
-    // ── Lấy local drafts từ admin ──
-    let drafts: any[] = [];
-    if (typeof window !== "undefined") {
-      try {
-        drafts = JSON.parse(localStorage.getItem("ecom_local_drafts") ?? "[]");
-      } catch {
-        drafts = [];
-      }
-    }
-
-    // ── Lọc sản phẩm phôi ly / ly custom in theo yêu cầu từ DB (CHỈ LY CHƯA IN) ──
-    const allRaw = [...drafts, ...rawList];
+    const allRaw = rawList;
     const cupRaw = allRaw.filter((p: any) => {
-      const category = String(p.category ?? "").toLowerCase();
-      const slug = String(p.slug ?? "").toLowerCase();
-      const name = String(p.name ?? "").toLowerCase();
+      const rawCategoryId = String(
+        p.categoryId ??
+          p.categoryObj?.id ??
+          p.categoryObj?._id ??
+          p.category?.id ??
+          p.category?._id ??
+          "",
+      );
+      const categoryFromApi = rawCategoryId ? categoriesById.get(rawCategoryId) : null;
+      const category = normalizeCatalogText(String(
+        p.categoryObj?.slug ??
+          p.category?.slug ??
+          categoryFromApi?.slug ??
+          p.category ??
+          "",
+      ));
+      const categoryName = normalizeCatalogText(String(
+        p.categoryName ??
+          p.categoryObj?.name ??
+          p.category?.name ??
+          categoryFromApi?.name ??
+          "",
+      ));
+      const slug = normalizeCatalogText(String(p.slug ?? ""));
+      const name = normalizeCatalogText(String(p.name ?? ""));
       const fulfillmentType = String(p.fulfillmentType ?? "").toLowerCase();
       const itemType = String(p.itemType ?? p.type ?? "").toUpperCase();
 
@@ -673,16 +703,19 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       }
 
       return (
+        (rawCategoryId && blankCupCategoryIds.has(rawCategoryId)) ||
         category === "plain_cup" ||
+        category === "ly-chua-in" ||
+        categoryName.includes("ly chua in") ||
         category === "custom_print" ||
         fulfillmentType === "custom_print" ||
         itemType === "CUP_BLANK" ||
-        name.includes("phôi") ||
+        name.includes("phoi") ||
         name.includes("custom") ||
-        name.includes("tự thiết kế") ||
+        name.includes("tu thiet ke") ||
         slug.includes("custom") ||
         slug.includes("phoi") ||
-        (name.includes("ly") && (name.includes("trơn") || name.includes("in theo yêu cầu")))
+        (name.includes("ly") && (name.includes("tron") || name.includes("in theo yeu cau")))
       );
     });
 
@@ -697,9 +730,9 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         if (Array.isArray(p.variants) && p.variants.length > 0) return p;
         if (!p.slug) return p;
         try {
-          const detail = await publicApiFetch<any>(
+          const detail = unwrapShopPayload(await publicApiFetch<any>(
             `/catalog/products/${encodeURIComponent(p.slug)}`,
-          );
+          ));
           return detail ?? p;
         } catch {
           return p;
@@ -708,29 +741,40 @@ export async function fetchAllCupVariantsFromApi(): Promise<
     );
 
     // ── Parse helpers chuẩn hóa từ thuộc tính DB và mã SKU Kho ──
-    function parseMaterial(text: string, sku: string = ""): "clear" | "frosted" | "paper" | "glass" {
-      const full = (text + " " + sku).toLowerCase();
-      if (full.includes("pet") || full.includes("nhựa trong") || full.includes("trong")) return "clear";
-      if (full.includes("pp") || full.includes("nhựa mờ") || full.includes("mờ")) return "frosted";
-      if (full.includes("giấy") || full.includes("kraft") || full.includes("paper")) return "paper";
-      if (full.includes("thủy tinh") || full.includes("glass")) return "glass";
-      return "clear";
+    function normalizeCupText(text: string) {
+      return text
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "d")
+        .toLowerCase();
     }
 
-    function parseStyle(text: string, sku: string = ""): "straight" | "u_shape" | "heart" | "mug" {
-      const full = (text + " " + sku).toLowerCase();
-      if (full.includes("-u") || full.includes("bầu") || full.includes("u-shape") || full.includes("đáy u") || full.includes("u_shape")) return "u_shape";
+    function parseMaterial(text: string, sku: string = ""): "clear" | "frosted" | "paper" | "glass" | null {
+      const full = normalizeCupText(`${text} ${sku}`);
+      if (full.includes("pet") || full.includes("nhua trong") || full.includes("trong suot")) return "clear";
+      if (full.includes("pp") || full.includes("nhua mo") || full.includes("mo")) return "frosted";
+      if (full.includes("giay") || full.includes("kraft") || full.includes("paper")) return "paper";
+      if (full.includes("thuy tinh") || full.includes("glass")) return "glass";
+      return null;
+    }
+
+    function parseStyle(text: string, sku: string = ""): "straight" | "u_shape" | "heart" | "mug" | null {
+      const full = normalizeCupText(`${text} ${sku}`);
+      if (full.includes("tru") || full.includes("tron") || full.includes("thang") || full.includes("straight") || full.includes("rnd")) return "straight";
+      if (full.includes("-u") || full.includes("bau") || full.includes("u-shape") || full.includes("day u") || full.includes("u_shape")) return "u_shape";
       if (full.includes("heart") || full.includes("tim")) return "heart";
       if (full.includes("mug") || full.includes("quai")) return "mug";
-      return "straight";
+      return null;
     }
 
-    function parseSize(text: string, sku: string = ""): "350ml" | "500ml" | "700ml" | "1000ml" {
-      const full = (text + " " + sku).toLowerCase();
+    function parseSize(text: string, sku: string = ""): "350ml" | "500ml" | "700ml" | "1000ml" | null {
+      const full = normalizeCupText(`${text} ${sku}`);
       if (full.includes("1000") || full.includes("1l")) return "1000ml";
       if (full.includes("700") || full.includes("750") || full.includes("l ") || full.includes("large")) return "700ml";
+      if (full.includes("500")) return "500ml";
       if (full.includes("350") || full.includes("s ") || full.includes("small")) return "350ml";
-      return "500ml";
+      return null;
     }
 
     // ── Parse variants chính xác từ DB — KHÔNG lọc theo availableQty ──
@@ -744,6 +788,9 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       productId?: string;
       variantId?: string;
       sku?: string;
+      productName?: string;
+      color?: string;
+      attributes?: Record<string, string>;
     }> = [];
 
     detailedProducts.forEach((p: any) => {
@@ -763,48 +810,36 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         if (Array.isArray(rawAttr)) {
           rawAttr.forEach((item: any) => {
             if (item && (item.name || item.key) && item.value) {
-              attrObj[String(item.name || item.key).toLowerCase()] = String(item.value).toLowerCase();
+              attrObj[String(item.name || item.key).toLowerCase()] = String(item.value).trim();
             }
           });
         } else if (rawAttr && typeof rawAttr === "object") {
           Object.entries(rawAttr).forEach(([k, val]) => {
-            attrObj[String(k).toLowerCase()] = String(val).toLowerCase();
+            attrObj[String(k).toLowerCase()] = String(val).trim();
           });
         }
 
         const attrMaterial = (attrObj.material ?? attrObj["chất liệu"] ?? attrObj["chat lieu"] ?? attrObj["materialtype"] ?? "").toLowerCase();
         const attrStyle = (attrObj.style ?? attrObj["kiểu dáng"] ?? attrObj["kieu dang"] ?? attrObj["dáng"] ?? "").toLowerCase();
         const attrSize = (attrObj.size ?? attrObj.capacity ?? attrObj["dung tích"] ?? attrObj["dung tich"] ?? attrObj["dungtich"] ?? "").toLowerCase();
+        const attrColor = String(attrObj.color ?? attrObj["màu sắc"] ?? attrObj["mau sac"] ?? "").trim();
 
-        const skuStr = String(v.sku ?? p.sku ?? p.productRefId ?? "").toLowerCase();
+        const material = parseMaterial(attrMaterial);
+        const style = parseStyle(attrStyle);
+        const size = parseSize(attrSize);
 
-        const fullText = [
-          attrMaterial, attrStyle, attrSize,
-          p.name, p.slug, v.name, skuStr,
-          ...Object.values(attrObj).map(String),
-        ].filter(Boolean).join(" ").toLowerCase();
-
-        const material = parseMaterial(attrMaterial || fullText, skuStr);
-        const style = parseStyle(attrStyle || fullText, skuStr);
-        const size = parseSize(attrSize || fullText, skuStr);
+        if (!material || !style || !size) {
+          console.warn("[Cup DB All] Skip variant without explicit cup attributes:", {
+            productName: p.name,
+            sku: v.sku,
+            attributes: rawAttr,
+          });
+          return;
+        }
 
         const sku = v.sku || p.sku || p.productRefId;
 
         // Dedupe: nếu combo đã có với inStock=true thì ưu tiên thông tin còn hàng
-        const existing = result.find(
-          (r) => r.materialType === material && r.style === style && r.size === size,
-        );
-        if (existing) {
-          if (inStock && !existing.inStock) {
-            existing.inStock = true;
-            existing.availableQty = availableQty;
-            existing.price = v.price ?? p.price;
-            if (sku) existing.sku = sku;
-            if (v.id || v._id) existing.variantId = v.id || v._id;
-          }
-          return;
-        }
-
         result.push({
           materialType: material,
           style,
@@ -815,6 +850,9 @@ export async function fetchAllCupVariantsFromApi(): Promise<
           productId: p.id || p._id,
           variantId: v.id || v._id || sku,
           sku,
+          productName: p.name,
+          color: attrColor || undefined,
+          attributes: attrObj,
         });
       });
     });
