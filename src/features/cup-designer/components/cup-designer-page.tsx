@@ -46,7 +46,6 @@ import {
   uploadDesignImage,
 } from "../services/design.service";
 import { sendChatMessageToAi } from "../services/ai-chat.service";
-import { publicApiFetch } from "@/lib/public-api";
 import {
   fetchAllCupVariantsFromApi,
 } from "@/features/catalog/services/catalog.service";
@@ -66,7 +65,6 @@ import {
   CUP_SIZE_SPECS,
   CUP_STYLE_LABELS,
   DEFAULT_CUP_CONFIG,
-  createCustomCupProduct,
   createDesignSnapshot,
   getArtboardDimensions,
 } from "../utils/artwork";
@@ -112,34 +110,8 @@ interface InStockVariant {
   inStock: boolean;
 }
 
-const ALL_MATERIALS: CupMaterialType[] = ["clear", "frosted", "paper", "glass"];
-const ALL_STYLES: CupStyle[] = ["straight", "u_shape", "heart", "mug"];
-const ALL_SIZES: CupSize[] = ["350ml", "500ml", "700ml", "1000ml"];
-
 /** Số mẫu thiết kế tối đa mỗi khách hàng */
 const MAX_DESIGNS = 15;
-
-const MATERIAL_DESCRIPTIONS: Record<CupMaterialType, string> = {
-  clear: "Trong suốt 100%, nổi bật màu sắc đồ uống",
-  frosted: "Bề mặt nhám cao cấp, mịn tay & sang trọng",
-  paper: "Kraft 2 lớp giữ nhiệt, thân thiện môi trường",
-  glass: "Thủy tinh cao cấp, độ bền cao & tái sử dụng",
-  metal: "Kim loại giữ nhiệt lâu",
-};
-
-const STYLE_DESCRIPTIONS: Record<CupStyle, string> = {
-  straight: "Dáng thẳng truyền thống, phù hợp mọi món nước",
-  u_shape: "Đáy bầu cong quyến rũ, tôn dáng trà sữa",
-  heart: "Nắp nốt tim dễ thương, thu hút giới trẻ",
-  mug: "Có quai cầm tiện lợi, chống nóng lạnh hiệu quả",
-};
-
-const SIZE_DESCRIPTIONS: Record<CupSize, string> = {
-  "350ml": "Size nhỏ vừa vặn (350ml)",
-  "500ml": "Size vừa phổ biến nhất (500ml)",
-  "700ml": "Size lớn uống thỏa thích (700ml)",
-  "1000ml": "Size khổng lồ (1000ml)",
-};
 
 const DESIGN_DRAFT_KEY = "cup_designer_draft_v1";
 const SAVED_DESIGNS_KEY = "cup_designer_saved_designs_v1";
@@ -237,6 +209,9 @@ interface InStockVariant {
   price?: number;
   productId?: string;
   variantId?: string;
+  productName?: string;
+  color?: string;
+  attributes?: Record<string, string>;
 }
 
 export function CupDesignerPage() {
@@ -250,8 +225,9 @@ export function CupDesignerPage() {
 
   // Số mẫu thiết kế hiện tại của khách
   const [designsCount, setDesignsCount] = useState(0);
-  // Product-based mode: khoá material + style
-  const [isProductLocked, setIsProductLocked] = useState(false);
+  const [selectedBlankVariantId, setSelectedBlankVariantId] = useState<string>("");
+  const [isBlankDropdownOpen, setIsBlankDropdownOpen] = useState(false);
+  const [blankSearchQuery, setBlankSearchQuery] = useState("");
 
   // Cup config state — khôi phục từ localStorage nếu có
   const [materialType, setMaterialType] = useState<CupMaterialType>(() => loadDraft()?.materialType ?? DEFAULT_CUP_CONFIG.materialType);
@@ -560,6 +536,9 @@ export function CupDesignerPage() {
   const searchParams = useSearchParams();
   /** productId truyền vào từ trang sản phẩm — có nghĩa là "Product-based mode" */
   const productIdFromUrl = searchParams?.get("productId") ?? null;
+  const productSlugFromUrl = searchParams?.get("productSlug") ?? null;
+  const variantIdFromUrl = searchParams?.get("variantId") ?? null;
+  const skuFromUrl = searchParams?.get("sku") ?? null;
 
   /* ── 0. AUTO-SAVE DRAFT VÀO LOCALSTORAGE ── */
   useEffect(() => {
@@ -595,6 +574,9 @@ export function CupDesignerPage() {
           price: v.price,
           productId: v.productId,
           variantId: v.variantId,
+          productName: v.productName,
+          color: v.color,
+          attributes: v.attributes,
         }));
         setInStockVariants(mapped);
       })
@@ -608,17 +590,109 @@ export function CupDesignerPage() {
   }, []);
 
   const selectedVariantInfo = useMemo(() => {
-    return inStockVariants.find(
-      (v) => v.materialType === materialType && v.style === style && v.size === size,
+    const sameCombo = (v: InStockVariant) =>
+      v.materialType === materialType && v.style === style && v.size === size;
+
+    if (selectedBlankVariantId) {
+      const exact = inStockVariants.find(
+        (v) => String(v.variantId || v.sku || "") === selectedBlankVariantId,
+      );
+      if (exact) return exact;
+    }
+
+    if (variantIdFromUrl) {
+      const exact = inStockVariants.find(
+        (v) => String(v.variantId) === variantIdFromUrl,
+      );
+      if (exact) return exact;
+    }
+
+    if (skuFromUrl) {
+      const exact = inStockVariants.find(
+        (v) => String(v.sku) === skuFromUrl,
+      );
+      if (exact) return exact;
+    }
+
+    return inStockVariants.find(sameCombo);
+  }, [inStockVariants, materialType, style, size, selectedBlankVariantId, variantIdFromUrl, skuFromUrl]);
+
+  useEffect(() => {
+    if (inStockVariants.length === 0) return;
+    const currentStillExists = inStockVariants.some(
+      (variant) => String(variant.variantId || variant.sku || "") === selectedBlankVariantId,
     );
-  }, [inStockVariants, materialType, style, size]);
+    if (selectedBlankVariantId && currentStillExists) return;
+
+    const preferred =
+      inStockVariants.find((variant) => variantIdFromUrl && String(variant.variantId) === variantIdFromUrl) ||
+      inStockVariants.find((variant) => skuFromUrl && String(variant.sku) === skuFromUrl) ||
+      inStockVariants.find((variant) => productIdFromUrl && String(variant.productId) === productIdFromUrl) ||
+      inStockVariants[0];
+
+    setSelectedBlankVariantId(String(preferred.variantId || preferred.sku || ""));
+    setMaterialType(preferred.materialType);
+    setStyle(preferred.style);
+    setSize(preferred.size);
+  }, [inStockVariants, selectedBlankVariantId, productIdFromUrl, variantIdFromUrl, skuFromUrl]);
 
   const currentCupSku = useMemo(() => {
     if (selectedVariantInfo?.sku) return selectedVariantInfo.sku;
-    const matCode = materialType === "clear" ? "PET" : materialType === "frosted" ? "PP" : materialType === "paper" ? "PAPER" : "GLASS";
-    const styleCode = style === "u_shape" ? "-U" : style === "heart" ? "-HEART" : style === "mug" ? "-MUG" : "";
-    return `CUP-${matCode}-${size.toUpperCase()}${styleCode}`;
+    return "-";
   }, [selectedVariantInfo, materialType, size, style]);
+
+  function handleSelectBlankVariant(variantKey: string) {
+    const variant = inStockVariants.find(
+      (item) => String(item.variantId || item.sku || "") === variantKey,
+    );
+    if (!variant) return;
+    setSelectedBlankVariantId(variantKey);
+    setMaterialType(variant.materialType);
+    setStyle(variant.style);
+    setSize(variant.size);
+    setPrintHeightPercent(DEFAULT_CUP_CONFIG.printHeightPercent);
+  }
+
+  function getVariantDisplayAttr(
+    variant: InStockVariant | undefined,
+    key: "capacity" | "style" | "material" | "color",
+  ) {
+    if (!variant) return "-";
+    const attrs = variant.attributes ?? {};
+    if (key === "capacity") {
+      return attrs.capacity || attrs.size || attrs["dung tích"] || attrs["dung tich"] || variant.size || "-";
+    }
+    if (key === "style") {
+      return attrs.style || attrs["kiểu dáng"] || attrs["kieu dang"] || attrs["dáng"] || "-";
+    }
+    if (key === "material") {
+      return attrs.material || attrs["chất liệu"] || attrs["chat lieu"] || attrs.materialtype || "-";
+    }
+    return variant.color || attrs.color || attrs["màu sắc"] || attrs["mau sac"] || "-";
+  }
+
+  function getBlankVariantStatusLabel(variant: InStockVariant) {
+    return variant.stockSnapshot > 0 ? "Còn hàng" : "Hết hàng";
+  }
+
+  function getBlankVariantLabel(variant: InStockVariant) {
+    return [
+      variant.sku || "Không có SKU",
+      getVariantDisplayAttr(variant, "capacity"),
+      getVariantDisplayAttr(variant, "style"),
+      getVariantDisplayAttr(variant, "material"),
+      getVariantDisplayAttr(variant, "color"),
+      getBlankVariantStatusLabel(variant),
+    ].join(" - ");
+  }
+
+  const filteredBlankVariants = useMemo(() => {
+    const query = blankSearchQuery.trim().toLowerCase();
+    if (!query) return inStockVariants;
+    return inStockVariants.filter((variant) =>
+      getBlankVariantLabel(variant).toLowerCase().includes(query),
+    );
+  }, [blankSearchQuery, inStockVariants]);
 
 
   const loadDesignIdFromUrl = searchParams?.get("loadDesignId") ?? null;
@@ -640,157 +714,51 @@ export function CupDesignerPage() {
       .catch(() => setDesignsCount(0));
   }, [user]);
 
-
-  /* ── 1c. PRODUCT-BASED MODE: Pre-fill từ productId trong URL ── */
   useEffect(() => {
-    if (!productIdFromUrl) return;
+    if (
+      inStockVariants.length === 0 ||
+      (!productIdFromUrl && !productSlugFromUrl && !variantIdFromUrl && !skuFromUrl)
+    ) {
+      return;
+    }
 
-    // Fetch product detail hoặc parse từ list để pre-fill material, style, size
-    publicApiFetch<any>(`/catalog/products/${encodeURIComponent(productIdFromUrl)}`)
-      .then((p) => {
-        if (!p) return;
-
-        // RÀNG BUỘC: CHỈ LY CHƯA IN MỚI ĐƯỢC THIẾT KẾ
-        const isPrinted =
-          p.category === "printed_cup" ||
-          p.isPrinted === true ||
-          p.itemType === "CUP_PRINTED" ||
-          p.type === "CUP_PRINTED" ||
-          p.fulfillmentType === "PRE_PRINTED";
-
-        if (isPrinted) {
-          toast.error(
-            "Sản phẩm này là ly đã in sẵn của nhà sản xuất. Chỉ ly chưa in (phôi ly) mới được dùng để thiết kế!",
-            { duration: 5000 },
-          );
-          setIsProductLocked(false);
-          return;
-        }
-
-        setIsProductLocked(true);
-
-        const attr = p.attributes ?? p.variants?.[0]?.attributes ?? {};
-        const fullText = [
-          p.name,
-          p.slug,
-          ...Object.values(attr).map(String),
-        ]
-          .join(" ")
-          .toLowerCase();
-
-        if (fullText.includes("pp") || fullText.includes("mờ")) {
-          setMaterialType("frosted");
-        } else if (fullText.includes("pet") || fullText.includes("trong")) {
-          setMaterialType("clear");
-        } else if (fullText.includes("giấy") || fullText.includes("paper")) {
-          setMaterialType("paper");
-        } else if (fullText.includes("thủy tinh") || fullText.includes("glass")) {
-          setMaterialType("glass");
-        }
-
-        if (fullText.includes("bầu") || fullText.includes("u-shape") || fullText.includes("đáy u")) {
-          setStyle("u_shape");
-        } else if (fullText.includes("tim")) {
-          setStyle("heart");
-        } else if (fullText.includes("thẳng")) {
-          setStyle("straight");
-        } else if (fullText.includes("mug")) {
-          setStyle("mug");
-        }
-
-        if (fullText.includes("700")) setSize("700ml");
-        else if (fullText.includes("500")) setSize("500ml");
-        else if (fullText.includes("350")) setSize("350ml");
-        else if (fullText.includes("1000")) setSize("1000ml");
-      })
-      .catch((err) => {
-        console.warn("Product detail pre-fill warning:", err);
-      });
-  }, [productIdFromUrl]);
-
-  const sizeFromUrl = searchParams?.get("size") ?? null;
-
-  useEffect(() => {
-    if (!sizeFromUrl) return;
-    const clean = sizeFromUrl.toLowerCase();
-    if (clean.includes("1000")) setSize("1000ml");
-    else if (clean.includes("700")) setSize("700ml");
-    else if (clean.includes("500")) setSize("500ml");
-    else if (clean.includes("350")) setSize("350ml");
-  }, [sizeFromUrl]);
-
-  /* ── 2. CASCADING RELATIONAL OPTION FILTERING (Chỉ hiển thị ly đã từng nhập trong DB) ── */
-  // A. Available Materials (chỉ hiển thị chất liệu từng nhập trong DB)
-  const availableMaterials = useMemo(() => {
-    if (inStockVariants.length === 0) return ALL_MATERIALS;
-    const mats = new Set<CupMaterialType>();
-    inStockVariants.forEach((v) => mats.add(v.materialType));
-    const filtered = ALL_MATERIALS.filter((m) => mats.has(m));
-    return filtered.length > 0 ? filtered : ALL_MATERIALS;
-  }, [inStockVariants]);
-
-  // B. Available Styles FOR selected Material (chỉ hiển thị kiểu dáng của chất liệu đó trong DB)
-  const availableStyles = useMemo(() => {
-    if (inStockVariants.length === 0) return ALL_STYLES;
-    const stys = new Set<CupStyle>();
-    inStockVariants.forEach((v) => {
-      if (v.materialType === materialType) stys.add(v.style);
+    const match = inStockVariants.find((variant) => {
+      if (variantIdFromUrl && String(variant.variantId) === variantIdFromUrl) return true;
+      if (skuFromUrl && String(variant.sku) === skuFromUrl) return true;
+      if (productIdFromUrl && String(variant.productId) === productIdFromUrl) return true;
+      return false;
     });
-    const filtered = ALL_STYLES.filter((s) => stys.has(s));
-    return filtered.length > 0 ? filtered : ALL_STYLES;
-  }, [inStockVariants, materialType]);
 
-  // C. Available Sizes FOR selected Material AND Style (chỉ hiển thị dung tích từng nhập của combo đó trong DB)
-  const availableSizes = useMemo(() => {
-    if (inStockVariants.length === 0) return ALL_SIZES;
-    const szs = new Set<CupSize>();
-    inStockVariants.forEach((v) => {
-      if (v.materialType === materialType && v.style === style) szs.add(v.size);
-    });
-    const filtered = ALL_SIZES.filter((s) => szs.has(s));
-    return filtered.length > 0 ? filtered : ALL_SIZES;
-  }, [inStockVariants, materialType, style]);
-
-  // Auto-correct selected Material if not available
-  useEffect(() => {
-    if (availableMaterials.length > 0 && !availableMaterials.includes(materialType)) {
-      setMaterialType(availableMaterials[0]);
-    }
-  }, [availableMaterials, materialType]);
-
-  // Auto-correct selected Style if not available for current Material
-  useEffect(() => {
-    if (availableStyles.length > 0 && !availableStyles.includes(style)) {
-      setStyle(availableStyles[0]);
-    }
-  }, [availableStyles, style]);
-
-  // Auto-correct selected Size if not available for current Material + Style
-  useEffect(() => {
-    if (availableSizes.length > 0 && !availableSizes.includes(size)) {
-      setSize(availableSizes[0]);
-    }
-  }, [availableSizes, size]);
+    if (!match) return;
+    setMaterialType(match.materialType);
+    setStyle(match.style);
+    setSize(match.size);
+  }, [inStockVariants, productIdFromUrl, productSlugFromUrl, variantIdFromUrl, skuFromUrl]);
 
   /** Combo hiện tại có hàng trong kho không? */
   const isCurrentComboOutOfStock = useMemo(() => {
-    if (inStockVariants.length === 0) return false;
-    const match = inStockVariants.find(
-      (v) => v.materialType === materialType && v.style === style && v.size === size,
-    );
-    return match ? !match.inStock || (match.stockSnapshot ?? 0) <= 0 : false;
-  }, [inStockVariants, materialType, style, size]);
+    if (inStockVariants.length === 0) return true;
+    return selectedVariantInfo
+      ? !selectedVariantInfo.inStock || (selectedVariantInfo.stockSnapshot ?? 0) <= 0
+      : true;
+  }, [inStockVariants.length, selectedVariantInfo]);
 
   const matchingVariant = useMemo(() => {
-    return inStockVariants.find(
-      (v) => v.materialType === materialType && v.style === style && v.size === size,
-    );
-  }, [inStockVariants, materialType, style, size]);
+    return selectedVariantInfo;
+  }, [selectedVariantInfo]);
+
+  const maxOrderQty = matchingVariant?.stockSnapshot ?? 0;
+
+  useEffect(() => {
+    if (maxOrderQty > 0 && quantity > maxOrderQty) {
+      setQuantity(maxOrderQty);
+    }
+  }, [maxOrderQty, quantity]);
 
   const dimensions = getArtboardDimensions(size, printHeightPercent);
   const price = (matchingVariant as any)?.price && (matchingVariant as any).price > 0
     ? (matchingVariant as any).price
-    : CUP_SIZE_SPECS[size].price;
+    : 0;
   const subtotal = price * quantity;
 
   const artwork = useMemo<DesignArtwork>(
@@ -805,12 +773,6 @@ export function CupDesignerPage() {
   const handleTextureChange = useCallback((dataUrl: string) => {
     setArtworkTextureUrl((cur) => (cur === dataUrl ? cur : dataUrl));
   }, []);
-
-  function handleSizeChange(nextSize: CupSize) {
-    setSize(nextSize);
-    setPrintHeightPercent(DEFAULT_CUP_CONFIG.printHeightPercent);
-    setSelectedLayerId(null);
-  }
 
   function goToStep(step: 1 | 2) {
     setCurrentStep(step);
@@ -915,11 +877,15 @@ export function CupDesignerPage() {
       toast.error(`Bạn đã đạt ${MAX_DESIGNS} mẫu thiết kế. Vui lòng xóa mẫu cũ tại trang "Thiết kế của tôi" trước khi tạo mới.`);
       return;
     }
+    if (!selectedVariantInfo) {
+      toast.error("Chưa chọn được phôi ly từ DB catalog.");
+      return;
+    }
 
     setIsSavingDesign(true);
     try {
       const designFile = createDesignSnapshot({
-        name: `Ly in PBVM ${CUP_SIZE_LABELS[size]}`,
+        name: `Ly in theo thiết kế ${selectedVariantInfo?.sku || getVariantDisplayAttr(selectedVariantInfo, "capacity")}`,
         previewDataUrl: artworkTextureUrl,
         artwork,
       });
@@ -957,10 +923,18 @@ export function CupDesignerPage() {
       } else {
         addCustomPrintItem({
           product: {
-            ...createCustomCupProduct({ size, price }),
-            id: selectedVariantInfo?.productId || productIdFromUrl || `custom-cup-${size.toLowerCase()}`,
-            productRefId: currentCupSku,
-            name: `Ly in theo thiết kế ${CUP_MATERIAL_LABELS[materialType]} ${CUP_SIZE_LABELS[size]} (${currentCupSku})`,
+            id: selectedVariantInfo.productId || selectedVariantInfo.variantId || selectedVariantInfo.sku || "",
+            productRefId: selectedVariantInfo.sku || "",
+            name: `Ly in theo thiết kế ${selectedVariantInfo.sku || ""}`,
+            slug: selectedVariantInfo.sku || "",
+            category: "custom_print",
+            price,
+            b2bPrice: price,
+            unit: "cái",
+            stockSnapshot: selectedVariantInfo.stockSnapshot,
+            imageUrl: "",
+            updatedAt: new Date().toISOString(),
+            fulfillmentType: "CUSTOM_PRINT",
           },
           quantity,
           designId: savedDesign.id,
@@ -1059,7 +1033,7 @@ export function CupDesignerPage() {
           <div className="flex items-center gap-3 text-xs">
             <span className="hidden md:inline-flex items-center gap-2 font-bold text-slate-500">
               <span>
-                Đã chọn: <strong className="text-primary">{CUP_MATERIAL_LABELS[materialType]} · {CUP_STYLE_LABELS[style]} ({CUP_SIZE_LABELS[size]})</strong>
+                Đã chọn: <strong className="text-primary">{getVariantDisplayAttr(selectedVariantInfo, "material")} · {getVariantDisplayAttr(selectedVariantInfo, "style")} ({getVariantDisplayAttr(selectedVariantInfo, "capacity")})</strong>
               </span>
               <span className="text-[10px] font-black tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md">
                 SKU: {currentCupSku}
@@ -1095,6 +1069,12 @@ export function CupDesignerPage() {
                 )}
 
                 {/* BANNER NẾU ĐẠT TỐI ĐA 15 MAU THIET KE */}
+                {!isLoadingDb && inStockVariants.length === 0 && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
+                    Chưa lấy được phôi ly từ DB catalog. Sản phẩm cần có variants kèm attributes dung tích, kiểu dáng và chất liệu.
+                  </div>
+                )}
+
                 {user && designsCount >= MAX_DESIGNS && (
                   <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex flex-wrap items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-3">
@@ -1115,178 +1095,110 @@ export function CupDesignerPage() {
                   </div>
                 )}
 
-                {/* WMS SKU PHÔI LY BANNER */}
-                <div className="flex flex-wrap items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl p-3 gap-2">
+                {/* CHỌN PHÔI LY TỪ CATALOG */}
+                {inStockVariants.length > 0 && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-xs font-black text-[#253D4E] uppercase tracking-wider flex items-center gap-2">
+                        <span className="size-2 rounded-full bg-primary" />
+                        Chọn phôi ly từ kho
+                      </h3>
+                      <span className="text-[10px] font-black text-emerald-700 bg-white border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                        {inStockVariants.length} phôi ly
+                      </span>
+                    </div>
 
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-600">Phôi ly Kho chuẩn hóa (WMS SKU):</span>
-                    <span className="text-xs font-black tracking-wider bg-white text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg shadow-2xs">
-                      {currentCupSku}
-                    </span>
-                  </div>
-                  {selectedVariantInfo?.inStock === false ? (
-                    <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded-full">
-                      Hết hàng trong kho (Vẫn có thể thiết kế &amp; lưu mẫu)
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
-                      Sẵn sàng in ấn ngay
-                    </span>
-                  )}
-                </div>
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setIsBlankDropdownOpen((open) => !open)}
+                        className="flex h-11 w-full items-center justify-between gap-3 rounded-xl border border-emerald-300 bg-white px-3 text-left text-xs font-bold text-[#253D4E] outline-none transition focus:border-primary focus:ring-2 focus:ring-emerald-100"
+                      >
+                        <span className="min-w-0 truncate">
+                          {selectedVariantInfo ? getBlankVariantLabel(selectedVariantInfo) : "Chọn phôi ly"}
+                        </span>
+                        <ChevronDown className="size-4 shrink-0 text-slate-500" />
+                      </button>
 
-                {/* SECTION 1: CHẤT LIỆU LY IN-STOCK */}
-                <div className="space-y-2.5">
-
-                  <div className="flex items-center justify-between pb-0.5">
-                    <h3 className="text-xs font-black text-[#253D4E] uppercase tracking-wider flex items-center gap-2">
-                      <span className="size-2 rounded-full bg-primary" />
-                      1. Chất liệu ly
-                    </h3>
-                    <span className="text-xs font-bold text-primary bg-emerald-50 px-2.5 py-0.5 rounded-lg">
-                      {CUP_MATERIAL_LABELS[materialType]}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {availableMaterials.map((m) => {
-                      const isSelected = materialType === m;
-                      const hasAnyStock = inStockVariants.some((v) => v.materialType === m && v.inStock);
-                      const isLocked = isProductLocked;
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => !isLocked && setMaterialType(m)}
-                          disabled={isLocked}
-                          className={cn(
-                            "px-3.5 py-2.5 rounded-xl border-2 transition-all text-left select-none relative h-[88px] flex flex-col justify-between w-full",
-                            isLocked ? "cursor-not-allowed opacity-70" : "cursor-pointer",
-                            isSelected
-                              ? "border-primary bg-emerald-50/40 shadow-xs"
-                              : "border-slate-100 hover:border-slate-200 bg-white hover:bg-slate-50"
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-1 w-full">
-                            <span className={cn("text-xs font-black truncate", isSelected ? "text-primary" : "text-[#253D4E]")}>
-                              {CUP_MATERIAL_LABELS[m]}
-                            </span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {!hasAnyStock && (
-                                <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md">Hết</span>
-                              )}
-                              {isSelected && <CheckCircle2 className="size-3.5 text-primary shrink-0" />}
-                            </div>
+                      {isBlankDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-2xl border border-emerald-200 bg-white p-2 shadow-xl">
+                          <Input
+                            value={blankSearchQuery}
+                            onChange={(event) => setBlankSearchQuery(event.target.value)}
+                            placeholder="Tìm SKU, dung tích, kiểu dáng, chất liệu, màu sắc..."
+                            className="h-9 rounded-xl border-emerald-200 text-xs font-semibold focus-visible:ring-emerald-500"
+                            autoFocus
+                          />
+                          <div className="mt-2 max-h-64 overflow-y-auto pr-1">
+                            {filteredBlankVariants.length === 0 ? (
+                              <div className="px-3 py-4 text-center text-xs font-bold text-slate-400">
+                                Không tìm thấy phôi ly phù hợp.
+                              </div>
+                            ) : (
+                              filteredBlankVariants.map((variant) => {
+                                const key = String(variant.variantId || variant.sku || "");
+                                const isSelected = key === selectedBlankVariantId;
+                                const isOutOfStock = variant.stockSnapshot <= 0;
+                                return (
+                                  <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => {
+                                      handleSelectBlankVariant(key);
+                                      setIsBlankDropdownOpen(false);
+                                      setBlankSearchQuery("");
+                                    }}
+                                    className={cn(
+                                      "flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-xs font-bold transition",
+                                      isSelected
+                                        ? "bg-emerald-50 text-primary"
+                                        : "text-[#253D4E] hover:bg-slate-50",
+                                    )}
+                                  >
+                                    <span className="min-w-0 truncate">
+                                      {variant.sku || "Không có SKU"} - {getVariantDisplayAttr(variant, "capacity")} - {getVariantDisplayAttr(variant, "style")} - {getVariantDisplayAttr(variant, "material")} - {getVariantDisplayAttr(variant, "color")}
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black",
+                                        isOutOfStock
+                                          ? "bg-rose-50 text-rose-600"
+                                          : "bg-emerald-50 text-emerald-700",
+                                      )}
+                                    >
+                                      {getBlankVariantStatusLabel(variant)}
+                                    </span>
+                                  </button>
+                                );
+                              })
+                            )}
                           </div>
-                          <p className="text-[10px] text-slate-500 font-medium leading-normal line-clamp-2">
-                            {MATERIAL_DESCRIPTIONS[m]}
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                        </div>
+                      )}
+                    </div>
 
-                {/* SECTION 2: KIỂU DÁNG LY */}
-                <div className="pt-1 space-y-2.5">
-                  <div className="flex items-center justify-between pb-0.5">
-                    <h3 className="text-xs font-black text-[#253D4E] uppercase tracking-wider flex items-center gap-2">
-                      <span className="size-2 rounded-full bg-primary" />
-                      2. Kiểu dáng ly
-                    </h3>
-                    <span className="text-xs font-bold text-primary bg-emerald-50 px-2.5 py-0.5 rounded-lg">
-                      {CUP_STYLE_LABELS[style]}
-                    </span>
+                    {selectedVariantInfo && (
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2">
+                          <div className="text-[10px] font-black uppercase text-slate-400">Dung tích</div>
+                          <div className="text-xs font-black text-[#253D4E]">{getVariantDisplayAttr(selectedVariantInfo, "capacity")}</div>
+                        </div>
+                        <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2">
+                          <div className="text-[10px] font-black uppercase text-slate-400">Kiểu dáng</div>
+                          <div className="text-xs font-black text-[#253D4E]">{getVariantDisplayAttr(selectedVariantInfo, "style")}</div>
+                        </div>
+                        <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2">
+                          <div className="text-[10px] font-black uppercase text-slate-400">Chất liệu</div>
+                          <div className="text-xs font-black text-[#253D4E]">{getVariantDisplayAttr(selectedVariantInfo, "material")}</div>
+                        </div>
+                        <div className="rounded-xl border border-emerald-100 bg-white px-3 py-2">
+                          <div className="text-[10px] font-black uppercase text-slate-400">Màu sắc</div>
+                          <div className="text-xs font-black text-[#253D4E]">{getVariantDisplayAttr(selectedVariantInfo, "color")}</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {availableStyles.map((s) => {
-                      const isSelected = style === s;
-                      const hasAnyStock = inStockVariants.some((v) => v.materialType === materialType && v.style === s && v.inStock);
-                      const isLocked = isProductLocked;
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => !isLocked && setStyle(s)}
-                          disabled={isLocked}
-                          className={cn(
-                            "px-3.5 py-2.5 rounded-xl border-2 transition-all text-left select-none relative h-[88px] flex flex-col justify-between w-full",
-                            isLocked ? "cursor-not-allowed opacity-70" : "cursor-pointer",
-                            isSelected
-                              ? "border-primary bg-emerald-50/40 shadow-xs"
-                              : "border-slate-100 hover:border-slate-200 bg-white hover:bg-slate-50"
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-1 w-full">
-                            <span className={cn("text-xs font-black truncate", isSelected ? "text-primary" : "text-[#253D4E]")}>
-                              {CUP_STYLE_LABELS[s]}
-                            </span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {!hasAnyStock && (
-                                <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md">Hết</span>
-                              )}
-                              {isSelected && <CheckCircle2 className="size-3.5 text-primary shrink-0" />}
-                            </div>
-                          </div>
-                          <p className="text-[10px] text-slate-500 font-medium leading-normal line-clamp-2">
-                            {STYLE_DESCRIPTIONS[s]}
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* SECTION 3: DUNG TÍCH (SIZE) */}
-                <div className="pt-1 space-y-2.5">
-                  <div className="flex items-center justify-between pb-0.5">
-                    <h3 className="text-xs font-black text-[#253D4E] uppercase tracking-wider flex items-center gap-2">
-                      <span className="size-2 rounded-full bg-primary" />
-                      3. Dung tích ly
-                    </h3>
-                    <span className="text-xs font-bold text-primary bg-emerald-50 px-2.5 py-0.5 rounded-lg">
-                      {CUP_SIZE_LABELS[size]}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {availableSizes.map((s) => {
-                      const isSelected = size === s;
-                      const sizeInStock = inStockVariants.some(
-                        (v) => v.materialType === materialType && v.style === style && v.size === s && v.inStock,
-                      );
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => handleSizeChange(s)}
-                          className={cn(
-                            "px-3.5 py-2.5 rounded-xl border-2 transition-all cursor-pointer text-left select-none relative h-[88px] flex flex-col justify-between w-full",
-                            isSelected
-                              ? "border-primary bg-emerald-50/40 shadow-xs"
-                              : "border-slate-100 hover:border-slate-200 bg-white hover:bg-slate-50"
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-1 w-full">
-                            <span className={cn("text-xs font-black truncate", isSelected ? "text-primary" : "text-[#253D4E]")}>
-                              {CUP_SIZE_LABELS[s]}
-                            </span>
-                            <div className="flex items-center gap-1 shrink-0">
-                              {!sizeInStock && (
-                                <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-md">Hết</span>
-                              )}
-                              {isSelected && <CheckCircle2 className="size-3.5 text-primary shrink-0" />}
-                            </div>
-                          </div>
-                          <p className="text-[10px] text-slate-500 font-medium leading-normal line-clamp-2">
-                            {SIZE_DESCRIPTIONS[s]}
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                )}
 
                 {/* SECTION 4: TÓM TẮT CẤU HÌNH & SỐ LƯỢNG (NẰM Ở GÓC BÊN TRÁI) */}
                 <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3 pt-4 border-t border-slate-100">
@@ -1317,7 +1229,7 @@ export function CupDesignerPage() {
                     <div className="p-2.5 rounded-xl bg-white border border-slate-200/60 space-y-0.5">
                       <span className="text-slate-500 font-semibold block text-[10px]">Cấu hình đã chọn:</span>
                       <span className="font-extrabold text-xs text-[#253D4E] block truncate">
-                        {CUP_MATERIAL_LABELS[materialType]} · Dáng {CUP_STYLE_LABELS[style]} ({CUP_SIZE_LABELS[size]})
+                        {getVariantDisplayAttr(selectedVariantInfo, "material")} · {getVariantDisplayAttr(selectedVariantInfo, "style")} ({getVariantDisplayAttr(selectedVariantInfo, "capacity")})
                       </span>
                     </div>
 
@@ -1329,8 +1241,13 @@ export function CupDesignerPage() {
                         id="step1-quantity"
                         type="number"
                         min={1}
+                        max={maxOrderQty || undefined}
+                        disabled={isCurrentComboOutOfStock}
                         value={quantity}
-                        onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                        onChange={(e) => {
+                          const next = Math.max(1, Number(e.target.value) || 1);
+                          setQuantity(maxOrderQty > 0 ? Math.min(maxOrderQty, next) : next);
+                        }}
                         className="h-7 w-20 rounded-md font-bold text-xs bg-white text-right border-slate-200"
                       />
                     </div>
@@ -1391,9 +1308,9 @@ export function CupDesignerPage() {
                     </button>
                   </div>
                   <div className="grid grid-cols-2 gap-1.5 text-[10.5px] font-semibold text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100">
-                    <div>Dung tích: <strong className="text-foreground">{CUP_SIZE_LABELS[size]}</strong></div>
-                    <div>Chất liệu: <strong className="text-foreground">{CUP_MATERIAL_LABELS[materialType]}</strong></div>
-                    <div>Kiểu dáng: <strong className="text-foreground">{CUP_STYLE_LABELS[style]}</strong></div>
+                    <div>Dung tích: <strong className="text-foreground">{getVariantDisplayAttr(selectedVariantInfo, "capacity")}</strong></div>
+                    <div>Chất liệu: <strong className="text-foreground">{getVariantDisplayAttr(selectedVariantInfo, "material")}</strong></div>
+                    <div>Kiểu dáng: <strong className="text-foreground">{getVariantDisplayAttr(selectedVariantInfo, "style")}</strong></div>
                     <div>Vùng in: <strong className="text-primary">{printHeightPercent}%</strong></div>
                   </div>
 
@@ -1789,8 +1706,13 @@ export function CupDesignerPage() {
                       id="step2-order-quantity"
                       type="number"
                       min={1}
+                      max={maxOrderQty || undefined}
+                      disabled={isCurrentComboOutOfStock}
                       value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                      onChange={(e) => {
+                        const next = Math.max(1, Number(e.target.value) || 1);
+                        setQuantity(maxOrderQty > 0 ? Math.min(maxOrderQty, next) : next);
+                      }}
                       className="h-7 w-20 rounded-md text-xs font-bold bg-white text-right"
                     />
                   </div>

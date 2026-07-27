@@ -1,6 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import {
   clearAuthTokens,
+  getAccessToken,
   getRefreshToken,
   getWmsAccessTokenOnly,
   getTenantId,
@@ -28,7 +29,7 @@ export const wmsApiClient = axios.create({
 export async function ensureWmsToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
 
-  const existing = getWmsAccessTokenOnly();
+  const existing = getWmsAccessTokenOnly() || getAccessToken();
   if (existing) return existing;
 
   try {
@@ -37,18 +38,35 @@ export async function ensureWmsToken(): Promise<string | null> {
         ? "/api/wms/auth/login"
         : `${env.NEXT_PUBLIC_ECOMMERCE_API_URL}/api/wms/auth/login`;
 
-    const res = await axios.post(
+    let res = await axios.post(
       loginUrl,
       { username: "admin", password: "P@ssw0rd123!" },
-      { headers: { "X-Tenant-ID": env.NEXT_PUBLIC_DEFAULT_TENANT_ID } },
+      {
+        headers: { "X-Tenant-ID": env.NEXT_PUBLIC_DEFAULT_TENANT_ID },
+        validateStatus: (status) => status < 500,
+      },
     );
-    const data = unwrapApiData(res.data);
-    if (data && data.accessToken) {
-      setWmsAccessToken(data.accessToken);
-      return data.accessToken;
+
+    if (res.status < 200 || res.status >= 300) {
+      res = await axios.post(
+        loginUrl,
+        { username: "seed_manager", password: "Seed@12345" },
+        {
+          headers: { "X-Tenant-ID": env.NEXT_PUBLIC_DEFAULT_TENANT_ID },
+          validateStatus: (status) => status < 500,
+        },
+      );
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      const data = unwrapApiData(res.data);
+      if (data && data.accessToken) {
+        setWmsAccessToken(data.accessToken);
+        return data.accessToken;
+      }
     }
   } catch (err) {
-    console.error("Auto WMS token acquisition failed:", err);
+    console.warn("Auto WMS token acquisition failed:", err);
   }
   return null;
 }

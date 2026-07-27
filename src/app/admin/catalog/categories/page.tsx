@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   Plus,
@@ -23,6 +23,8 @@ import {
   Tag,
   Image as ImageIcon,
   FolderOutput,
+  RotateCcw,
+  EyeOff,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -60,6 +62,8 @@ import {
   adminCreateCategory,
   adminUpdateCategory,
   adminDeleteCategory,
+  adminListHiddenCategories,
+  adminRestoreCategory,
   adminListProducts,
   adminUpdateProduct,
   adminPublishProduct,
@@ -79,6 +83,8 @@ const FULFILLMENT_LABELS: Record<string, string> = {
 
 export default function AdminCategoriesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const categoryIdFromUrl = searchParams.get("categoryId");
   const [categories, setCategories] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -204,15 +210,28 @@ export default function AdminCategoriesPage() {
     });
   };
 
-  const [deletingCategory, setDeletingCategory] = useState<any | null>(null);
-  const [deletingCat, setDeletingCat] = useState(false);
-  const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
-  const [deletingProd, setDeletingProd] = useState(false);
-
   // Move Product Category State
   const [movingProduct, setMovingProduct] = useState<any | null>(null);
   const [targetCategoryId, setTargetCategoryId] = useState<string>("");
   const [movingLoading, setMovingLoading] = useState(false);
+  const [deletingCategory, setDeletingCategory] = useState<any | null>(null);
+  const [deletingCat, setDeletingCat] = useState(false);
+  const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
+  const [deletingProd, setDeletingProd] = useState(false);
+  const [hiddenCategories, setHiddenCategories] = useState<any[]>([]);
+  const [isHiddenModalOpen, setIsHiddenModalOpen] = useState(false);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  const fetchHiddenCategories = async () => {
+    try {
+      const res = await adminListHiddenCategories();
+      setHiddenCategories(res || []);
+    } catch (e) {
+      console.error("fetchHiddenCategories error:", e);
+    }
+  };
+
+  const handleRestoreCategoryConfirm = async (_cat: any) => {};
 
   // ─── Revalidate shop ecom cache sau khi CRUD danh mục ───────────────────────
   const revalidateShopCache = async () => {
@@ -263,6 +282,24 @@ export default function AdminCategoriesPage() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (!categoryIdFromUrl || categories.length === 0) return;
+
+    const matchedCategory = categories.find((category) => {
+      const id = category.id || category._id;
+      return String(id || "") === categoryIdFromUrl || String(category.slug || "") === categoryIdFromUrl;
+    });
+
+    if (matchedCategory && (activeCategory?.id || activeCategory?._id) !== (matchedCategory.id || matchedCategory._id)) {
+      setActiveCategory(matchedCategory);
+    }
+  }, [categoryIdFromUrl, categories, activeCategory]);
+
+  const handleBackToCategoryList = () => {
+    setActiveCategory(null);
+    router.push("/admin/catalog/categories");
+  };
+
   // Map product count per category
   const productCountByCat = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -297,10 +334,10 @@ export default function AdminCategoriesPage() {
   // Filter Products of active category in Level 2 View
   const categoryProducts = useMemo(() => {
     if (!activeCategory) return [];
-    const catId = activeCategory.id || activeCategory._id;
+    const catId = String(activeCategory.id || activeCategory._id || "");
     let list = products.filter((p) => {
       const pCatId = p.categoryId || p.category?._id || p.category?.id;
-      return pCatId === catId;
+      return String(pCatId || "") === catId;
     });
 
     const q = search.toLowerCase().trim();
@@ -396,11 +433,12 @@ export default function AdminCategoriesPage() {
   const handleDeleteCategoryConfirm = async () => {
     if (!deletingCategory) return;
     const catId = deletingCategory.id || deletingCategory._id;
+    const catSlug = deletingCategory.slug;
 
     setDeletingCat(true);
     try {
-      // Truyền danh sách products để service ẩn các sản phẩm trong danh mục này
-      const result = await adminDeleteCategory(catId, products);
+      // Truyền danh sách products & slug để service ẩn các sản phẩm và dọn dẹp cache
+      const result = await adminDeleteCategory(catId, products, catSlug);
       const hiddenCount = result?.hiddenProductCount ?? 0;
 
       if (hiddenCount > 0) {
@@ -504,7 +542,9 @@ export default function AdminCategoriesPage() {
   // PRODUCT EDIT HANDLERS - Chuyển sang trang riêng quản lý Variant theo yêu cầu
   const handleOpenEditProduct = (prod: any) => {
     const targetId = prod.id || prod._id || prod.slug;
-    router.push(`/admin/catalog/products/${encodeURIComponent(targetId)}`);
+    const catId = activeCategory?.id || activeCategory?._id || prod.categoryId || prod.category?._id || prod.category?.id;
+    const categoryQuery = catId ? `?categoryId=${encodeURIComponent(String(catId))}` : "";
+    router.push(`/admin/catalog/products/${encodeURIComponent(targetId)}${categoryQuery}`);
   };
 
   const handleProductUpdateSubmit = async (e: React.FormEvent) => {
@@ -628,71 +668,86 @@ export default function AdminCategoriesPage() {
       {/* MAIN UNIFIED CARD MANAGER */}
       <Card className="rounded-2xl border-[#E9E3DD] shadow-sm bg-white overflow-hidden">
         {/* Header styling matching Product Management */}
-        <CardHeader className="border-b border-[#E9E3DD] py-4 bg-slate-50/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <CardTitle className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-              <Layers className="size-4 text-emerald-600" />
-              <span>Quản lý danh mục</span>
-            </CardTitle>
-          </div>
+        {!activeCategory && (
+          <CardHeader className="border-b border-[#E9E3DD] py-4 bg-slate-50/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                <Layers className="size-4 text-emerald-600" />
+                <span>Quản lý danh mục</span>
+              </CardTitle>
+            </div>
 
-          <div className="flex items-center gap-2 flex-wrap shrink-0">
-            <Button
-              onClick={handleOpenCreateCategory}
-              className="h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 cursor-pointer text-xs font-bold border-0 shadow-sm"
-            >
-              <Plus className="size-3.5" />
-              Thêm danh mục
-            </Button>
-
-            <Button
-              onClick={() => setShowSyncModal(true)}
-              variant="outline"
-              className="h-9 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5 cursor-pointer text-xs font-bold"
-            >
-              <Building2 className="size-4 text-emerald-600" />
-              Duyệt &amp; Đẩy hàng
-            </Button>
-            <Button
-              onClick={fetchData}
-              disabled={loading}
-              variant="outline"
-              className="h-9 rounded-xl border border-[#E9E3DD] bg-white text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer text-xs font-bold"
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Làm mới
-            </Button>
-          </div>
-        </CardHeader>
-
-        {/* LEVEL 2 NAVIGATION BAR (WHEN CATEGORY IS ACTIVE) */}
-        {activeCategory && (
-          <div className="p-4 border-b border-[#E9E3DD] bg-emerald-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
               <Button
-                onClick={() => setActiveCategory(null)}
-                variant="outline"
-                className="h-8 rounded-xl bg-white text-slate-700 hover:bg-slate-100 border-slate-200 text-xs font-bold gap-1.5 cursor-pointer"
+                onClick={handleOpenCreateCategory}
+                className="h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 cursor-pointer text-xs font-bold border-0 shadow-sm"
               >
-                <ArrowLeft className="size-3.5" />
-                <span>Quay lại danh sách danh mục</span>
+                <Plus className="size-3.5" />
+                Thêm danh mục
               </Button>
-              <div className="flex items-center gap-2">
+
+              <Button
+                onClick={() => setShowSyncModal(true)}
+                variant="outline"
+                className="h-9 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5 cursor-pointer text-xs font-bold"
+              >
+                <Building2 className="size-4 text-emerald-600" />
+                Duyệt &amp; Đẩy hàng
+              </Button>
+
+              {hiddenCategories.length > 0 && (
+                <Button
+                  onClick={() => {
+                    fetchHiddenCategories();
+                    setIsHiddenModalOpen(true);
+                  }}
+                  variant="outline"
+                  className="h-9 rounded-xl border border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-2xs"
+                  title="Xem và khôi phục các danh mục đã ẩn"
+                >
+                  <EyeOff className="size-3.5 text-amber-600" />
+                  <span>Danh mục đã ẩn ({hiddenCategories.length})</span>
+                </Button>
+              )}
+
+              <Button
+                onClick={fetchData}
+                disabled={loading}
+                variant="outline"
+                className="h-9 rounded-xl border border-[#E9E3DD] bg-white text-slate-600 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer text-xs font-bold"
+              >
+                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+                Làm mới
+              </Button>
+            </div>
+          </CardHeader>
+        )}
+
+        {/* SEARCH BAR / LEVEL 2 NAVIGATION */}
+        <div
+          className={`p-4 border-b border-[#E9E3DD] flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+            activeCategory ? "bg-emerald-50/50" : "bg-white"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {activeCategory ? (
+              <>
+                <Button
+                  onClick={handleBackToCategoryList}
+                  variant="outline"
+                  className="h-8 rounded-xl bg-white text-slate-700 hover:bg-slate-100 border-slate-200 text-xs font-bold gap-1.5 cursor-pointer"
+                >
+                  <ArrowLeft className="size-3.5" />
+                  <span>Quay lại</span>
+                </Button>
                 <Badge className="bg-emerald-600 text-white text-xs font-bold py-1 px-3">
                   Danh mục: {activeCategory.name}
                 </Badge>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* SEARCH BAR */}
-        <div className="p-4 border-b border-[#E9E3DD] bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="text-xs font-bold text-slate-700">
-            {activeCategory ? (
-              <span>Sản phẩm trong danh mục &quot;{activeCategory.name}&quot; ({categoryProducts.length} sản phẩm)</span>
+              </>
             ) : (
-              <span>Danh sách các danh mục</span>
+              <div className="text-xs font-bold text-slate-700">
+                Danh sách các danh mục
+              </div>
             )}
           </div>
 
@@ -796,7 +851,7 @@ export default function AdminCategoriesPage() {
                               size="sm"
                               variant="ghost"
                               onClick={() => setDeletingCategory(c)}
-                              className="h-8 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-lg cursor-pointer gap-1"
+                              className="hidden"
                               title="Ẩn danh mục"
                             >
                               <Trash2 className="size-3.5" />
@@ -1462,6 +1517,75 @@ export default function AdminCategoriesPage() {
                 <FolderOutput className="size-3.5" />
               )}
               Xác Nhận Chuyển
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* HIDDEN CATEGORIES MODAL */}
+      <Dialog open={isHiddenModalOpen} onOpenChange={setIsHiddenModalOpen}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto rounded-2xl bg-white border border-slate-200 p-6 shadow-2xl">
+          <DialogHeader className="border-b pb-3">
+            <DialogTitle className="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+              <EyeOff className="size-4 text-amber-600" />
+              Danh mục đã ẩn ({hiddenCategories.length})
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 mt-1">
+              Bấm &quot;Khôi phục&quot; để hiển thị lại danh mục và các sản phẩm thuộc danh mục này.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            {hiddenCategories.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400 font-medium italic">
+                Không có danh mục nào đang bị ẩn.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {hiddenCategories.map((cat) => {
+                  const cId = cat.id || cat._id;
+                  const isRestoring = restoringId === cId;
+
+                  return (
+                    <div key={cId} className="py-3 flex items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <div className="text-xs font-black text-slate-800 flex items-center gap-2">
+                          <Folder className="size-4 text-amber-600 shrink-0" />
+                          <span>{cat.name}</span>
+                        </div>
+                        <div className="text-[11px] font-mono text-slate-400">
+                          slug: {cat.slug}
+                        </div>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        disabled={isRestoring}
+                        onClick={() => handleRestoreCategoryConfirm(cat)}
+                        className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-2xs gap-1.5 cursor-pointer border-0"
+                      >
+                        {isRestoring ? (
+                          <RefreshCw className="size-3.5 animate-spin" />
+                        ) : (
+                          <RotateCcw className="size-3.5" />
+                        )}
+                        <span>Khôi phục</span>
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="pt-2 border-t">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsHiddenModalOpen(false)}
+              className="h-9 text-xs font-bold rounded-xl"
+            >
+              Đóng
             </Button>
           </DialogFooter>
         </DialogContent>

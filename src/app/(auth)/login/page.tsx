@@ -77,7 +77,15 @@ function LoginForm() {
         return;
       }
       console.error(error);
-      const errorMsg = error.message || error.response?.data?.message || "Đăng nhập Google thất bại.";
+      const status = error.response?.status;
+      const beMessage = error.response?.data?.message;
+
+      let errorMsg = "Đăng nhập bằng Google thất bại. Vui lòng thử lại.";
+      if (status === 401) {
+        errorMsg = "Xác thực Google không hợp lệ hoặc tài khoản bị từ chối.";
+      } else if (beMessage) {
+        errorMsg = typeof beMessage === "string" ? beMessage : "Đăng nhập bằng Google thất bại.";
+      }
       toast.error(errorMsg);
     } finally {
       setIsGoogleLoading(false);
@@ -134,7 +142,20 @@ function LoginForm() {
       router.push(redirect);
     } catch (error: any) {
       console.error(error);
-      const errorMsg = error.response?.data?.message || "Đăng nhập thất bại. Vui lòng kiểm tra lại.";
+      const status = error.response?.status;
+      const beMessage = error.response?.data?.message;
+
+      let errorMsg = "Đăng nhập thất bại. Vui lòng kiểm tra lại.";
+      if (status === 401) {
+        errorMsg = "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.";
+      } else if (status === 404) {
+        errorMsg = "Tài khoản không tồn tại trên hệ thống.";
+      } else if (status === 400) {
+        errorMsg = typeof beMessage === "string" ? beMessage : "Thông tin đăng nhập không hợp lệ.";
+      } else if (beMessage) {
+        errorMsg = typeof beMessage === "string" ? beMessage : Array.isArray(beMessage) ? beMessage[0] : "Đăng nhập thất bại.";
+      }
+
       toast.error(errorMsg);
     }
   };

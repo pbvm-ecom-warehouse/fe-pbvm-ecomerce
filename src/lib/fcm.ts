@@ -69,7 +69,10 @@ export async function getFCMToken(): Promise<string | null> {
  */
 export async function registerFCMToken(token: string): Promise<void> {
   try {
-    await apiClient.post("/auth/fcm-token", { token });
+    await apiClient.post("/auth/fcm-token", {
+      fcmToken: token,
+      deviceType: "web",
+    });
     console.info("[FCM] Token registered with backend");
   } catch (err) {
     console.warn("[FCM] Failed to register token with backend:", err);
@@ -82,7 +85,7 @@ export async function registerFCMToken(token: string): Promise<void> {
  */
 export async function unregisterFCMToken(token: string): Promise<void> {
   try {
-    await apiClient.delete("/auth/fcm-token", { data: { token } });
+    await apiClient.delete("/auth/fcm-token", { data: { fcmToken: token } });
     console.info("[FCM] Token unregistered from backend");
   } catch (err) {
     console.warn("[FCM] Failed to unregister token:", err);

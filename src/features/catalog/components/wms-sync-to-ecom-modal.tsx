@@ -6,7 +6,6 @@ import {
   Building2,
   CheckCircle2,
   RefreshCw,
-  ShieldCheck,
   Plus,
   Upload,
   Loader2,
@@ -27,25 +26,105 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import {
-  listWmsItems,
-  wmsStaffLogin,
-  type WmsWarehouseItem,
-} from "../services/wms-stock.service";
+import type { WmsWarehouseItem } from "../services/wms-stock.service";
 import {
   adminCreateProduct,
+  adminUpdateProduct,
   adminCreateVariant,
   adminPublishProduct,
   adminListCategories,
   adminUploadProductImage,
+  adminListInactiveProducts,
+  adminActivateVariant,
 } from "../services/admin-catalog.service";
+import { listCatalogProducts } from "../services/catalog.service";
 import type { FulfillmentType } from "@/types/api";
+
+type SyncItem = WmsWarehouseItem & {
+  source?: "WMS" | "INACTIVE_PRODUCT" | "CATALOG";
+  variantId?: string;
+  variantIds?: string[];
+  productId?: string;
+  price?: number;
+};
+
+function productToSyncItem(product: any, source: SyncItem["source"]): SyncItem | null {
+  const productId = String(product.id || product._id || "");
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const mainVariant = variants[0] || {};
+  const sku = String(mainVariant.sku || product.sku || product.slug || "");
+  if (!sku) return null;
+
+  const attrs = mainVariant.attributes || product.attributes || {};
+  return {
+    id: productId || sku,
+    _id: productId || sku,
+    productId,
+    variantId: mainVariant.id || mainVariant._id ? String(mainVariant.id || mainVariant._id) : undefined,
+    variantIds: variants
+      .map((variant: any) => variant.id || variant._id)
+      .filter(Boolean)
+      .map((id: any) => String(id)),
+    sku,
+    name: product.name || sku,
+    type: "CUP_BLANK",
+    attributes: Object.entries(attrs).map(([key, value]) => ({
+      key: String(key).toUpperCase(),
+      name: String(key).toUpperCase(),
+      value: String(value),
+      code: String(value),
+    })),
+    unit: product.unit || "sp",
+    minQuantity: 0,
+    availableQty: variants.reduce(
+      (sum: number, variant: any) => sum + Number(variant.availableQty ?? 0),
+      0,
+    ),
+    isActive: product.status === "ACTIVE" || product.isActive === true,
+    price: Number(mainVariant.price ?? product.price ?? 0),
+    categoryId: product.categoryId || product.category?._id || product.category?.id,
+    slug: product.slug,
+    description: product.description,
+    images: Array.isArray(product.images) ? product.images : [],
+    imageUrl: product.imageUrl,
+    source,
+  } as SyncItem;
+}
+
+function slugifyProductName(name: string) {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0111/g, "d")
+    .replace(/\u0110/g, "d")
+    .replace(/[^a-z0-9\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
+export function buildSyncItemsFromCatalogProducts(
+  catalogProducts: any[],
+  inactiveProducts: any[],
+): SyncItem[] {
+  const byProductId = new Map<string, SyncItem>();
+  for (const product of [...catalogProducts, ...inactiveProducts]) {
+    const productId = String(product.id || product._id || "");
+    if (!productId || byProductId.has(productId)) continue;
+    const item = productToSyncItem(
+      product,
+      product.status === "ACTIVE" || product.isActive === true ? "CATALOG" : "INACTIVE_PRODUCT",
+    );
+    if (item) byProductId.set(productId, item);
+  }
+  return Array.from(byProductId.values());
+}
 
 interface WmsSyncToEcomModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialCategoryId?: string;
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
 export function WmsSyncToEcomModal({
@@ -54,16 +133,12 @@ export function WmsSyncToEcomModal({
   initialCategoryId,
   onSuccess,
 }: WmsSyncToEcomModalProps) {
-  const [wmsItems, setWmsItems] = useState<WmsWarehouseItem[]>([]);
+  const [wmsItems, setWmsItems] = useState<SyncItem[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [isUnauthorized, setIsUnauthorized] = useState(false);
-  const [wmsUser, setWmsUser] = useState("admin");
-  const [wmsPass, setWmsPass] = useState("P@ssw0rd123!");
-  const [wmsAuthLoading, setWmsAuthLoading] = useState(false);
 
   // Selected WMS item & Form state
-  const [selectedItem, setSelectedItem] = useState<WmsWarehouseItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<SyncItem | null>(null);
   const [ecomName, setEcomName] = useState("");
   const [ecomSlug, setEcomSlug] = useState("");
   const [ecomDesc, setEcomDesc] = useState("");
@@ -98,7 +173,7 @@ export function WmsSyncToEcomModal({
         } catch (err) {
           console.error("Cloudinary upload error:", err);
           setEcomImage(reader.result as string);
-          toast.warning("Đã lưu ảnh");
+          toast.warning("Đã lưu ảnh (dùng preview local)");
         } finally {
           setIsUploadingImage(false);
         }
@@ -114,15 +189,19 @@ export function WmsSyncToEcomModal({
 
   const fetchData = async () => {
     setLoading(true);
-    setIsUnauthorized(false);
     try {
-      const [itemRes, catRes] = await Promise.all([
-        listWmsItems({ isActive: true, limit: 100 }),
-        adminListCategories(),
+      const [catRes, catalogRes, inactiveProductRes] = await Promise.all([
+        adminListCategories().catch(() => []),
+        listCatalogProducts().catch(() => ({ data: [] })),
+        adminListInactiveProducts().catch(() => []),
       ]);
 
-      const itemsList = itemRes.data || [];
+      let itemsList: any[] = [];
+
       const catsList = catRes || [];
+      const catalogProds = catalogRes && Array.isArray((catalogRes as any).data) ? (catalogRes as any).data : [];
+      const inactiveProducts = Array.isArray(inactiveProductRes) ? inactiveProductRes : [];
+      itemsList = buildSyncItemsFromCatalogProducts(catalogProds, inactiveProducts);
 
       setWmsItems(itemsList);
       setCategories(catsList);
@@ -138,36 +217,6 @@ export function WmsSyncToEcomModal({
       }
     } catch (err: any) {
       console.error(err);
-      if (err?.response?.status === 401) {
-        try {
-          await wmsStaffLogin("admin", "P@ssw0rd123!");
-          const [retryItems, retryCats] = await Promise.all([
-            listWmsItems({ isActive: true, limit: 100 }),
-            adminListCategories(),
-          ]);
-          const itemsList = retryItems.data || [];
-          const catsList = retryCats || [];
-
-          setWmsItems(itemsList);
-          setCategories(catsList);
-          if (initialCategoryId) {
-            setEcomCategoryId(initialCategoryId);
-          } else if (catsList.length > 0) {
-            setEcomCategoryId(catsList[0].id || catsList[0]._id);
-          }
-          if (itemsList.length > 0) handleSelectItem(itemsList[0]);
-
-          setIsUnauthorized(false);
-          toast.success("Đã tự động xác thực kết nối Kho WMS!");
-        } catch {
-          setIsUnauthorized(true);
-          toast.error("Vui lòng xác thực tài khoản WMS Staff bên dưới.");
-        }
-      } else if (err?.code === "ECONNABORTED" || err?.message?.includes("timeout")) {
-        toast.error("Máy chủ Kho (WMS) phản hồi chậm (Timeout). Vui lòng kiểm tra kết nối.");
-      } else {
-        toast.error("Lấy danh sách mặt hàng kho WMS thất bại.");
-      }
     } finally {
       setLoading(false);
     }
@@ -180,9 +229,12 @@ export function WmsSyncToEcomModal({
   }, [open, initialCategoryId]);
 
   // Pre-fill form inputs from selected WMS Item
-  const handleSelectItem = (item: WmsWarehouseItem) => {
+  const handleSelectItem = (item: SyncItem) => {
     setSelectedItem(item);
     setEcomName(item.name);
+    if ((item as any).categoryId) {
+      setEcomCategoryId(String((item as any).categoryId));
+    }
     setEcomSlug(
       item.name
         .toLowerCase()
@@ -196,7 +248,17 @@ export function WmsSyncToEcomModal({
 
     setEcomDesc(`Mặt hàng ${item.name} đồng bộ trực tiếp từ kho WMS. SKU: ${item.sku}.`);
 
-    const rawAttrs = item.attributes || [];
+    if ((item as any).slug) setEcomSlug(String((item as any).slug));
+    if ((item as any).description) setEcomDesc(String((item as any).description));
+
+    const rawAttrs = Array.isArray(item.attributes)
+      ? item.attributes
+      : Object.entries(item.attributes || {}).map(([key, value]) => ({
+        key,
+        name: key,
+        value: String(value),
+        code: String(value),
+      }));
 
     const styleAttr = rawAttrs.find(
       (a) =>
@@ -265,7 +327,10 @@ export function WmsSyncToEcomModal({
     }
 
     // Không tự điền ảnh giả — người dùng upload ảnh thật sau khi tạo sản phẩm
-    setEcomImage("");
+    setEcomImage((item as any).imageUrl || (item as any).images?.[0] || "");
+    if (item.price !== undefined && item.price > 0) {
+      setEcomPrice(item.price);
+    }
   };
 
   const handleNameChange = (val: string) => {
@@ -282,28 +347,12 @@ export function WmsSyncToEcomModal({
     );
   };
 
-  const handleWmsAuthLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!wmsUser.trim() || !wmsPass.trim()) {
-      toast.error("Nhập đủ Username và Password WMS.");
-      return;
-    }
-    setWmsAuthLoading(true);
-    try {
-      await wmsStaffLogin(wmsUser.trim(), wmsPass.trim());
-      toast.success("Xác thực tài khoản WMS thành công!");
-      setIsUnauthorized(false);
-      fetchData();
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err?.response?.data?.message || "Xác thực WMS thất bại.");
-    } finally {
-      setWmsAuthLoading(false);
-    }
-  };
+
 
   const handleSubmitSync = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isSelectedExistingProduct =
+      selectedItem?.source === "INACTIVE_PRODUCT" || selectedItem?.source === "CATALOG";
     if (!selectedItem || !ecomName.trim() || !ecomSlug.trim() || !ecomCategoryId) {
       toast.error("Vui lòng chọn mặt hàng WMS và nhập tên sản phẩm.");
       return;
@@ -311,6 +360,33 @@ export function WmsSyncToEcomModal({
 
     setSubmitting(true);
     try {
+      if (isSelectedExistingProduct && selectedItem.productId) {
+        if (selectedItem.productId) {
+          const productPatch: Parameters<typeof adminUpdateProduct>[1] = {
+            name: ecomName.trim(),
+            slug: ecomSlug.trim().toLowerCase(),
+            description: ecomDesc,
+            categoryId: ecomCategoryId,
+            status: "ACTIVE",
+          };
+          if (ecomImage) productPatch.images = [ecomImage];
+          await adminUpdateProduct(selectedItem.productId, productPatch);
+          await adminPublishProduct(selectedItem.productId);
+          await Promise.all(
+            (selectedItem.variantIds || []).map((variantId) =>
+              adminActivateVariant(variantId).catch((error) => {
+                console.warn("adminActivateVariant warning:", variantId, error);
+                return null;
+              }),
+            ),
+          );
+        }
+        toast.success(`Da cap nhat va day san pham "${ecomName}" vao danh muc thanh cong!`);
+        if (onSuccess) onSuccess();
+        onOpenChange(false);
+        return;
+      }
+
       // 1. Create Product (DRAFT)
       const productPayload = {
         name: ecomName.trim(),
@@ -354,7 +430,7 @@ export function WmsSyncToEcomModal({
         `Đã tạo & duyệt sản phẩm "${ecomName}" vào danh mục "${catName}" (SKU: ${selectedItem.sku}) thành công!`,
       );
 
-      onSuccess();
+      if (onSuccess) onSuccess();
       onOpenChange(false);
     } catch (err: any) {
       console.error(err);
@@ -365,6 +441,8 @@ export function WmsSyncToEcomModal({
   };
 
   const selectedCatObj = categories.find((c) => (c.id || c._id) === ecomCategoryId);
+  const isInactiveApproval =
+    selectedItem?.source === "INACTIVE_PRODUCT" || selectedItem?.source === "CATALOG";
   const isMaterial =
     selectedItem?.type === "MATERIAL" ||
     selectedItem?.sku?.startsWith("MAT") ||
@@ -386,49 +464,7 @@ export function WmsSyncToEcomModal({
           </DialogDescription>
         </DialogHeader>
 
-        {isUnauthorized ? (
-          <form onSubmit={handleWmsAuthLogin} className="space-y-4 py-4">
-            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 space-y-2">
-              <div className="flex items-center gap-2 text-amber-800 font-bold text-xs">
-                <ShieldCheck className="size-4 text-amber-600" />
-                <span>Xác thực tài khoản WMS Staff</span>
-              </div>
-              <p className="text-[11px] text-amber-700">
-                Phiên làm việc WMS đã hết hạn. Vui lòng đăng nhập tài khoản Quản trị WMS để tiếp tục.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-slate-600">Username WMS</Label>
-              <Input
-                value={wmsUser}
-                onChange={(e) => setWmsUser(e.target.value)}
-                className="h-10 text-xs rounded-xl font-bold"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-slate-600">Password WMS</Label>
-              <Input
-                type="password"
-                value={wmsPass}
-                onChange={(e) => setWmsPass(e.target.value)}
-                className="h-10 text-xs rounded-xl font-bold"
-              />
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button
-                type="submit"
-                disabled={wmsAuthLoading}
-                className="h-9 w-full text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl flex items-center justify-center gap-1.5"
-              >
-                {wmsAuthLoading ? <RefreshCw className="size-4 animate-spin" /> : <Building2 className="size-4" />}
-                Xác Thực WMS &amp; Tiếp Tục
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : loading ? (
+        {loading ? (
           <div className="flex h-64 items-center justify-center">
             <div className="flex flex-col items-center gap-2">
               <div className="size-8 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin" />
@@ -436,32 +472,49 @@ export function WmsSyncToEcomModal({
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmitSync} className="space-y-4 pt-2">
+          <form
+            onSubmit={handleSubmitSync}
+            className="space-y-4 pt-2"
+          >
             {/* 1. Chọn mặt hàng Kho WMS */}
             <div className="space-y-1.5 bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200">
-              <Label htmlFor="wmsItemDropdown" className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
-                <Building2 className="size-4 text-emerald-600" />
-                <span>Chọn mặt hàng</span>
+              <Label htmlFor="wmsItemDropdown" className="text-xs font-bold text-emerald-900 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Building2 className="size-4 text-emerald-600" />
+                  <span>Mặt hàng</span>
+                </span>
               </Label>
               <select
                 id="wmsItemDropdown"
-                value={selectedItem?.sku || ""}
+                value={selectedItem?.productId || selectedItem?.sku || ""}
                 onChange={(e) => {
-                  const found = wmsItems.find((i) => i.sku === e.target.value);
+                  const found = wmsItems.find(
+                    (i) => (i.productId || i.sku) === e.target.value,
+                  );
                   if (found) handleSelectItem(found);
                 }}
                 className="h-10 w-full rounded-xl border border-emerald-300 bg-white px-3 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none shadow-2xs cursor-pointer"
               >
                 {wmsItems.map((item) => (
-                  <option key={item.sku} value={item.sku}>
-                    SKU: {item.sku} - {item.name} ({item.type})
+                  <option key={item.productId || item.sku} value={item.productId || item.sku}>
+                    Mã SKU: {item.sku} — {item.name}
                   </option>
                 ))}
               </select>
+              {selectedItem && (
+                <div className="flex items-center gap-2 pt-1 text-[11px] font-semibold text-emerald-900">
+                  <span className="bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded-md font-mono font-bold">
+                    SKU Kho: {selectedItem.sku}
+                  </span>
+                  <span className="text-slate-500 text-[10px] font-medium">
+                    (Cố định từ Kho WMS — Manager chỉ duyệt &amp; đẩy lên Shop Ecom)
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* 1.5. XEM TRƯỚC & CHỈNH SỬA THÔNG SỐ VARIANT (DUNG TÍCH, KIỂU DÁNG, CHẤT LIỆU, TRỌNG LƯỢNG, XUẤT XỨ) */}
-            {selectedItem && (() => {
+            {!isInactiveApproval && selectedItem && (() => {
               const pType =
                 selectedItem.type === "MATERIAL" || selectedItem.sku?.startsWith("MAT")
                   ? "MATERIAL"
