@@ -22,6 +22,7 @@ import {
   Loader2,
   Tag,
   Image as ImageIcon,
+  FolderOutput,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -203,11 +204,31 @@ export default function AdminCategoriesPage() {
     });
   };
 
-  // Delete Category & Delete Product Confirm States
   const [deletingCategory, setDeletingCategory] = useState<any | null>(null);
   const [deletingCat, setDeletingCat] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
   const [deletingProd, setDeletingProd] = useState(false);
+
+  // Move Product Category State
+  const [movingProduct, setMovingProduct] = useState<any | null>(null);
+  const [targetCategoryId, setTargetCategoryId] = useState<string>("");
+  const [movingLoading, setMovingLoading] = useState(false);
+
+  // ─── Revalidate shop ecom cache sau khi CRUD danh mục ───────────────────────
+  const revalidateShopCache = async () => {
+    try {
+      await fetch("/api/revalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tags: ["catalog-categories", "catalog-products"],
+          paths: ["/", "/products", "/shop"],
+        }),
+      });
+    } catch {
+      // non-critical — don't break the flow
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -359,6 +380,9 @@ export default function AdminCategoriesPage() {
         toast.success(`Tạo danh mục "${catName.trim()}" (Vị trí: ${payload.position}) thành công!`);
       }
 
+      // Revalidate shop ecom cache — hiển thị danh mục mới cho user
+      await revalidateShopCache();
+
       setIsCategoryModalOpen(false);
       fetchData();
     } catch (error: any) {
@@ -375,16 +399,29 @@ export default function AdminCategoriesPage() {
 
     setDeletingCat(true);
     try {
-      await adminDeleteCategory(catId);
-      toast.success(`Đã xóa danh mục "${deletingCategory.name}" thành công!`);
+      // Truyền danh sách products để service ẩn các sản phẩm trong danh mục này
+      const result = await adminDeleteCategory(catId, products);
+      const hiddenCount = result?.hiddenProductCount ?? 0;
+
+      if (hiddenCount > 0) {
+        toast.success(
+          `Đã ẩn danh mục "${deletingCategory.name}" và ${hiddenCount} sản phẩm liên quan.`,
+        );
+      } else {
+        toast.success(`Đã ẩn danh mục "${deletingCategory.name}" thành công.`);
+      }
+
       if (activeCategory && (activeCategory.id || activeCategory._id) === catId) {
         setActiveCategory(null);
       }
       setDeletingCategory(null);
+
+      // Revalidate shop ecom cache
+      await revalidateShopCache();
       fetchData();
     } catch (error: any) {
       console.error(error);
-      toast.error(error.response?.data?.message || "Xóa danh mục thất bại.");
+      toast.error(error.response?.data?.message || "Ẩn danh mục thất bại.");
     } finally {
       setDeletingCat(false);
     }
@@ -407,6 +444,60 @@ export default function AdminCategoriesPage() {
       toast.error(error.response?.data?.message || "Xóa sản phẩm thất bại.");
     } finally {
       setDeletingProd(false);
+    }
+  };
+
+  // MOVE PRODUCT CATEGORY HANDLERS
+  const handleOpenMoveProduct = (prod: any) => {
+    const currentCatId =
+      prod.categoryId ||
+      prod.category?._id ||
+      prod.category?.id ||
+      (activeCategory ? activeCategory.id || activeCategory._id : "");
+    setMovingProduct(prod);
+
+    const otherCat = categories.find(
+      (c) => String(c.id || c._id) !== String(currentCatId),
+    );
+    setTargetCategoryId(otherCat ? otherCat.id || otherCat._id : currentCatId);
+  };
+
+  const handleConfirmMoveProductCategory = async () => {
+    if (!movingProduct || !targetCategoryId) return;
+    const prodId = movingProduct.id || movingProduct._id;
+    const targetCat = categories.find(
+      (c) => String(c.id || c._id) === String(targetCategoryId),
+    );
+
+    setMovingLoading(true);
+    try {
+      await adminUpdateProduct(prodId, { categoryId: targetCategoryId });
+
+      setProducts((prev) =>
+        prev.map((p) => {
+          const pId = p.id || p._id;
+          if (pId === prodId) {
+            return {
+              ...p,
+              categoryId: targetCategoryId,
+              category: targetCat || p.category,
+            };
+          }
+          return p;
+        }),
+      );
+
+      toast.success(
+        `Đã chuyển sản phẩm "${movingProduct.name}" sang danh mục "${targetCat?.name || "mới"}"!`,
+      );
+      setMovingProduct(null);
+      await revalidateShopCache();
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.response?.data?.message || "Chuyển danh mục thất bại.");
+    } finally {
+      setMovingLoading(false);
     }
   };
 
@@ -547,6 +638,14 @@ export default function AdminCategoriesPage() {
 
           <div className="flex items-center gap-2 flex-wrap shrink-0">
             <Button
+              onClick={handleOpenCreateCategory}
+              className="h-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 cursor-pointer text-xs font-bold border-0 shadow-sm"
+            >
+              <Plus className="size-3.5" />
+              Thêm danh mục
+            </Button>
+
+            <Button
               onClick={() => setShowSyncModal(true)}
               variant="outline"
               className="h-9 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 flex items-center gap-1.5 cursor-pointer text-xs font-bold"
@@ -582,7 +681,6 @@ export default function AdminCategoriesPage() {
                 <Badge className="bg-emerald-600 text-white text-xs font-bold py-1 px-3">
                   Danh mục: {activeCategory.name}
                 </Badge>
-                <span className="text-xs font-mono text-slate-500">({activeCategory.slug})</span>
               </div>
             </div>
           </div>
@@ -594,7 +692,7 @@ export default function AdminCategoriesPage() {
             {activeCategory ? (
               <span>Sản phẩm trong danh mục &quot;{activeCategory.name}&quot; ({categoryProducts.length} sản phẩm)</span>
             ) : (
-              <span>Danh sách các danh mục Ecommerce hiện có ({filteredCategories.length} danh mục)</span>
+              <span>Danh sách các danh mục</span>
             )}
           </div>
 
@@ -625,7 +723,7 @@ export default function AdminCategoriesPage() {
                 <TableRow className="border-b border-[#E9E3DD] hover:bg-transparent bg-slate-50/30">
                   <TableHead className="w-[60px] font-bold text-slate-500 text-xs pl-6 text-left">#</TableHead>
                   <TableHead className="w-[32%] font-bold text-slate-500 text-xs text-left">Tên danh mục</TableHead>
-                  <TableHead className="w-[26%] font-bold text-slate-500 text-xs text-left">Slug URL</TableHead>
+                  <TableHead className="w-[26%] font-bold text-slate-500 text-xs text-left">Slug</TableHead>
                   <TableHead className="w-[15%] font-bold text-slate-500 text-xs text-left">Số sản phẩm</TableHead>
                   <TableHead className="w-[12%] font-bold text-slate-500 text-xs text-left">Vị trí hiển thị</TableHead>
                   <TableHead className="w-[150px] font-bold text-slate-500 text-xs pr-6 text-right">Thao tác</TableHead>
@@ -693,6 +791,17 @@ export default function AdminCategoriesPage() {
                               <Edit2 className="size-3.5" />
                               <span>Sửa</span>
                             </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setDeletingCategory(c)}
+                              className="h-8 px-2.5 text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded-lg cursor-pointer gap-1"
+                              title="Ẩn danh mục"
+                            >
+                              <Trash2 className="size-3.5" />
+                              <span>Ẩn</span>
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -708,7 +817,7 @@ export default function AdminCategoriesPage() {
                 <TableRow className="border-b border-[#E9E3DD] hover:bg-transparent bg-slate-50/30">
                   <TableHead className="w-[80px] font-bold text-slate-500 text-xs pl-6 text-left">Ảnh</TableHead>
                   <TableHead className="font-bold text-slate-500 text-xs text-left">Tên & Mô tả sản phẩm</TableHead>
-                  <TableHead className="w-[200px] font-bold text-slate-500 text-xs text-right pr-6">Thao tác</TableHead>
+                  <TableHead className="w-[280px] font-bold text-slate-500 text-xs text-right pr-6">Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -753,7 +862,7 @@ export default function AdminCategoriesPage() {
                         </TableCell>
 
                         {/* 3. Thao tác */}
-                        <TableCell className="w-[200px] align-middle text-right pr-6 py-3.5 text-xs">
+                        <TableCell className="w-[280px] align-middle text-right pr-6 py-3.5 text-xs">
                           <div className="flex items-center justify-end gap-1.5">
                             {product.status === "DRAFT" && (
                               <Button
@@ -766,6 +875,17 @@ export default function AdminCategoriesPage() {
                                 <span>Lên kệ</span>
                               </Button>
                             )}
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenMoveProduct(product)}
+                              className="h-8 px-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[11.5px] font-bold rounded-lg gap-1 cursor-pointer shadow-2xs"
+                              title="Chuyển sản phẩm sang danh mục khác"
+                            >
+                              <FolderOutput className="size-3.5 text-emerald-600" />
+                              <span>Chuyển DM</span>
+                            </Button>
 
                             <Button
                               size="sm"
@@ -829,7 +949,7 @@ export default function AdminCategoriesPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="catSlugInput" className="text-xs font-bold text-slate-600">Slug URL *</Label>
+              <Label htmlFor="catSlugInput" className="text-xs font-bold text-slate-600">Slug *</Label>
               <Input
                 id="catSlugInput"
                 value={catSlug}
@@ -840,7 +960,7 @@ export default function AdminCategoriesPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="catPositionInput" className="text-xs font-bold text-slate-600">Thứ tự hiển thị (Position)</Label>
+              <Label htmlFor="catPositionInput" className="text-xs font-bold text-slate-600">Thứ tự</Label>
               <Input
                 id="catPositionInput"
                 type="number"
@@ -874,6 +994,60 @@ export default function AdminCategoriesPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* DELETE CATEGORY CONFIRM DIALOG */}
+      <Dialog open={!!deletingCategory} onOpenChange={(open) => !open && setDeletingCategory(null)}>
+        <DialogContent className="max-w-sm rounded-2xl bg-white border border-slate-200 p-6 shadow-2xl">
+          <DialogHeader className="space-y-2">
+            <DialogTitle className="text-sm font-black text-rose-950 uppercase tracking-wider flex items-center gap-2">
+              <Trash2 className="size-4 text-rose-600" />
+              Xác nhận ẩn danh mục
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-600 leading-relaxed">
+              Danh mục{" "}
+              <span className="font-black text-rose-900">&quot;{deletingCategory?.name}&quot;</span>{" "}
+              sẽ bị ẩn khỏi shop. Dữ liệu vẫn được giữ lại trong hệ thống.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Warning if category has products */}
+          {deletingCategory && (productCountByCat[deletingCategory.id || deletingCategory._id] || 0) > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-900 flex items-start gap-2">
+              <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Danh mục này có{" "}
+                <b>{productCountByCat[deletingCategory.id || deletingCategory._id]} sản phẩm</b>.
+                {" "}Tất cả sản phẩm trong danh mục cũng sẽ <b>bị ẩn</b> khỏi shop.
+              </span>
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2 justify-end pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={deletingCat}
+              onClick={() => setDeletingCategory(null)}
+              className="h-9 rounded-xl font-bold text-xs text-slate-500 hover:bg-slate-100 cursor-pointer"
+            >
+              Quay lại
+            </Button>
+            <Button
+              type="button"
+              onClick={handleDeleteCategoryConfirm}
+              disabled={deletingCat}
+              className="h-9 bg-rose-600 hover:bg-rose-700 text-white rounded-xl px-5 font-bold text-xs cursor-pointer shadow-md border-0"
+            >
+              {deletingCat ? (
+                <><RefreshCw className="size-3.5 animate-spin mr-1.5" /> Đang ẩn...</>
+              ) : (
+                <><Trash2 className="size-3.5 mr-1.5" /> Xác nhận ẩn
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -958,10 +1132,10 @@ export default function AdminCategoriesPage() {
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                         <Layers className="size-3.5 text-emerald-600" />
-                        Danh sách Variant từ DB ({prodVariants.length} loại)
+                        Danh sách
                       </Label>
                       <Badge className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border-emerald-200">
-                        Thông số từ DB · Chỉ đổi giá
+                        Thông số
                       </Badge>
                     </div>
 
@@ -969,7 +1143,7 @@ export default function AdminCategoriesPage() {
                       {isLoadingVariants ? (
                         <div className="flex items-center justify-center gap-2 py-8 text-xs text-slate-500 font-medium bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                           <Loader2 className="size-4 animate-spin text-emerald-600" />
-                          <span>Đang tải biến thể mới nhất từ CSDL API...</span>
+                          <span>Đang tải</span>
                         </div>
                       ) : prodVariants.length === 0 ? (
                         <div className="py-6 text-center text-xs text-slate-400 font-medium">
@@ -992,9 +1166,6 @@ export default function AdminCategoriesPage() {
                                   </Badge>
                                   <span className="font-mono text-[11px] font-bold text-slate-700">Mã SKU: {varItem.sku}</span>
                                 </div>
-                                <Badge variant="outline" className="text-[10px] font-semibold text-slate-500 bg-slate-50 border-slate-200">
-                                  DB Auto-Sync
-                                </Badge>
                               </div>
 
                               {/* KHU VỰC THÔNG SỐ TỪ DB (READ-ONLY) */}
@@ -1012,7 +1183,7 @@ export default function AdminCategoriesPage() {
                                   <span className="font-semibold text-slate-700">{materialVal || "-"}</span>
                                 </div>
                                 <div>
-                                  <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Tồn kho DB</span>
+                                  <span className="text-[9.5px] font-bold text-slate-400 block uppercase">Tồn kho</span>
                                   <span className="font-bold text-slate-800">{varItem.availableQty ?? 0} sp</span>
                                 </div>
                               </div>
@@ -1134,12 +1305,22 @@ export default function AdminCategoriesPage() {
           <DialogHeader className="border-b pb-3">
             <DialogTitle className="text-base font-black text-rose-700 uppercase tracking-wider flex items-center gap-2">
               <AlertCircle className="size-5 text-rose-600" />
-              Xác nhận xóa danh mục
+              Xác nhận ẩn danh mục
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-600 mt-1">
-              Bạn có chắc chắn muốn xóa danh mục <strong className="text-slate-900">&quot;{deletingCategory?.name}&quot;</strong>? Hành động này không thể hoàn tác.
+              Danh mục <strong className="text-slate-900">&quot;{deletingCategory?.name}&quot;</strong> và tất cả sản phẩm trong danh mục sẽ bị <strong>ẩn khỏi shop</strong>. Dữ liệu vẫn được lưu lại trong hệ thống.
             </DialogDescription>
           </DialogHeader>
+
+          {deletingCategory && (productCountByCat[deletingCategory.id || deletingCategory._id] || 0) > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5 text-xs text-amber-900 flex items-start gap-2">
+              <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                <b>{productCountByCat[deletingCategory.id || deletingCategory._id]} sản phẩm</b>{" "}
+                trong danh mục này cũng sẽ bị ẩn.
+              </span>
+            </div>
+          )}
 
           <DialogFooter className="pt-3 flex justify-end gap-2">
             <Button
@@ -1157,7 +1338,7 @@ export default function AdminCategoriesPage() {
               className="h-9 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl flex items-center gap-1.5"
             >
               {deletingCat ? <RefreshCw className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
-              Xác Nhận Xóa
+              Xác Nhận Ẩn
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1193,6 +1374,94 @@ export default function AdminCategoriesPage() {
             >
               {deletingProd ? <RefreshCw className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
               Xác Nhận Xóa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MOVE PRODUCT CATEGORY DIALOG */}
+      <Dialog open={!!movingProduct} onOpenChange={(open) => !open && setMovingProduct(null)}>
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white border border-slate-200 p-6 shadow-2xl">
+          <DialogHeader className="border-b pb-3">
+            <DialogTitle className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-2">
+              <FolderOutput className="size-4 text-emerald-600" />
+              Chuyển sản phẩm sang danh mục khác
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500 mt-1">
+              Chọn danh mục mới cho sản phẩm <strong className="text-slate-900">&quot;{movingProduct?.name}&quot;</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700">Danh mục hiện tại</Label>
+              <div className="text-xs font-bold text-slate-600 bg-slate-100 px-3 py-2.5 rounded-xl flex items-center gap-2 border border-slate-200/80">
+                <Folder className="size-3.5 text-slate-500" />
+                <span>
+                  {categories.find(
+                    (c) =>
+                      String(c.id || c._id) ===
+                      String(
+                        movingProduct?.categoryId ||
+                          movingProduct?.category?._id ||
+                          movingProduct?.category?.id ||
+                          (activeCategory ? activeCategory.id || activeCategory._id : ""),
+                      ),
+                  )?.name || "Chưa phân loại"}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="targetCatSelect" className="text-xs font-bold text-slate-700">
+                Chuyển sang danh mục mới *
+              </Label>
+              <select
+                id="targetCatSelect"
+                value={targetCategoryId}
+                onChange={(e) => setTargetCategoryId(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-800 font-bold focus:border-emerald-500 focus:outline-none"
+              >
+                {categories.map((c) => {
+                  const cId = c.id || c._id;
+                  const currentCatId =
+                    movingProduct?.categoryId ||
+                    movingProduct?.category?._id ||
+                    movingProduct?.category?.id ||
+                    (activeCategory ? activeCategory.id || activeCategory._id : "");
+                  const isCurrent = String(cId) === String(currentCatId);
+                  return (
+                    <option key={cId} value={cId} disabled={isCurrent}>
+                      {c.name} {isCurrent ? "(Danh mục hiện tại)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={movingLoading}
+              onClick={() => setMovingProduct(null)}
+              className="h-9 text-xs font-bold rounded-xl"
+            >
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              disabled={movingLoading || !targetCategoryId}
+              onClick={handleConfirmMoveProductCategory}
+              className="h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl flex items-center gap-1.5 border-0 shadow-sm"
+            >
+              {movingLoading ? (
+                <RefreshCw className="size-3.5 animate-spin" />
+              ) : (
+                <FolderOutput className="size-3.5" />
+              )}
+              Xác Nhận Chuyển
             </Button>
           </DialogFooter>
         </DialogContent>

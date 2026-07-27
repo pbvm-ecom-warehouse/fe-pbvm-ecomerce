@@ -23,7 +23,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCartStore } from "@/stores/cart-store";
 
-import { listOrders } from "@/features/order/services/order.service";
+import {
+  listNotifications,
+  markAllNotificationsRead,
+  type Notification as ApiNotification,
+} from "@/features/notification/services/notification.service";
 
 function NotificationsContent() {
   const searchParams = useSearchParams();
@@ -35,76 +39,65 @@ function NotificationsContent() {
 
   const cartItems = useCartStore((state) => state.items);
   const [notifications, setNotifications] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadOrderNotifications() {
+    async function loadNotifications() {
+      setLoading(true);
       try {
-        const res = await listOrders();
-        const list = Array.isArray(res) ? res : res?.data || [];
+        const res = await listNotifications({ pageSize: 50 });
+        const mapped: any[] = res.data.map((n: ApiNotification) => ({
+          id: n.id,
+          type: n.type,
+          title: n.title,
+          description: n.description,
+          time: n.createdAt ? new Date(n.createdAt).toLocaleString("vi-VN") : "Vừa xong",
+          read: n.isRead,
+          actionType:
+            n.type === "PAYMENT_CANCELLED" || n.type === "PAYMENT_FAILED"
+              ? "REPAY"
+              : undefined,
+          orderId: (n.metadata?.orderId as string) || undefined,
+          orderCode: (n.metadata?.orderCode as string) || undefined,
+        }));
 
-        const dynamicNotifs: any[] = [];
-
-        if (type === "payment_cancelled" || orderCode) {
-          dynamicNotifs.push({
-            id: "notif-payment-cancel",
-            type: "PAYMENT_CANCELLED",
-            title: "Giao dịch thanh toán chưa hoàn tất",
-            description: orderCode
-              ? `Thanh toán cho đơn hàng #${orderCode} đã bị hủy hoặc ngắt kết nối.`
-              : "Thanh toán trực tuyến bị hủy hoặc tạm dừng.",
-            time: "Vừa xong",
-            read: false,
-            actionType: "REPAY",
-            orderId: orderId || undefined,
-            orderCode: orderCode || undefined,
-          });
-        }
-
-        list.forEach((ord: any) => {
-          const code = ord.code || ord.id || ord._id;
-          if (ord.paymentStatus === "UNPAID" || ord.status === "PLACED") {
-            dynamicNotifs.push({
-              id: `notif-unpaid-${ord.id || ord._id}`,
+        // Prepend a payment-cancel entry if redirected from PayOS and not already present
+        if (type === "payment_cancelled" && orderCode) {
+          const alreadyHas = mapped.some(
+            (m) => m.type === "PAYMENT_CANCELLED" && m.orderCode === orderCode,
+          );
+          if (!alreadyHas) {
+            mapped.unshift({
+              id: "notif-payment-cancel",
               type: "PAYMENT_CANCELLED",
-              title: `Đơn hàng #${code} đang chờ thanh toán`,
-              description: `Đơn hàng trị giá ${ord.totalAmount ? ord.totalAmount.toLocaleString("vi-VN") + "đ" : ""} đang chờ thanh toán.`,
-              time: ord.createdAt ? new Date(ord.createdAt).toLocaleDateString("vi-VN") : "Gần đây",
+              title: "Giao dịch thanh toán chưa hoàn tất",
+              description: `Thanh toán cho đơn hàng #${orderCode} đã bị hủy hoặc ngắt kết nối.`,
+              time: "Vừa xong",
               read: false,
               actionType: "REPAY",
-              orderId: ord.id || ord._id,
-              orderCode: code,
-            });
-          } else if (ord.status === "CONFIRMED" || ord.status === "COMPLETED") {
-            dynamicNotifs.push({
-              id: `notif-success-${ord.id || ord._id}`,
-              type: "ORDER_SUCCESS",
-              title: `Đơn hàng #${code} đã được xác nhận`,
-              description: "Đơn hàng của bạn đã được xác nhận thành công và đang chuẩn bị đóng gói.",
-              time: ord.createdAt ? new Date(ord.createdAt).toLocaleDateString("vi-VN") : "Gần đây",
-              read: true,
-              orderId: ord.id || ord._id,
-              orderCode: code,
-            });
+              orderId: orderId || undefined,
+              orderCode: orderCode || undefined,
+            } as any);
           }
-        });
+        }
 
-        dynamicNotifs.push({
-          id: "notif-welcome",
-          type: "SYSTEM",
-          title: "Chào mừng bạn đến với PBVM Ecommerce",
-          description: "Cảm ơn bạn đã lựa chọn sản phẩm bao bì & in ấn ly của PBVM. Đội ngũ chúng tôi sẵn sàng hỗ trợ 24/7.",
-          time: "Hệ thống",
-          read: true,
-        });
-
-        setNotifications(dynamicNotifs);
+        setNotifications(mapped);
       } catch (err) {
-        console.warn("Could not fetch order notifications:", err);
+        console.error("Failed to load notifications:", err);
+        setNotifications([]);
+      } finally {
+        setLoading(false);
       }
     }
 
-    loadOrderNotifications();
+    loadNotifications();
   }, [type, orderCode, orderId]);
+
+  const handleMarkAllRead = () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    markAllNotificationsRead().catch(() => {});
+  };
+
 
   return (
     <div className="min-h-[85vh] bg-gradient-to-b from-slate-50 via-background to-background py-10 px-4 sm:px-6 lg:px-8">
@@ -125,15 +118,26 @@ function NotificationsContent() {
             </div>
           </div>
 
-          <Button
-            asChild
-            variant="outline"
-            className="w-fit rounded-xl gap-2 font-bold text-xs border-emerald-600 text-emerald-700 hover:bg-emerald-50"
-          >
-            <Link href="/cart">
-              <ShoppingBag className="h-4 w-4" /> Xem giỏ hàng ({cartItems.length})
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            {notifications.some((n) => !n.read) && (
+              <Button
+                variant="ghost"
+                className="w-fit rounded-xl gap-2 font-bold text-xs text-emerald-700 hover:bg-emerald-50"
+                onClick={handleMarkAllRead}
+              >
+                <CheckCircle2 className="h-4 w-4" /> Đánh dấu đã đọc
+              </Button>
+            )}
+            <Button
+              asChild
+              variant="outline"
+              className="w-fit rounded-xl gap-2 font-bold text-xs border-emerald-600 text-emerald-700 hover:bg-emerald-50"
+            >
+              <Link href="/cart">
+                <ShoppingBag className="h-4 w-4" /> Xem giỏ hàng ({cartItems.length})
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {/* Featured Alert if redirected from Payment Cancel */}

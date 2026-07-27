@@ -199,17 +199,38 @@ export function WmsSyncToEcomModal({
     const rawAttrs = item.attributes || [];
 
     const styleAttr = rawAttrs.find(
-      (a) => a.key === "CUP_STYLE" || a.key === "STYLE" || (a.name && a.name.toLowerCase().includes("kiểu dáng")),
+      (a) =>
+        a.key === "CUP_STYLE" ||
+        a.key === "STYLE" ||
+        a.key === "PACKAGING" ||
+        a.key === "BAO_BI" ||
+        (a.name &&
+          (a.name.toLowerCase().includes("kiểu dáng") ||
+            a.name.toLowerCase().includes("bao bì") ||
+            a.name.toLowerCase().includes("đóng gói"))),
     );
     const capacityAttr = rawAttrs.find(
       (a) =>
         a.key === "CAPACITY" ||
         a.key === "SIZE" ||
         a.key === "SPEC" ||
-        (a.name && (a.name.toLowerCase().includes("dung tích") || a.name.toLowerCase().includes("kích thước"))),
+        a.key === "WEIGHT" ||
+        a.key === "TRONG_LUONG" ||
+        (a.name &&
+          (a.name.toLowerCase().includes("dung tích") ||
+            a.name.toLowerCase().includes("kích thước") ||
+            a.name.toLowerCase().includes("trọng lượng"))),
     );
     const materialAttr = rawAttrs.find(
-      (a) => a.key === "MATERIAL" || (a.name && a.name.toLowerCase().includes("chất liệu")),
+      (a) =>
+        a.key === "MATERIAL" ||
+        a.key === "ORIGIN" ||
+        a.key === "NGUON_GOC" ||
+        a.key === "XUAT_XU" ||
+        (a.name &&
+          (a.name.toLowerCase().includes("chất liệu") ||
+            a.name.toLowerCase().includes("nguồn gốc") ||
+            a.name.toLowerCase().includes("xuất xứ"))),
     );
     const colorAttr = rawAttrs.find(
       (a) => a.key === "COLOR" || (a.name && a.name.toLowerCase().includes("màu sắc")),
@@ -222,9 +243,9 @@ export function WmsSyncToEcomModal({
       item.name?.toLowerCase().includes("trà");
 
     if (isMatItem) {
-      setEcomStyle(styleAttr ? styleAttr.value || styleAttr.code : "Đài Loan");
+      setEcomStyle(styleAttr ? styleAttr.value || styleAttr.code : "Túi Kraft");
       setEcomSize(capacityAttr ? capacityAttr.value || capacityAttr.code : "500g");
-      setEcomMaterial(materialAttr ? materialAttr.value || materialAttr.code : "Túi Kraft");
+      setEcomMaterial(materialAttr ? materialAttr.value || materialAttr.code : "Đài Loan");
       setEcomColor(colorAttr ? colorAttr.value || colorAttr.code : "Tự nhiên");
 
       const ingCat = categories.find(
@@ -420,7 +441,7 @@ export function WmsSyncToEcomModal({
             <div className="space-y-1.5 bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-200">
               <Label htmlFor="wmsItemDropdown" className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
                 <Building2 className="size-4 text-emerald-600" />
-                <span>Chọn mặt hàng Kho WMS (SKU có sẵn khi nhập hàng)</span>
+                <span>Chọn mặt hàng</span>
               </Label>
               <select
                 id="wmsItemDropdown"
@@ -457,7 +478,7 @@ export function WmsSyncToEcomModal({
 
               const col2Label =
                 pType === "MATERIAL"
-                  ? "QUY CÁCH ĐÓNG GÓI"
+                  ? "BAO BÌ"
                   : pType === "PACKAGING"
                     ? "QUY CÁCH BAO BÌ"
                     : "KIỂU DÁNG";
@@ -472,10 +493,7 @@ export function WmsSyncToEcomModal({
               return (
                 <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
                   <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                    <span>XEM TRƯỚC THÔNG SỐ VARIANT SẼ ĐẨY LÊN</span>
-                    <span className="font-mono text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md border border-emerald-300/60 text-[11px]">
-                      Tồn kho WMS: {(selectedItem as any).totalQuantity ?? (selectedItem as any).availableQty ?? 0}
-                    </span>
+                    <span>THÔNG TIN CHI TIẾT SẢN PHẨM</span>
                   </div>
 
                   {/* THÔNG SỐ BANNER PREVIEW */}
@@ -503,7 +521,7 @@ export function WmsSyncToEcomModal({
 
                     <div>
                       <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">
-                        TỒN KHO DB
+                        TỒN KHO
                       </span>
                       <span className="font-black text-emerald-700">
                         {(selectedItem as any).totalQuantity ?? (selectedItem as any).availableQty ?? 0} sản phẩm
@@ -547,7 +565,7 @@ export function WmsSyncToEcomModal({
 
             {/* 2. Danh mục Ecommerce */}
             <div className="space-y-1.5">
-              <Label htmlFor="eCat" className="text-xs font-bold text-emerald-800">Danh mục Ecommerce *</Label>
+              <Label htmlFor="eCat" className="text-xs font-bold text-emerald-800">Danh mục *</Label>
               <select
                 id="eCat"
                 value={ecomCategoryId}

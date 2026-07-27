@@ -80,6 +80,7 @@ export type CatalogProduct = {
   productRefId: string;
   slug: string;
   name: string;
+  description?: string;
   category: string;
   categoryId?: string;
   categoryObj?: any;

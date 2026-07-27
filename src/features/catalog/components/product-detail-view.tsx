@@ -420,28 +420,6 @@ export function ProductDetailView({
                 <Search className="size-4" />
               </button>
             </div>
-
-            {/* Thumbnail Row */}
-            <div className="flex items-center gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden py-1">
-              {images.map((img, idx) => {
-                const isActive = img === activeImage;
-                return (
-                  <button
-                    suppressHydrationWarning
-                    key={idx}
-                    onClick={() => setActiveImage(img)}
-                    className={cn(
-                      "relative aspect-square size-16 rounded-xl border bg-white flex items-center justify-center p-1.5 transition-all shrink-0 cursor-pointer overflow-hidden",
-                      isActive
-                        ? "border-[#3BB77E] ring-2 ring-[#DEF9EC]"
-                        : "border-[#E2EDE8] hover:border-[#3BB77E]/50"
-                    )}
-                  >
-                    <img src={img} alt={`Thumb ${idx}`} className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal" />
-                  </button>
-                );
-              })}
-            </div>
           </div>
 
           {/* RIGHT: Product Info Details (7 columns on desktop) */}
@@ -691,21 +669,15 @@ export function ProductDetailView({
           {/* Active Tab Content Display */}
           <div className="pt-6">
             {activeTab === "desc" && (
-              <div className="space-y-4 text-xs md:text-sm text-muted-foreground dark:text-zinc-300 leading-relaxed">
-                <p>
-                  Sản phẩm được tuyển chọn kỹ càng và phục vụ phân khúc chuỗi F&B chuyên nghiệp. Chúng tôi hiểu rằng bao bì ly in logo và chất lượng nguyên liệu pha chế là yếu tố tiên quyết trong sự thành bại của một cửa hàng trà sữa hay cà phê.
-                </p>
-                <p>
-                  Đối với các sản phẩm bao bì ly nhựa PP/PET, PBVM cam kết bề mặt nhẵn mịn, độ dày đồng đều chuẩn ly cứng và bền bỉ trong quá trình bảo quản hay giao hàng. Công nghệ in offset cho phép các chi tiết in ấn chính xác, không nhòe lệch, giữ đúng tỷ lệ thiết kế logo thương hiệu của bạn.
-                </p>
-
-                <h4 className="font-extrabold text-[#253D4E] dark:text-zinc-200 text-sm pt-2">Đặc điểm nổi bật:</h4>
-                <ul className="list-disc pl-5 space-y-1.5">
-                  <li>Nguồn gốc rõ ràng: Đầy đủ giấy tờ hải quan, kiểm định chất lượng và ATVSTP.</li>
-                  <li>Tồn kho realtime: Đồng bộ trực tiếp với hệ thống phần mềm quản lý kho WMS giúp tránh tình trạng hết hàng đột xuất.</li>
-                  <li>Dịch vụ in trọn gói: Nhận in ấn số lượng sỉ từ 10.000 ly với thời gian hoàn thành nhanh chóng trong vòng 5-7 ngày làm việc.</li>
-                  <li>Chính sách vận chuyển: Giao sỉ qua chành xe toàn quốc hoặc hỗ trợ giao hàng nội thành cực nhanh cho các đơn hỏa tốc.</li>
-                </ul>
+              <div className="text-xs md:text-sm text-muted-foreground dark:text-zinc-300 leading-relaxed">
+                {product.description ? (
+                  <div
+                    className="prose prose-sm max-w-none prose-headings:text-[#253D4E] prose-headings:font-extrabold prose-a:text-[#3BB77E] prose-li:marker:text-[#3BB77E]"
+                    dangerouslySetInnerHTML={{ __html: product.description }}
+                  />
+                ) : (
+                  <p className="text-slate-400 italic text-xs">Sản phẩm này chưa có mô tả.</p>
+                )}
               </div>
             )}
 
