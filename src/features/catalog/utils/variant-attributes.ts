@@ -31,14 +31,29 @@ function readAttr(attrs: Record<string, any>, keys: string[]) {
   return "";
 }
 
+function stringifyAttributeValue(value: any) {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "object") {
+    const nested =
+      value.value ??
+      value.val ??
+      value.displayValue ??
+      value.label ??
+      value.name ??
+      value.code;
+    return nested === undefined || nested === null ? "" : String(nested).trim();
+  }
+  return String(value).trim();
+}
+
 export function coerceVariantAttributes(input: any): Record<string, string> {
   if (Array.isArray(input)) {
     return input.reduce<Record<string, string>>((acc, item) => {
       if (!item || typeof item !== "object") return acc;
       const key = item.key ?? item.name ?? item.label ?? item.code;
-      const value = item.value ?? item.val ?? item.displayValue;
-      if (key !== undefined && key !== null && value !== undefined && value !== null && String(value).trim()) {
-        acc[String(key).trim()] = String(value).trim();
+      const value = stringifyAttributeValue(item.value ?? item.val ?? item.displayValue);
+      if (key !== undefined && key !== null && value) {
+        acc[String(key).trim()] = value;
       }
       return acc;
     }, {});
@@ -46,14 +61,123 @@ export function coerceVariantAttributes(input: any): Record<string, string> {
 
   if (input && typeof input === "object") {
     return Object.entries(input).reduce<Record<string, string>>((acc, [key, value]) => {
-      if (value !== undefined && value !== null && String(value).trim()) {
-        acc[key] = String(value).trim();
+      const textValue = stringifyAttributeValue(value);
+      if (textValue) {
+        acc[key] = textValue;
       }
       return acc;
     }, {});
   }
 
   return {};
+}
+
+function collectSkuCodeAttributes(variant: any, attrs: Record<string, string>) {
+  const sku = String(variant?.sku || "").toUpperCase();
+  const parts = sku.split("-").filter(Boolean);
+  const prefix = parts[0];
+  const valueForCode = (code: string | undefined) => {
+    if (!code) return "";
+    return attrs[String(code).toLowerCase()] || "";
+  };
+
+  if (prefix === "CUP") {
+    const [styleCode, materialCode, capacityCode, colorCode] = parts.slice(1);
+    const capacity = valueForCode(capacityCode);
+    return {
+      ...(valueForCode(styleCode) ? { style: valueForCode(styleCode) } : {}),
+      ...(valueForCode(materialCode) ? { material: valueForCode(materialCode) } : {}),
+      ...(capacity ? { capacity, size: capacity } : {}),
+      ...(valueForCode(colorCode) ? { color: valueForCode(colorCode) } : {}),
+    };
+  }
+
+  if (prefix === "MAT") {
+    const codes = parts.slice(1);
+    const category = valueForCode(codes[0]);
+    const type = valueForCode(codes[1]);
+    const weight = valueForCode(codes[codes.length - 1]);
+    const flavorValues = codes.slice(2, -1).map(valueForCode).filter(Boolean);
+    return {
+      ...(category ? { category } : {}),
+      ...(type ? { type, material: type } : {}),
+      ...(flavorValues.length > 0 ? { flavor: flavorValues.join(" / ") } : {}),
+      ...(weight ? { weight, spec: weight, size: weight } : {}),
+    };
+  }
+
+  if (prefix === "PKG") {
+    const codes = parts.slice(1);
+    const packaging = valueForCode(codes[0]);
+    const size = valueForCode(codes[1]);
+    const color = valueForCode(codes[2]);
+    return {
+      ...(packaging ? { packaging, style: packaging } : {}),
+      ...(size ? { size } : {}),
+      ...(color ? { color } : {}),
+    };
+  }
+
+  return {};
+}
+
+export function collectVariantAttributes(variant: any): Record<string, string> {
+  const collected = {
+    ...coerceVariantAttributes(variant?.attributes),
+    ...coerceVariantAttributes(variant?.attributeValues),
+    ...coerceVariantAttributes(variant?.variantAttributes),
+    ...(variant?.capacity ? { capacity: variant.capacity } : {}),
+    ...(variant?.size ? { size: variant.size } : {}),
+    ...(variant?.weight ? { weight: variant.weight } : {}),
+    ...(variant?.packaging ? { packaging: variant.packaging } : {}),
+    ...(variant?.specification ? { specification: variant.specification } : {}),
+    ...(variant?.style ? { style: variant.style } : {}),
+    ...(variant?.material ? { material: variant.material } : {}),
+    ...(variant?.origin ? { origin: variant.origin } : {}),
+    ...(variant?.brand ? { brand: variant.brand } : {}),
+    ...(variant?.type ? { type: variant.type } : {}),
+    ...(variant?.color ? { color: variant.color } : {}),
+  };
+  const skuCodeAttrs = collectSkuCodeAttributes(variant, collected);
+
+  const weight = readAttr(collected, ["weight", "trong_luong", "trọng lượng", "khoi_luong", "khối lượng"]);
+  const packaging = readAttr(collected, ["packaging", "dong_goi", "đóng gói", "quy_cach", "quy cách"]);
+  const origin = readAttr(collected, ["origin", "nguon_goc", "nguồn gốc", "xuat_xu", "xuất xứ"]);
+
+  return {
+    ...collected,
+    ...skuCodeAttrs,
+    ...(weight ? { weight } : {}),
+    ...(packaging ? { packaging } : {}),
+    ...(origin ? { origin } : {}),
+  };
+}
+
+export function collectWmsItemVariantAttributes(item: any): Record<string, string> {
+  const attrs: any[] = Array.isArray(item?.attributes) ? item.attributes : [];
+  return attrs.reduce((acc: Record<string, string>, attr: any) => {
+    if (!attr || typeof attr !== "object") return acc;
+    const key = String(attr.key || attr.name || "").toUpperCase();
+    const value = stringifyAttributeValue(attr.value);
+    if (!value) return acc;
+
+    if (key === "CAPACITY") acc.capacity = value;
+    if (key === "SIZE" || key === "SPEC") acc.size = value;
+    if (key === "CUP_STYLE") acc.style = value;
+    if (key === "MATERIAL" || key === "MATERIAL_TYPE") acc.material = value;
+    if (key === "COLOR") acc.color = value;
+    if (key === "PACKAGING_CATEGORY") {
+      acc.style = value;
+      acc.packaging = value;
+    }
+    if (key === "MATERIAL_CATEGORY") acc.type = value;
+    if (key === "FLAVOR") acc.flavor = value;
+    if (key === "DIAMETER") acc.diameter = value;
+    if (key === "LENGTH") acc.length = value;
+    if (key === "COMPATIBILITY") acc.compatibility = value;
+
+    return acc;
+  }, {});
 }
 
 const ATTRIBUTE_LABELS: Record<string, string> = {

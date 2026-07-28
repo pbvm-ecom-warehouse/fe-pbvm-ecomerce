@@ -31,11 +31,10 @@ import {
   adminCreateProduct,
   adminUpdateProduct,
   adminCreateVariant,
-  adminPublishProduct,
+  adminPublishProductWithVariants,
   adminListCategories,
   adminUploadProductImage,
   adminListInactiveProducts,
-  adminActivateVariant,
 } from "../services/admin-catalog.service";
 import { listCatalogProducts } from "../services/catalog.service";
 import type { FulfillmentType } from "@/types/api";
@@ -48,8 +47,23 @@ type SyncItem = WmsWarehouseItem & {
   price?: number;
 };
 
+function getEntityId(value: any): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  if (typeof value === "object") {
+    const id = value.id || value._id;
+    return id ? String(id) : undefined;
+  }
+  return undefined;
+}
+
+function isObjectId(value: string) {
+  return /^[0-9a-fA-F]{24}$/.test(value);
+}
+
 function productToSyncItem(product: any, source: SyncItem["source"]): SyncItem | null {
-  const productId = String(product.id || product._id || "");
+  const productId = getEntityId(product) || "";
   const variants = Array.isArray(product.variants) ? product.variants : [];
   const mainVariant = variants[0] || {};
   const sku = String(mainVariant.sku || product.sku || product.slug || "");
@@ -82,7 +96,7 @@ function productToSyncItem(product: any, source: SyncItem["source"]): SyncItem |
     ),
     isActive: product.status === "ACTIVE" || product.isActive === true,
     price: Number(mainVariant.price ?? product.price ?? 0),
-    categoryId: product.categoryId || product.category?._id || product.category?.id,
+    categoryId: getEntityId(product.categoryId) || getEntityId(product.category),
     slug: product.slug,
     description: product.description,
     images: Array.isArray(product.images) ? product.images : [],
@@ -358,6 +372,11 @@ export function WmsSyncToEcomModal({
       return;
     }
 
+    if (!isObjectId(ecomCategoryId)) {
+      toast.error("Danh mục không hợp lệ. Vui lòng chọn lại danh mục trước khi đồng bộ.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       if (isSelectedExistingProduct && selectedItem.productId) {
@@ -367,19 +386,10 @@ export function WmsSyncToEcomModal({
             slug: ecomSlug.trim().toLowerCase(),
             description: ecomDesc,
             categoryId: ecomCategoryId,
-            status: "ACTIVE",
           };
           if (ecomImage) productPatch.images = [ecomImage];
           await adminUpdateProduct(selectedItem.productId, productPatch);
-          await adminPublishProduct(selectedItem.productId);
-          await Promise.all(
-            (selectedItem.variantIds || []).map((variantId) =>
-              adminActivateVariant(variantId).catch((error) => {
-                console.warn("adminActivateVariant warning:", variantId, error);
-                return null;
-              }),
-            ),
-          );
+          await adminPublishProductWithVariants(selectedItem.productId);
         }
         toast.success(`Da cap nhat va day san pham "${ecomName}" vao danh muc thanh cong!`);
         if (onSuccess) onSuccess();
@@ -420,8 +430,8 @@ export function WmsSyncToEcomModal({
 
       await adminCreateVariant(variantPayload);
 
-      // 4. Publish to Ecommerce
-      await adminPublishProduct(productId);
+      // 4. Approve product and activate its variants
+      await adminPublishProductWithVariants(productId);
 
       const targetCategoryObj = categories.find((c) => (c.id || c._id) === ecomCategoryId);
       const catName = targetCategoryObj ? targetCategoryObj.name : "danh mục";

@@ -28,9 +28,27 @@ describe("cart utilities", () => {
   it("calculates subtotal with zero shipping fee", () => {
     expect(calculateCartTotals(items)).toEqual({
       subtotal: 200_000,
+      bulkBoxDiscount: 0,
       shippingFee: 0,
       tax: 0,
       grandTotal: 200_000,
+    });
+  });
+
+  it("discounts 20,000 VND for each full box of 3 selected products", () => {
+    expect(
+      calculateCartTotals([
+        {
+          ...items[0],
+          quantity: 7,
+        },
+      ]),
+    ).toEqual({
+      subtotal: 700_000,
+      bulkBoxDiscount: 40_000,
+      shippingFee: 0,
+      tax: 0,
+      grandTotal: 660_000,
     });
   });
 });

@@ -1,6 +1,3 @@
-import { apiClient } from "@/lib/api-client";
-import { type ApiEnvelope, unwrapApiData } from "@/lib/api-contract";
-
 export type ValidatePromotionInput = {
   code: string;
   orderValue: number;
@@ -13,9 +10,9 @@ export type ValidatePromotionResult = {
   message?: string;
 };
 
-export async function validatePromotion(input: ValidatePromotionInput) {
-  const response = await apiClient.post<
-    ApiEnvelope<ValidatePromotionResult> | ValidatePromotionResult
-  >("/promotions/validate", input);
-  return unwrapApiData(response.data);
+export async function validatePromotion(
+  input: ValidatePromotionInput,
+): Promise<ValidatePromotionResult> {
+  void input;
+  throw new Error("BE chưa có API /promotions/validate để kiểm tra mã giảm giá.");
 }

@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const apiClientMock = vi.hoisted(() => ({
   get: vi.fn(),
+  post: vi.fn(),
   patch: vi.fn(),
+  put: vi.fn(),
 }));
 
 const publicApiFetchMock = vi.hoisted(() => vi.fn());
@@ -21,6 +23,7 @@ vi.mock("@/features/catalog/services/wms-stock.service", () => ({
 
 import {
   adminActivateVariant,
+  adminCreateCategory,
   adminUpdateProduct,
   adminListProducts,
   adminListInactiveProducts,
@@ -28,15 +31,112 @@ import {
   adminGetProductVariants,
   adminListHiddenCategories,
   adminRestoreCategory,
+  adminPublishProductWithVariants,
+  adminActivateProductVariants,
+  isApprovedCatalogProduct,
 } from "@/features/catalog/services/admin-catalog.service";
 import { buildSyncItemsFromCatalogProducts } from "@/features/catalog/components/wms-sync-to-ecom-modal";
 
 describe("admin catalog variant activation API", () => {
   beforeEach(() => {
     apiClientMock.get.mockReset();
+    apiClientMock.post.mockReset();
     apiClientMock.patch.mockReset();
+    apiClientMock.put.mockReset();
     publicApiFetchMock.mockReset();
     window.localStorage.clear();
+  });
+
+  it("keeps draft products out of approved category product lists", () => {
+    expect(isApprovedCatalogProduct({ status: "ACTIVE" })).toBe(true);
+    expect(isApprovedCatalogProduct({ status: "ACTIVE", isActive: false })).toBe(false);
+    expect(isApprovedCatalogProduct({ status: "DRAFT", isActive: false })).toBe(false);
+    expect(isApprovedCatalogProduct({ status: "INACTIVE" })).toBe(false);
+  });
+
+  it("publishes a product and activates all inactive variants from the admin API", async () => {
+    apiClientMock.put.mockResolvedValueOnce({
+      data: { data: { id: "product-1", slug: "cup-1", status: "ACTIVE" }, meta: {} },
+    });
+    apiClientMock.get
+      .mockResolvedValueOnce({
+        data: {
+          data: [
+            { id: "variant-1", sku: "CUP-1", isActive: false },
+            { id: "variant-2", sku: "CUP-2", isActive: true },
+          ],
+          meta: {},
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          data: [
+            { id: "variant-1", sku: "CUP-1", isActive: true },
+            { id: "variant-2", sku: "CUP-2", isActive: true },
+          ],
+          meta: {},
+        },
+      });
+    apiClientMock.patch.mockResolvedValueOnce({
+      data: { data: { id: "variant-1", isActive: true } },
+    });
+
+    await expect(adminPublishProductWithVariants("product-1")).resolves.toEqual({
+      product: { id: "product-1", slug: "cup-1", status: "ACTIVE" },
+      variants: [
+        { id: "variant-1", sku: "CUP-1", isActive: true },
+        { id: "variant-2", sku: "CUP-2", isActive: true },
+      ],
+    });
+    expect(apiClientMock.put).toHaveBeenCalledWith(
+      "/admin/catalog/products/product-1/publish",
+    );
+    expect(apiClientMock.get).toHaveBeenCalledWith(
+      "/admin/catalog/products/product-1/variants",
+    );
+    expect(apiClientMock.patch).toHaveBeenCalledWith(
+      "/admin/catalog/variants/variant-1/activate",
+    );
+    expect(apiClientMock.patch).not.toHaveBeenCalledWith(
+      "/admin/catalog/variants/variant-2/activate",
+    );
+  });
+
+  it("repairs inactive variants for an already active product without publishing again", async () => {
+    apiClientMock.get
+      .mockResolvedValueOnce({
+        data: {
+          data: [
+            { id: "variant-1", sku: "CUP-1", isActive: false },
+            { id: "variant-2", sku: "CUP-2", isActive: false },
+          ],
+          meta: {},
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          data: [
+            { id: "variant-1", sku: "CUP-1", isActive: true },
+            { id: "variant-2", sku: "CUP-2", isActive: true },
+          ],
+          meta: {},
+        },
+      });
+    apiClientMock.patch
+      .mockResolvedValueOnce({ data: { data: { id: "variant-1", isActive: true }, meta: {} } })
+      .mockResolvedValueOnce({ data: { data: { id: "variant-2", isActive: true }, meta: {} } });
+
+    await expect(adminActivateProductVariants("product-1")).resolves.toEqual([
+      { id: "variant-1", sku: "CUP-1", isActive: true },
+      { id: "variant-2", sku: "CUP-2", isActive: true },
+    ]);
+    expect(apiClientMock.put).not.toHaveBeenCalled();
+    expect(apiClientMock.patch).toHaveBeenCalledWith(
+      "/admin/catalog/variants/variant-1/activate",
+    );
+    expect(apiClientMock.patch).toHaveBeenCalledWith(
+      "/admin/catalog/variants/variant-2/activate",
+    );
   });
 
   it("lists inactive variants from the admin Swagger endpoint", async () => {
@@ -85,16 +185,19 @@ describe("admin catalog variant activation API", () => {
   });
 
   it("lists products only from the public catalog DB payload", async () => {
-    publicApiFetchMock.mockResolvedValueOnce([
-      {
-        id: "product-db",
-        name: "San pham DB",
-        status: "ACTIVE",
-        isActive: true,
-        categoryId: "category-1",
-        variants: [],
-      },
-    ]);
+    publicApiFetchMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: "product-db",
+          name: "San pham DB",
+          status: "ACTIVE",
+          isActive: true,
+          categoryId: "category-1",
+          variants: [],
+        },
+      ],
+      meta: {},
+    });
     window.localStorage.setItem(
       "ecom_local_drafts",
       JSON.stringify([
@@ -219,6 +322,38 @@ describe("admin catalog variant activation API", () => {
     );
   });
 
+  it("notifies the storefront after creating a category", async () => {
+    const listener = vi.fn();
+    window.addEventListener("ecom_products_updated", listener);
+    apiClientMock.post.mockResolvedValueOnce({
+      data: {
+        data: {
+          id: "cat-1",
+          name: "Ly chưa in",
+          slug: "ly-chua-in",
+        },
+        meta: {},
+      },
+    });
+
+    try {
+      await adminCreateCategory({
+        name: "Ly chưa in",
+        slug: "ly-chua-in",
+        position: 1,
+      });
+    } finally {
+      window.removeEventListener("ecom_products_updated", listener);
+    }
+
+    expect(apiClientMock.post).toHaveBeenCalledWith("/admin/catalog/categories", {
+      name: "Ly chưa in",
+      slug: "ly-chua-in",
+      position: 1,
+    });
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps approved catalog products visible in the sync item list", () => {
     const activeProduct = {
       id: "product-active",
@@ -274,6 +409,25 @@ describe("admin catalog variant activation API", () => {
         productId: "product-1",
         source: "CATALOG",
         price: 100000,
+      }),
+    );
+  });
+
+  it("extracts category object ids before syncing existing products", () => {
+    const product = {
+      id: "6a66df2e2ebc2c57c2817e66",
+      name: "Da len ke",
+      status: "ACTIVE",
+      categoryId: { _id: "6b66df2e2ebc2c57c2817e77", name: "Ly" },
+      variants: [{ sku: "CUP-700", price: 100000 }],
+    };
+
+    const items = buildSyncItemsFromCatalogProducts([product], []);
+
+    expect(items[0]).toEqual(
+      expect.objectContaining({
+        productId: "6a66df2e2ebc2c57c2817e66",
+        categoryId: "6b66df2e2ebc2c57c2817e77",
       }),
     );
   });

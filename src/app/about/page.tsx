@@ -109,6 +109,7 @@ export default function AboutPage() {
                 alt="PBVM custom printed cups and ingredients B2B setup"
                 fill
                 priority
+                sizes="(min-width: 1024px) 50vw, 100vw"
                 className="object-cover"
               />
             </div>

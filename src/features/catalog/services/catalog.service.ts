@@ -1,9 +1,11 @@
 import { publicApiFetch } from "@/lib/public-api";
-import type { ApiListResponse, CatalogProduct, ProductVariant } from "@/types/api";
+import type { ApiListResponse, CatalogCategory, CatalogProduct, ProductVariant } from "@/types/api";
 import {
-  coerceVariantAttributes,
+  collectVariantAttributes,
   normalizeVariantAttributes,
 } from "@/features/catalog/utils/variant-attributes";
+
+const SHOP_ACTIVE_PRODUCTS_ENDPOINT = "/catalog/products/active";
 
 function getValidImageUrl(img: string | undefined): string | undefined {
   if (!img) return undefined;
@@ -83,6 +85,22 @@ async function readCatalogCategoriesById() {
   }
 }
 
+export async function listCatalogCategories(): Promise<CatalogCategory[]> {
+  try {
+    const response = await publicApiFetch<any>("/catalog/categories");
+    const categories = readArrayPayload(response) ?? [];
+    return categories
+      .filter((category) => category && category.isDeleted !== true && !category.deletedAt)
+      .map((category) => ({
+        ...category,
+        id: category.id ?? category._id,
+      }));
+  } catch (error) {
+    console.error("listCatalogCategories: BE error:", error);
+    return [];
+  }
+}
+
 async function readBlankCupCategoryIds() {
   const categoriesById = await readCatalogCategoriesById();
   const ids = new Set<string>();
@@ -125,16 +143,7 @@ function attachCategory(product: any, categoriesById: Map<string, any>) {
 }
 
 function readVariantAttributeSource(variant: any) {
-  return {
-    ...coerceVariantAttributes(variant?.attributes),
-    ...coerceVariantAttributes(variant?.attributeValues),
-    ...coerceVariantAttributes(variant?.variantAttributes),
-    ...(variant?.capacity ? { capacity: variant.capacity } : {}),
-    ...(variant?.size ? { size: variant.size } : {}),
-    ...(variant?.style ? { style: variant.style } : {}),
-    ...(variant?.material ? { material: variant.material } : {}),
-    ...(variant?.color ? { color: variant.color } : {}),
-  };
+  return collectVariantAttributes(variant);
 }
 
 async function withFreshProductVariants(product: any) {
@@ -374,7 +383,8 @@ export async function listCatalogProducts() {
   try {
     let rawProducts: any[] = [];
     try {
-      rawProducts = (await publicApiFetch<any[]>("/catalog/products")) ?? [];
+      const payload = await publicApiFetch<any>(SHOP_ACTIVE_PRODUCTS_ENDPOINT);
+      rawProducts = readArrayPayload(payload) ?? [];
     } catch {
       rawProducts = [];
     }
@@ -479,7 +489,7 @@ export async function fetchInStockCupVariantsFromApi() {
     // ── BƯỚC 1: lấy danh sách sản phẩm từ DB ──
     let rawList: any[] = [];
     try {
-      rawList = (await publicApiFetch<any[]>("/catalog/products")) ?? [];
+      rawList = (await publicApiFetch<any[]>(SHOP_ACTIVE_PRODUCTS_ENDPOINT)) ?? [];
     } catch {
       rawList = [];
     }
@@ -644,7 +654,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
     // ── Lấy sản phẩm đang bán từ public catalog và lọc phôi ly theo category API ──
     let rawList: any[] = [];
     try {
-      const adminData = await publicApiFetch<any>("/catalog/products");
+      const adminData = await publicApiFetch<any>(SHOP_ACTIVE_PRODUCTS_ENDPOINT);
       // Xử lý cả dạng array lẫn paginated { data: [...] }
       if (Array.isArray(adminData)) {
         rawList = adminData;
@@ -655,7 +665,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       }
     } catch {
       try {
-        rawList = (await publicApiFetch<any[]>("/catalog/products")) ?? [];
+        rawList = (await publicApiFetch<any[]>(SHOP_ACTIVE_PRODUCTS_ENDPOINT)) ?? [];
       } catch {
         rawList = [];
       }

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildVariantAttributeRows,
+  collectVariantAttributes,
+  collectWmsItemVariantAttributes,
   coerceVariantAttributes,
   normalizeVariantAttributes,
 } from "@/features/catalog/utils/variant-attributes";
@@ -42,6 +44,64 @@ describe("variant attribute utilities", () => {
       material: "",
       color: "",
     });
+  });
+
+  it("normalizes coded cup attributes when the API sends SKU-code keys", () => {
+    expect(
+      collectVariantAttributes({
+        sku: "CUP-RND-PP-700-WHT",
+        attributes: {
+          "700": "700ml",
+          rnd: "Trụ tròn",
+          pp: "Nhựa PP",
+          wht: "Trắng sữa",
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        capacity: "700ml",
+        style: "Trụ tròn",
+        material: "Nhựa PP",
+        color: "Trắng sữa",
+      }),
+    );
+  });
+
+  it("normalizes coded material attributes when the API sends SKU-code keys", () => {
+    expect(
+      collectVariantAttributes({
+        sku: "MAT-TEA-BLK-ORG-500G",
+        attributes: {
+          tea: "Trà",
+          blk: "Trà đen",
+          org: "Nguyên bản",
+          "500g": "500g",
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        category: "Trà",
+        type: "Trà đen",
+        flavor: "Nguyên bản",
+        weight: "500g",
+      }),
+    );
+  });
+
+  it("normalizes coded packaging attributes when the API sends SKU-code keys", () => {
+    expect(
+      collectVariantAttributes({
+        sku: "PKG-STRAW",
+        attributes: {
+          straw: "Ống hút",
+        },
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        packaging: "Ống hút",
+        style: "Ống hút",
+      }),
+    );
   });
 
   it("reads Vietnamese and camelCase attribute keys without translating values", () => {
@@ -97,6 +157,47 @@ describe("variant attribute utilities", () => {
       style: "Trụ tròn",
       material: "Nhựa PP",
       color: "Trắng sữa",
+    });
+  });
+
+  it("collects attributes from variant-level API fields for admin variants", () => {
+    expect(
+      collectVariantAttributes({
+        sku: "MAT-TEA-BLK-ORG-500G",
+        attributeValues: [
+          { key: "weight", value: "500g" },
+          { key: "packaging", value: "Túi bạc" },
+        ],
+        variantAttributes: {
+          origin: "Việt Nam",
+        },
+        color: "Đen",
+      }),
+    ).toEqual(
+      expect.objectContaining({
+        weight: "500g",
+        packaging: "Túi bạc",
+        origin: "Việt Nam",
+        color: "Đen",
+      }),
+    );
+  });
+
+  it("maps WMS item attributes by their real attribute keys", () => {
+    expect(
+      collectWmsItemVariantAttributes({
+        sku: "PKG-STRAW-12MM-BLK",
+        attributes: [
+          { key: "PACKAGING_CATEGORY", value: "Ống hút", code: "STRAW" },
+          { key: "SIZE", value: "12mm", code: "12MM" },
+          { key: "COLOR", value: "Đen", code: "BLK" },
+        ],
+      }),
+    ).toEqual({
+      style: "Ống hút",
+      packaging: "Ống hút",
+      size: "12mm",
+      color: "Đen",
     });
   });
 });

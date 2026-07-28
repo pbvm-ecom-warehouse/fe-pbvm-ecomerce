@@ -11,15 +11,16 @@ function normalizePaymentStatus(order: any) {
     order?.paymentState;
   const status = raw ? String(raw).toUpperCase() : "";
 
-  if (
-    order?.paidAt ||
-    ["PAID", "SUCCESS", "SUCCEEDED", "COMPLETED", "SETTLED"].includes(status)
-  ) {
+  if (["DEPOSIT_PAID", "PROGRESS_PAID", "REFUND_PENDING", "REFUNDED"].includes(status)) {
+    return status;
+  }
+
+  if (["PAID", "SUCCESS", "SUCCEEDED", "COMPLETED", "SETTLED"].includes(status)) {
     return "PAID";
   }
 
-  if (["DEPOSIT_PAID", "PROGRESS_PAID", "REFUND_PENDING", "REFUNDED"].includes(status)) {
-    return status;
+  if (order?.paidAt && !status) {
+    return "PAID";
   }
 
   return status || "UNPAID";
@@ -95,4 +96,12 @@ export async function cancelOrder(orderId: string, reason = "Hủy đơn phục 
     { reason }
   );
   return unwrapApiData(response.data);
+}
+
+export async function requestOrderReturn(orderId: string) {
+  const response = await apiClient.post<ApiEnvelope<any> | any>(
+    `/orders/${orderId}/return`,
+  );
+  const data = unwrapApiData(response.data) as any;
+  return mapOrderToSummary(data);
 }

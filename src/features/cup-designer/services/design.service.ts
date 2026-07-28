@@ -71,6 +71,14 @@ export async function listMyDesigns(): Promise<DesignResponse[]> {
   return unwrapApiData(response.data);
 }
 
+export async function updateDesign(
+  id: string,
+  input: Partial<Pick<DesignResponse, "name" | "file" | "thumbnail">>,
+) {
+  const response = await apiClient.patch<any>(`/designs/${id}`, input);
+  return unwrapApiData(response.data);
+}
+
 export async function deleteDesign(id: string) {
   const response = await apiClient.delete<{ success?: boolean }>(`/designs/${id}`);
   return unwrapApiData(response.data);

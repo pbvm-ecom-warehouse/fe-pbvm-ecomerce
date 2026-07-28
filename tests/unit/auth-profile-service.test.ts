@@ -19,37 +19,14 @@ describe("auth profile service", () => {
     mockedPost.mockReset();
   });
 
-  it("persists profile fields through the backend profile endpoint", async () => {
-    mockedPatch.mockResolvedValueOnce({
-      data: {
-        data: {
-          id: "user-1",
-          name: "PBVM Bakery",
-          phone: "0900000000",
-          customerType: "B2B",
-          avatarUrl: "https://cdn.example/avatar.png",
-        },
-        meta: {},
-      },
-    });
+  it("does not call a profile update endpoint that the backend has not exposed", async () => {
+    await expect(updateProfile({
+      name: "PBVM Bakery",
+      phone: "0900000000",
+      customerType: "B2B",
+    })).rejects.toThrow("BE chưa có API cập nhật hồ sơ khách hàng");
 
-    const result = await updateProfile({
-      name: "PBVM Bakery",
-      phone: "0900000000",
-      customerType: "B2B",
-    });
-
-    expect(mockedPatch).toHaveBeenCalledWith("/auth/profile", {
-      name: "PBVM Bakery",
-      phone: "0900000000",
-      customerType: "B2B",
-    });
-    expect(result).toMatchObject({
-      name: "PBVM Bakery",
-      phone: "0900000000",
-      customerType: "B2B",
-      avatar: "https://cdn.example/avatar.png",
-    });
+    expect(mockedPatch).not.toHaveBeenCalled();
   });
 
   it("uploads avatar files through the backend avatar endpoint", async () => {

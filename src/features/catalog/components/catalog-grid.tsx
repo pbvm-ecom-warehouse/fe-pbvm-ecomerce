@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ProductCard } from "@/features/catalog/components/product-card";
 import { subscribeProductSync } from "@/features/catalog/services/admin-catalog.service";
 import { cn } from "@/lib/utils";
-import type { CatalogProduct } from "@/types/api";
+import type { CatalogCategory, CatalogProduct } from "@/types/api";
 
 function looksLikeObjectId(value: string) {
   return /^[a-f\d]{24}$/i.test(value);
@@ -14,9 +14,11 @@ function looksLikeObjectId(value: string) {
 
 export function CatalogGridContent({
   products: initialProducts,
+  categories = [],
   title,
 }: {
   products: CatalogProduct[];
+  categories?: CatalogCategory[];
   title: string;
 }) {
   const searchParams = useSearchParams();
@@ -37,6 +39,17 @@ export function CatalogGridContent({
     const tabs = new Map<string, { id: string; slug: string; label: string }>();
     tabs.set("all", { id: "all", slug: "all", label: "Tất cả" });
 
+    categories.forEach((category) => {
+      if (category.isDeleted === true || category.deletedAt) return;
+      const id = String(category.id || category._id || category.slug || "");
+      const slug = String(category.slug || id);
+      const label = String(category.name || category.slug || id);
+
+      if (slug && label && !looksLikeObjectId(label) && !tabs.has(slug)) {
+        tabs.set(slug, { id: id || slug, slug, label });
+      }
+    });
+
     products.forEach((product: any) => {
       const id = String(
         product.categoryId ||
@@ -54,7 +67,7 @@ export function CatalogGridContent({
     });
 
     return Array.from(tabs.values());
-  }, [products]);
+  }, [categories, products]);
 
   const handleCategoryChange = (slugOrId: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -142,6 +155,7 @@ export function CatalogGridContent({
 
 export function CatalogGrid(props: {
   products: CatalogProduct[];
+  categories?: CatalogCategory[];
   title: string;
 }) {
   return (

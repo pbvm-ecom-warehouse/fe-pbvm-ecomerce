@@ -108,6 +108,54 @@ export async function changePassword(input: ChangePasswordInput) {
   return unwrapApiData(response.data);
 }
 
+export async function verifyEmail(input: { email: string; code: string }) {
+  const response = await apiClient.post<ApiEnvelope<SuccessResponse> | SuccessResponse>(
+    "/auth/verify-email",
+    input,
+  );
+  return unwrapApiData(response.data);
+}
+
+export async function resendVerifyEmail() {
+  const response = await apiClient.post<ApiEnvelope<SuccessResponse> | SuccessResponse>(
+    "/auth/resend-verify-email",
+  );
+  return unwrapApiData(response.data);
+}
+
+export async function forgotPassword(email: string) {
+  const response = await apiClient.post<ApiEnvelope<SuccessResponse> | SuccessResponse>(
+    "/auth/forgot-password",
+    { email },
+  );
+  return unwrapApiData(response.data);
+}
+
+export async function resetPassword(input: {
+  email: string;
+  code: string;
+  newPassword: string;
+}) {
+  const response = await apiClient.post<ApiEnvelope<SuccessResponse> | SuccessResponse>(
+    "/auth/reset-password",
+    input,
+  );
+  return unwrapApiData(response.data);
+}
+
+export async function createEcomManager(input: {
+  email: string;
+  password: string;
+  name: string;
+  phone?: string;
+}) {
+  const response = await apiClient.post<ApiEnvelope<EcomMeResponse> | EcomMeResponse>(
+    "/auth/admin/create-manager",
+    input,
+  );
+  return unwrapApiData(response.data);
+}
+
 /**
  * Cập nhật thông tin cá nhân và upload avatar lên Backend
  */
@@ -143,17 +191,7 @@ export async function updateProfile(input: UpdateProfileInput) {
     return normalizeProfileResponse(unwrapApiData(response.data));
   }
 
-  const payload = {
-    ...(input.name !== undefined ? { name: input.name } : {}),
-    ...(input.phone !== undefined ? { phone: input.phone } : {}),
-    ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
-    ...(input.customerType !== undefined ? { customerType: input.customerType } : {}),
-  };
-
-  const response = await apiClient.patch<
-    ApiEnvelope<ProfileResponse> | ProfileResponse
-  >("/auth/profile", payload);
-  return normalizeProfileResponse(unwrapApiData(response.data));
+  throw new Error("BE chưa có API cập nhật hồ sơ khách hàng. Hiện FE chỉ nối được upload avatar qua /auth/me/avatar.");
 }
 
 export async function loginWithGoogle() {
