@@ -38,6 +38,7 @@ function PaymentReturnContent() {
 
   const [order, setOrder] = useState<any>(null);
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
+  const [hasClearedPaidCartItems, setHasClearedPaidCartItems] = useState(false);
 
   // Determine if payment is cancelled or failed
   const isCancelled = cancel === "true" || status === "CANCELLED" || code === "CANCELLED";
@@ -46,30 +47,48 @@ function PaymentReturnContent() {
     return <PaymentCancelContent />;
   }
 
-  // Determine if payment is successful
-  // PayOS uses code === "00" or status === "PAID" for successful transactions
-  const isSuccess =
+  // Gateway success is not enough; final paid state must come from the order API/DB.
+  const isGatewaySuccess =
     !isCancelled &&
-    (code === "00" || status === "PAID" || (code === null && status === null));
+    (code === "00" ||
+      status === "PAID" ||
+      status === "success" ||
+      status === "SUCCESS" ||
+      (code === null && status === null));
+  const isConfirmedPaid = order?.paymentStatus === "PAID";
+  const isPendingPaymentConfirmation =
+    isGatewaySuccess && !isLoadingOrder && !isConfirmedPaid;
 
   useEffect(() => {
-    if (isSuccess) {
-      if (typeof window !== "undefined") {
-        sessionStorage.removeItem("lastCreatedOrderId");
-        sessionStorage.removeItem("pendingCartBackup");
-      }
-      clearSelectedItems();
-    }
-  }, [isSuccess, clearSelectedItems]);
+    if (isConfirmedPaid && !hasClearedPaidCartItems) {
+      let isMounted = true;
+      async function clearPaidCartItems() {
+        await clearSelectedItems();
+        if (!isMounted) return;
+        setHasClearedPaidCartItems(true);
 
-  // Robustly load order details
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("lastCreatedOrderId");
+          sessionStorage.removeItem("pendingCartBackup");
+        }
+      }
+
+      clearPaidCartItems();
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [isConfirmedPaid, hasClearedPaidCartItems, clearSelectedItems]);
+
+  // Robustly load order details from the real API/DB state.
   useEffect(() => {
     let isMounted = true;
-    async function loadOrder() {
-      setIsLoadingOrder(true);
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    async function findOrderFromApi() {
       let foundOrder: any = null;
 
-      // 1. Try fetching by 24-character ObjectId if orderCodeParam is valid ObjectId
       if (orderCodeParam && /^[0-9a-fA-F]{24}$/.test(orderCodeParam)) {
         try {
           foundOrder = await getOrder(orderCodeParam);
@@ -78,7 +97,6 @@ function PaymentReturnContent() {
         }
       }
 
-      // 2. Try fetching using sessionStorage saved lastCreatedOrderId
       if (!foundOrder && typeof window !== "undefined") {
         const savedId = sessionStorage.getItem("lastCreatedOrderId");
         if (savedId && /^[0-9a-fA-F]{24}$/.test(savedId)) {
@@ -90,7 +108,6 @@ function PaymentReturnContent() {
         }
       }
 
-      // 3. Fallback: Search in user listOrders() matching code or orderCode
       if (!foundOrder) {
         try {
           const res = await listOrders();
@@ -106,13 +123,28 @@ function PaymentReturnContent() {
                   (o.code && String(o.code).replace(/[^0-9]/g, "") === cleanParam),
               );
             }
-            if (!foundOrder) {
+            if (!foundOrder && !isGatewaySuccess) {
               foundOrder = list[0]; // fallback to latest order
             }
           }
         } catch {
           // ignore
         }
+      }
+
+      return foundOrder;
+    }
+
+    async function loadOrder() {
+      setIsLoadingOrder(true);
+      let foundOrder: any = null;
+      const attempts = isGatewaySuccess ? 8 : 1;
+
+      for (let attempt = 0; attempt < attempts; attempt += 1) {
+        foundOrder = await findOrderFromApi();
+        if (!isMounted) return;
+        if (!isGatewaySuccess || foundOrder?.paymentStatus === "PAID") break;
+        await wait(1500);
       }
 
       if (isMounted) {
@@ -126,13 +158,31 @@ function PaymentReturnContent() {
     return () => {
       isMounted = false;
     };
-  }, [orderCodeParam]);
+  }, [orderCodeParam, isGatewaySuccess]);
 
   const displayOrderCode =
     order?.code ||
     (orderCodeParam ? (orderCodeParam.startsWith("ORD-") ? orderCodeParam : `ORD-${orderCodeParam}`) : null);
 
   const displayOrderId = order?.id || order?._id || orderCodeParam;
+  const unresolvedPaymentBadge = isLoadingOrder
+    ? "Đang kiểm tra thanh toán"
+    : isPendingPaymentConfirmation
+      ? "Chờ xác nhận từ hệ thống"
+      : "Giao dịch chưa hoàn tất";
+  const unresolvedPaymentTitle = isLoadingOrder
+    ? "Đang Xác Minh Thanh Toán"
+    : isPendingPaymentConfirmation
+      ? "Chưa Xác Nhận Đã Thanh Toán"
+      : "Thanh Toán Chưa Thành Công";
+  const unresolvedPaymentDescription = isLoadingOrder
+    ? "FE đang gọi API đơn hàng để lấy trạng thái thanh toán thật từ hệ thống."
+    : isPendingPaymentConfirmation
+      ? "Cổng thanh toán đã trả về thành công, nhưng API đơn hàng chưa trả paymentStatus=PAID. Vui lòng kiểm tra lại sau vài giây."
+      : `Giao dịch chưa hoàn tất hoặc PayOS trả mã lỗi ${code || status || "UNKNOWN"}.`;
+  const unresolvedPaymentNote = isPendingPaymentConfirmation
+    ? "Đơn hàng vẫn được giữ nguyên. FE chưa xóa hàng khỏi giỏ cho đến khi API trả paymentStatus=PAID."
+    : "Đơn hàng của bạn vẫn được giữ trên hệ thống. Bạn có thể kiểm tra lại trạng thái đơn hàng hoặc thực hiện thanh toán lại.";
 
   return (
     <div className="min-h-[80vh] bg-gradient-to-b from-emerald-50/50 via-background to-background py-12 px-4 sm:px-6 lg:px-8">
@@ -143,7 +193,7 @@ function PaymentReturnContent() {
           transition={{ duration: 0.5 }}
           className="space-y-6 text-center"
         >
-          {isSuccess ? (
+          {isConfirmedPaid ? (
             <>
               {/* Title & Description */}
               <div className="space-y-2">
@@ -267,10 +317,26 @@ function PaymentReturnContent() {
             /* Error / Failed outcome */
             <>
               <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
-                <AlertTriangle className="h-10 w-10" />
+                {isLoadingOrder ? (
+                  <RefreshCw className="h-10 w-10 animate-spin" />
+                ) : (
+                  <AlertTriangle className="h-10 w-10" />
+                )}
               </div>
 
               <div className="space-y-2">
+                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+                  {unresolvedPaymentBadge}
+                </Badge>
+                <h1 className="text-3xl font-extrabold text-foreground sm:text-4xl">
+                  {unresolvedPaymentTitle}
+                </h1>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  {unresolvedPaymentDescription}
+                </p>
+              </div>
+
+              <div className="hidden">
                 <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
                   Giao dịch chưa hoàn tất
                 </Badge>
@@ -286,7 +352,7 @@ function PaymentReturnContent() {
                 <CardContent className="pt-6 space-y-4">
                   <div className="text-sm space-y-2">
                     <p className="text-muted-foreground">
-                      Đơn hàng của bạn vẫn được giữ trên hệ thống. Bạn có thể kiểm tra lại trạng thái đơn hàng hoặc thực hiện thanh toán lại.
+                      {unresolvedPaymentNote}
                     </p>
                   </div>
                 </CardContent>
