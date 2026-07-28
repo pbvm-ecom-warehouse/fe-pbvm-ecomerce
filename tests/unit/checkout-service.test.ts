@@ -29,12 +29,15 @@ describe("checkout service", () => {
     cartStoreMock.fetchAndSyncCart.mockResolvedValue(undefined);
   });
 
-  it("uses the selected saved address id and does not auto-create duplicate addresses", async () => {
+  it("uses the selected saved address id and creates a PayOS deposit link for COD orders", async () => {
     apiClientMock.post.mockResolvedValueOnce({
       data: { data: { id: "order-1", code: "ORD-1" } },
     });
+    apiClientMock.get.mockResolvedValueOnce({
+      data: { data: { payUrl: "https://checkout.payos.vn/pay/order-1" } },
+    });
 
-    await createOrder({
+    const order = await createOrder({
       addressId: "address-1",
       customerName: "Vuong Hoai Bao",
       customerType: "B2B",
@@ -49,5 +52,7 @@ describe("checkout service", () => {
       addressId: "address-1",
       paymentMethod: "COD",
     });
+    expect(apiClientMock.get).toHaveBeenCalledWith("/payment/payos/create-url/order-1");
+    expect(order.paymentUrl).toBe("https://checkout.payos.vn/pay/order-1");
   });
 });

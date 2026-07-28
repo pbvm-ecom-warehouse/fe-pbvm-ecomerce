@@ -1,53 +1,45 @@
 "use client";
 
-import { useSearchParams, useRouter } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  CheckCircle2,
-  PackageCheck,
-  ShoppingBag,
-  FileText,
-  AlertTriangle,
-  RefreshCw,
-  CreditCard,
-  Calendar,
-  Check,
-} from "lucide-react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { OrderDetailClient } from "@/features/order/components/order-detail-client";
 import { getOrder, listOrders } from "@/features/order/services/order.service";
-import { useCartStore } from "@/stores/cart-store";
-import { formatCurrency } from "@/utils/format-currency";
-import { formatDateTime } from "@/utils/format-date";
 import { PaymentCancelContent } from "@/features/payment/components/payment-cancel-content";
+import { useCartStore } from "@/stores/cart-store";
+
+const paymentStatusRank: Record<string, number> = {
+  UNPAID: 0,
+  DEPOSIT_PAID: 1,
+  PROGRESS_PAID: 2,
+  PAID: 3,
+};
+
+const isObjectId = (value?: string | null) =>
+  Boolean(value && /^[0-9a-fA-F]{24}$/.test(value));
+
+function normalizeOrderKey(value?: string | null) {
+  return value ? String(value).replace(/[^0-9a-zA-Z]/g, "").toUpperCase() : "";
+}
 
 function PaymentReturnContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const clearSelectedItems = useCartStore((state) => state.clearSelectedItems);
 
-  // Extract query parameters from PayOS / payment gateway
   const code = searchParams.get("code");
   const status = searchParams.get("status");
   const cancel = searchParams.get("cancel");
   const orderCodeParam = searchParams.get("orderCode") || searchParams.get("orderId");
-  const paymentLinkId = searchParams.get("id");
 
-  const [order, setOrder] = useState<any>(null);
-  const [isLoadingOrder, setIsLoadingOrder] = useState(true);
+  const [resolvedOrderId, setResolvedOrderId] = useState<string | null>(null);
+  const [isResolvingOrder, setIsResolvingOrder] = useState(true);
+  const [resolveError, setResolveError] = useState("");
   const [hasClearedPaidCartItems, setHasClearedPaidCartItems] = useState(false);
 
-  // Determine if payment is cancelled or failed
   const isCancelled = cancel === "true" || status === "CANCELLED" || code === "CANCELLED";
-
-  if (isCancelled) {
-    return <PaymentCancelContent />;
-  }
-
-  // Gateway success is not enough; final paid state must come from the order API/DB.
   const isGatewaySuccess =
     !isCancelled &&
     (code === "00" ||
@@ -55,366 +47,229 @@ function PaymentReturnContent() {
       status === "success" ||
       status === "SUCCESS" ||
       (code === null && status === null));
-  const isConfirmedPaid = order?.paymentStatus === "PAID";
-  const isPendingPaymentConfirmation =
-    isGatewaySuccess && !isLoadingOrder && !isConfirmedPaid;
+
+  const identifierKeys = useMemo(() => {
+    const keys = new Set<string>();
+
+    if (orderCodeParam) {
+      keys.add(normalizeOrderKey(orderCodeParam));
+      keys.add(normalizeOrderKey(orderCodeParam.replace(/[^0-9]/g, "")));
+    }
+
+    if (typeof window !== "undefined") {
+      const savedId = sessionStorage.getItem("lastCreatedOrderId");
+      const savedCode = sessionStorage.getItem("lastCreatedOrderCode");
+      if (savedId) {
+        keys.add(normalizeOrderKey(savedId));
+        keys.add(normalizeOrderKey(savedId.replace(/[^0-9]/g, "")));
+      }
+      if (savedCode) {
+        keys.add(normalizeOrderKey(savedCode));
+        keys.add(normalizeOrderKey(savedCode.replace(/[^0-9]/g, "")));
+      }
+    }
+
+    return keys;
+  }, [orderCodeParam]);
 
   useEffect(() => {
-    if (isConfirmedPaid && !hasClearedPaidCartItems) {
-      let isMounted = true;
-      async function clearPaidCartItems() {
-        await clearSelectedItems();
-        if (!isMounted) return;
-        setHasClearedPaidCartItems(true);
+    if (isCancelled) return;
+
+    let isMounted = true;
+
+    const matchesOrder = (order: any) => {
+      if (!order || identifierKeys.size === 0) return false;
+      const keys = [
+        order.id,
+        order._id,
+        order.orderId,
+        order.code,
+        order.orderCode,
+        order.code ? String(order.code).replace(/[^0-9]/g, "") : null,
+        order.orderCode ? String(order.orderCode).replace(/[^0-9]/g, "") : null,
+      ].map(normalizeOrderKey);
+
+      return keys.some((key) => key && identifierKeys.has(key));
+    };
+
+    async function resolveOrderId() {
+      setIsResolvingOrder(true);
+      setResolveError("");
+
+      try {
+        if (isObjectId(orderCodeParam)) {
+          const order = await getOrder(String(orderCodeParam));
+          if (!isMounted) return;
+          setResolvedOrderId(order?.id || order?._id || String(orderCodeParam));
+          return;
+        }
 
         if (typeof window !== "undefined") {
-          sessionStorage.removeItem("lastCreatedOrderId");
-          sessionStorage.removeItem("lastCreatedOrderCode");
-          sessionStorage.removeItem("pendingCartBackup");
-        }
-      }
-
-      clearPaidCartItems();
-
-      return () => {
-        isMounted = false;
-      };
-    }
-  }, [isConfirmedPaid, hasClearedPaidCartItems, clearSelectedItems]);
-
-  // Robustly load order details from the real API/DB state.
-  useEffect(() => {
-    let isMounted = true;
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    async function findOrderFromApi() {
-      const candidates: any[] = [];
-      const identifiers = new Set<string>();
-      if (orderCodeParam) {
-        identifiers.add(String(orderCodeParam));
-        identifiers.add(String(orderCodeParam).replace(/[^0-9]/g, ""));
-      }
-      if (typeof window !== "undefined") {
-        const savedId = sessionStorage.getItem("lastCreatedOrderId");
-        const savedCode = sessionStorage.getItem("lastCreatedOrderCode");
-        if (savedId) {
-          identifiers.add(savedId);
-          identifiers.add(savedId.replace(/[^0-9]/g, ""));
-        }
-        if (savedCode) {
-          identifiers.add(savedCode);
-          identifiers.add(savedCode.replace(/[^0-9]/g, ""));
-        }
-      }
-
-      const isMatchingOrder = (candidate: any) => {
-        if (!candidate) return false;
-        const candidateKeys = [
-          candidate.id,
-          candidate._id,
-          candidate.orderId,
-          candidate.code,
-          candidate.orderCode,
-          candidate.code ? String(candidate.code).replace(/[^0-9]/g, "") : null,
-          candidate.orderCode ? String(candidate.orderCode).replace(/[^0-9]/g, "") : null,
-        ]
-          .filter(Boolean)
-          .map((value) => String(value));
-
-        return candidateKeys.some((key) => identifiers.has(key));
-      };
-
-      const collectMatchingFromList = async (filter?: { paymentStatus?: string }) => {
-        try {
-          const res = await listOrders(filter);
-          const list = Array.isArray(res) ? res : res?.data || [];
-          candidates.push(...list.filter(isMatchingOrder));
-          if (!isGatewaySuccess && candidates.length === 0 && list.length > 0) {
-            candidates.push(list[0]);
+          const savedId = sessionStorage.getItem("lastCreatedOrderId");
+          if (isObjectId(savedId)) {
+            const order = await getOrder(String(savedId));
+            if (!isMounted) return;
+            setResolvedOrderId(order?.id || order?._id || String(savedId));
+            return;
           }
-        } catch {
-          // ignore
         }
-      };
 
-      if (orderCodeParam && /^[0-9a-fA-F]{24}$/.test(orderCodeParam)) {
-        try {
-          candidates.push(await getOrder(orderCodeParam));
-        } catch {
-          // ignore
-        }
-      }
-
-      if (typeof window !== "undefined") {
-        const savedId = sessionStorage.getItem("lastCreatedOrderId");
-        if (savedId && /^[0-9a-fA-F]{24}$/.test(savedId)) {
+        const candidates: any[] = [];
+        const collectOrders = async (paymentStatus?: string) => {
           try {
-            candidates.push(await getOrder(savedId));
+            const response = await listOrders(paymentStatus ? { paymentStatus } : undefined);
+            const orders = Array.isArray(response) ? response : response?.data || [];
+            candidates.push(...orders);
           } catch {
-            // ignore
+            // The detail page will show an API error if the order cannot be loaded later.
           }
+        };
+
+        await collectOrders();
+        if (isGatewaySuccess) {
+          await collectOrders("DEPOSIT_PAID");
+          await collectOrders("PROGRESS_PAID");
+          await collectOrders("PAID");
+        }
+
+        const matchedOrder = candidates
+          .filter(matchesOrder)
+          .sort(
+            (a, b) =>
+              (paymentStatusRank[String(b?.paymentStatus || "UNPAID")] ?? 0) -
+              (paymentStatusRank[String(a?.paymentStatus || "UNPAID")] ?? 0),
+          )[0];
+
+        if (!isMounted) return;
+
+        if (matchedOrder) {
+          setResolvedOrderId(matchedOrder.id || matchedOrder._id);
+        } else {
+          setResolveError("Không tìm thấy đơn hàng tương ứng với dữ liệu PayOS trả về.");
+        }
+      } catch {
+        if (isMounted) {
+          setResolveError("Không tải được thông tin đơn hàng từ API.");
+        }
+      } finally {
+        if (isMounted) {
+          setIsResolvingOrder(false);
         }
       }
-
-      await collectMatchingFromList();
-      if (isGatewaySuccess) {
-        await collectMatchingFromList({ paymentStatus: "PAID" });
-      }
-
-      return (
-        candidates.find((candidate) => candidate?.paymentStatus === "PAID") ||
-        candidates.find(isMatchingOrder) ||
-        candidates[0] ||
-        null
-      );
     }
 
-    async function loadOrder() {
-      setIsLoadingOrder(true);
-      let foundOrder: any = null;
-      const attempts = isGatewaySuccess ? 15 : 1;
-
-      for (let attempt = 0; attempt < attempts; attempt += 1) {
-        foundOrder = await findOrderFromApi();
-        if (!isMounted) return;
-        if (!isGatewaySuccess || foundOrder?.paymentStatus === "PAID") break;
-        await wait(2000);
-      }
-
-      if (isMounted) {
-        setOrder(foundOrder);
-        setIsLoadingOrder(false);
-      }
-    }
-
-    loadOrder();
+    resolveOrderId();
 
     return () => {
       isMounted = false;
     };
-  }, [orderCodeParam, isGatewaySuccess]);
+  }, [identifierKeys, isCancelled, isGatewaySuccess, orderCodeParam]);
 
-  const displayOrderCode =
-    order?.code ||
-    (orderCodeParam ? (orderCodeParam.startsWith("ORD-") ? orderCodeParam : `ORD-${orderCodeParam}`) : null);
+  useEffect(() => {
+    if (!isGatewaySuccess || !resolvedOrderId || hasClearedPaidCartItems) return;
 
-  const displayOrderId = order?.id || order?._id || orderCodeParam;
-  const unresolvedPaymentBadge = isLoadingOrder
-    ? "Đang kiểm tra thanh toán"
-    : isPendingPaymentConfirmation
-      ? "Chờ xác nhận từ hệ thống"
-      : "Giao dịch chưa hoàn tất";
-  const unresolvedPaymentTitle = isLoadingOrder
-    ? "Đang Xác Minh Thanh Toán"
-    : isPendingPaymentConfirmation
-      ? "Chưa Xác Nhận Đã Thanh Toán"
-      : "Thanh Toán Chưa Thành Công";
-  const unresolvedPaymentDescription = isLoadingOrder
-    ? "FE đang gọi API đơn hàng để lấy trạng thái thanh toán thật từ hệ thống."
-    : isPendingPaymentConfirmation
-      ? "Cổng thanh toán đã trả về thành công, nhưng API đơn hàng chưa trả paymentStatus=PAID. Vui lòng kiểm tra lại sau vài giây."
-      : `Giao dịch chưa hoàn tất hoặc PayOS trả mã lỗi ${code || status || "UNKNOWN"}.`;
-  const unresolvedPaymentNote = isPendingPaymentConfirmation
-    ? "Đơn hàng vẫn được giữ nguyên. FE chưa xóa hàng khỏi giỏ cho đến khi API trả paymentStatus=PAID."
-    : "Đơn hàng của bạn vẫn được giữ trên hệ thống. Bạn có thể kiểm tra lại trạng thái đơn hàng hoặc thực hiện thanh toán lại.";
+    let isMounted = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const orderId = resolvedOrderId;
+
+    const startedPaymentStatus =
+      typeof window !== "undefined"
+        ? sessionStorage.getItem("lastPaymentStartedStatus") || "UNPAID"
+        : "UNPAID";
+    const startedPaymentRank = paymentStatusRank[startedPaymentStatus] ?? 0;
+
+    async function clearCartWhenPaymentConfirmed() {
+      try {
+        const order = await getOrder(orderId);
+        if (!isMounted) return;
+
+        const currentPaymentRank =
+          paymentStatusRank[String(order?.paymentStatus || "UNPAID")] ?? 0;
+        const isConfirmedPaid =
+          currentPaymentRank > startedPaymentRank || order?.paymentStatus === "PAID";
+
+        if (isConfirmedPaid) {
+          await clearSelectedItems();
+          if (!isMounted) return;
+          setHasClearedPaidCartItems(true);
+
+          if (typeof window !== "undefined") {
+            sessionStorage.removeItem("lastCreatedOrderId");
+            sessionStorage.removeItem("lastCreatedOrderCode");
+            sessionStorage.removeItem("lastPaymentStartedStatus");
+            sessionStorage.removeItem("pendingCartBackup");
+          }
+          return;
+        }
+      } catch {
+        // Keep polling; OrderDetailClient also refetches and displays the real API state.
+      }
+
+      if (isMounted) {
+        timeoutId = setTimeout(clearCartWhenPaymentConfirmed, 2000);
+      }
+    }
+
+    clearCartWhenPaymentConfirmed();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [
+    clearSelectedItems,
+    hasClearedPaidCartItems,
+    isGatewaySuccess,
+    resolvedOrderId,
+  ]);
+
+  if (isCancelled) {
+    return <PaymentCancelContent />;
+  }
+
+  if (isResolvingOrder) {
+    return (
+      <main className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center px-4 py-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="size-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm font-semibold text-muted-foreground">
+            Đang mở chi tiết đơn hàng...
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!resolvedOrderId) {
+    return (
+      <main className="mx-auto flex min-h-[60vh] w-full max-w-7xl items-center justify-center px-4 py-6">
+        <div className="max-w-md space-y-4 rounded-2xl border border-amber-200 bg-amber-50/60 p-6 text-center">
+          <p className="text-base font-black text-amber-900">
+            Chưa mở được chi tiết đơn hàng
+          </p>
+          <p className="text-sm leading-6 text-amber-800">
+            {resolveError || "FE chưa tìm được mã đơn hàng từ dữ liệu PayOS trả về."}
+          </p>
+          <Button
+            type="button"
+            onClick={() => router.push("/orders")}
+            className="gap-2 rounded-xl"
+          >
+            <ArrowLeft className="size-4" />
+            Về danh sách đơn hàng
+          </Button>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <div className="min-h-[80vh] bg-gradient-to-b from-emerald-50/50 via-background to-background py-12 px-4 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-3xl">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="space-y-6 text-center"
-        >
-          {isConfirmedPaid ? (
-            <>
-              {/* Title & Description */}
-              <div className="space-y-2">
-                <h1 className="text-3xl font-extrabold text-foreground sm:text-4xl tracking-tight">
-                  Thanh Toán Thành Công!
-                </h1>
-                <p className="text-base text-muted-foreground max-w-lg mx-auto">
-                  Cảm ơn bạn đã hoàn tất thanh toán. Đơn hàng của bạn đã được hệ thống ghi nhận và đang chuyển tới bộ phận xử lý.
-                </p>
-              </div>
-
-              {/* Details Card */}
-              <Card className="mt-8 text-left border-emerald-100/80 shadow-xl shadow-emerald-500/5 dark:border-emerald-900/30">
-                <CardHeader className="border-b bg-emerald-50/40 dark:bg-emerald-950/20 pb-4">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-foreground">
-                      <PackageCheck className="h-5 w-5 text-emerald-600" /> Thông tin giao dịch
-                    </CardTitle>
-                    <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
-                      Đã thanh toán
-                    </Badge>
-                  </div>
-                  <CardDescription>
-                    Mã phản hồi từ PayOS: <span className="font-mono text-emerald-700 font-semibold dark:text-emerald-400">{code || "00"}</span>
-                  </CardDescription>
-                </CardHeader>
-
-                <CardContent className="pt-6 space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                    {displayOrderCode && (
-                      <div className="p-3 rounded-lg bg-muted/50 border space-y-1">
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground" /> Mã đơn hàng
-                        </span>
-                        <p className="font-mono font-bold text-base text-foreground">
-                          #{displayOrderCode}
-                        </p>
-                      </div>
-                    )}
-
-                    {paymentLinkId && (
-                      <div className="p-3 rounded-lg bg-muted/50 border space-y-1">
-                        <span className="text-xs text-muted-foreground flex items-center gap-1">
-                          <CreditCard className="h-3.5 w-3.5 text-muted-foreground" /> Mã giao dịch PayOS
-                        </span>
-                        <p className="font-mono font-medium text-xs text-foreground truncate">
-                          {paymentLinkId}
-                        </p>
-                      </div>
-                    )}
-
-                    <div className="p-3 rounded-lg bg-muted/50 border space-y-1">
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <CreditCard className="h-3.5 w-3.5 text-muted-foreground" /> Phương thức
-                      </span>
-                      <p className="font-medium text-foreground">
-                        Chuyển khoản / PayOS
-                      </p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted/50 border space-y-1">
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" /> Thời gian
-                      </span>
-                      <p className="font-medium text-foreground">
-                        {formatDateTime(new Date().toISOString())}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Order Details Preview */}
-                  {order && (
-                    <div className="mt-4 pt-4 border-t space-y-3">
-                      <div className="flex justify-between items-center text-sm font-medium">
-                        <span className="text-muted-foreground">Tổng tiền thanh toán:</span>
-                        <span className="text-lg font-extrabold text-emerald-600">
-                          {formatCurrency(order.totalAmount || order.total || 0)}
-                        </span>
-                      </div>
-                      {(order.recipientName || order.customerName) && (
-                        <div className="text-xs text-muted-foreground flex justify-between">
-                          <span>Người nhận:</span>
-                          <span className="font-medium text-foreground">
-                            {order.recipientName || order.customerName} {order.phone ? `- ${order.phone}` : ""}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2 border border-emerald-200/50">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
-                    <span>
-                      Hóa đơn và thông báo xác nhận đơn hàng đã được cập nhật trên hệ thống. Chúng tôi sẽ sớm liên hệ và giao hàng tới bạn.
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* CTAs */}
-              <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <Button
-                  size="lg"
-                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-semibold shadow-lg shadow-emerald-600/20"
-                  onClick={() => router.push(displayOrderId ? `/orders?id=${displayOrderId}` : "/orders")}
-                >
-                  <FileText className="h-4 w-4" /> Xem đơn hàng của tôi
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full sm:w-auto gap-2"
-                  onClick={() => router.push("/products")}
-                >
-                  <ShoppingBag className="h-4 w-4" /> Tiếp tục mua sắm
-                </Button>
-              </div>
-            </>
-          ) : (
-            /* Error / Failed outcome */
-            <>
-              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400">
-                {isLoadingOrder ? (
-                  <RefreshCw className="h-10 w-10 animate-spin" />
-                ) : (
-                  <AlertTriangle className="h-10 w-10" />
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
-                  {unresolvedPaymentBadge}
-                </Badge>
-                <h1 className="text-3xl font-extrabold text-foreground sm:text-4xl">
-                  {unresolvedPaymentTitle}
-                </h1>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  {unresolvedPaymentDescription}
-                </p>
-              </div>
-
-              <div className="hidden">
-                <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
-                  Giao dịch chưa hoàn tất
-                </Badge>
-                <h1 className="text-3xl font-extrabold text-foreground sm:text-4xl">
-                  Thanh Toán Chưa Thành Công
-                </h1>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Giao dịch của bạn bị ngắt kết nối hoặc phản hồi mã lỗi từ PayOS (<span className="font-mono font-bold text-amber-700">{code || "UNKNOWN"}</span>).
-                </p>
-              </div>
-
-              <Card className="mt-6 text-left border-amber-200">
-                <CardContent className="pt-6 space-y-4">
-                  <div className="text-sm space-y-2">
-                    <p className="text-muted-foreground">
-                      {unresolvedPaymentNote}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
-                <Button
-                  size="lg"
-                  className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white gap-2 font-semibold"
-                  onClick={() => router.push(displayOrderId ? `/orders?id=${displayOrderId}` : "/orders")}
-                >
-                  <RefreshCw className="h-4 w-4" /> Kiểm tra & Thanh toán lại
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className="w-full sm:w-auto gap-2"
-                  onClick={() => router.push("/cart")}
-                >
-                  <ShoppingBag className="h-4 w-4" /> Xem giỏ hàng
-                </Button>
-              </div>
-            </>
-          )}
-        </motion.div>
-      </div>
-    </div>
+    <main className="mx-auto w-full max-w-7xl px-4 py-6">
+      <OrderDetailClient
+        orderId={resolvedOrderId}
+        onBack={() => router.push("/orders")}
+      />
+    </main>
   );
 }
 
@@ -422,9 +277,8 @@ export default function PaymentReturnPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-3">
-          <div className="h-10 w-10 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin" />
-          <p className="text-sm font-medium text-muted-foreground">Đang xác minh kết quả thanh toán...</p>
+        <div className="flex h-64 items-center justify-center">
+          <div className="size-8 animate-spin rounded-full border-2 border-emerald-200 border-t-emerald-600" />
         </div>
       }
     >

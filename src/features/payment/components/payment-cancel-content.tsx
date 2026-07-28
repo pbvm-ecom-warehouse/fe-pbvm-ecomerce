@@ -124,6 +124,44 @@ export function PaymentCancelContent() {
     order?.code ||
     (orderCodeParam ? (orderCodeParam.startsWith("ORD-") ? orderCodeParam : `ORD-${orderCodeParam}`) : null);
 
+  const findRetryPaymentOrderId = async () => {
+    const directId = order?.id || order?._id;
+    if (directId && /^[0-9a-fA-F]{24}$/.test(String(directId))) {
+      return String(directId);
+    }
+
+    if (typeof window !== "undefined") {
+      const savedId = sessionStorage.getItem("lastCreatedOrderId");
+      if (savedId && /^[0-9a-fA-F]{24}$/.test(savedId)) {
+        return savedId;
+      }
+    }
+
+    const lookupCode =
+      order?.code ||
+      orderCodeParam ||
+      (typeof window !== "undefined" ? sessionStorage.getItem("lastCreatedOrderCode") : null);
+    if (!lookupCode) return null;
+
+    const cleanCode = String(lookupCode).replace(/[^0-9]/g, "");
+    const res = await listOrders();
+    const list = Array.isArray(res) ? res : res?.data || [];
+    const matchedOrder = list.find(
+      (item: any) =>
+        item.id === lookupCode ||
+        item._id === lookupCode ||
+        String(item.code) === String(lookupCode) ||
+        String(item.orderCode) === String(lookupCode) ||
+        (item.code && String(item.code).replace(/[^0-9]/g, "") === cleanCode) ||
+        (item.orderCode && String(item.orderCode).replace(/[^0-9]/g, "") === cleanCode),
+    );
+
+    const matchedId = matchedOrder?.id || matchedOrder?._id;
+    return matchedId && /^[0-9a-fA-F]{24}$/.test(String(matchedId))
+      ? String(matchedId)
+      : null;
+  };
+
   const handleRetryPayment = async () => {
     if (!targetOrderId) {
       toast.error("Không tìm thấy thông tin đơn hàng để thanh toán lại.");
@@ -134,11 +172,25 @@ export function PaymentCancelContent() {
     try {
       setIsRepaying(true);
       toast.loading("Đang khởi tạo lại liên kết thanh toán PayOS...");
+      const retryOrderId = await findRetryPaymentOrderId();
+      if (!retryOrderId) {
+        toast.error("Không tìm thấy thông tin đơn hàng để thanh toán lại.");
+        router.push("/orders");
+        return;
+      }
+
       const payUrlRes = await apiClient.get<any>(
-        `/payment/payos/create-url/${targetOrderId}`,
+        `/payment/payos/create-url/${retryOrderId}`,
       );
       const payUrlData = unwrapApiData(payUrlRes.data);
       if (payUrlData.payUrl) {
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("lastCreatedOrderId", retryOrderId);
+          if (displayOrderCode) {
+            sessionStorage.setItem("lastCreatedOrderCode", String(displayOrderCode));
+          }
+          sessionStorage.setItem("lastPaymentStartedStatus", order?.paymentStatus || "UNPAID");
+        }
         toast.success("Đang chuyển hướng sang PayOS...");
         window.location.href = payUrlData.payUrl;
       } else {

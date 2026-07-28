@@ -99,6 +99,8 @@ export function mapCartItemsToCheckoutItems(items: CartItem[]) {
 
 export async function createOrder(payload: CreateOrderPayload) {
   type CreateOrderResponse = {
+    id?: string;
+    code?: string;
     orderId: string;
     paymentUrl?: string;
     offline?: boolean;
@@ -131,22 +133,23 @@ export async function createOrder(payload: CreateOrderPayload) {
       },
     );
 
-    const orderData = unwrapApiData(checkoutResponse.data);
+    const checkoutPayload = unwrapApiData(checkoutResponse.data) as any;
+    const orderData = checkoutPayload?.data ?? checkoutPayload;
     const orderId = orderData.id || orderData._id;
 
-    // 3. If online payment, generate PayOS URL
+    // 3. Generate PayOS URL for the next payment stage.
+    // Multi-stage COD orders still require an online deposit/progress payment.
     let paymentUrl: string | undefined = undefined;
-    if (paymentMethod === "ONLINE") {
-      try {
-        const payUrlRes = await apiClient.get<any>(
-          `/payment/payos/create-url/${orderId}`,
-        );
-        const payUrlData = unwrapApiData(payUrlRes.data);
-        paymentUrl = payUrlData.payUrl;
-      } catch (payErr) {
-        console.error("Failed to create PayOS URL:", payErr);
-        throw payErr;
-      }
+    try {
+      const payUrlRes = await apiClient.get<any>(
+        `/payment/payos/create-url/${orderId}`,
+      );
+      const payUrlPayload = unwrapApiData(payUrlRes.data) as any;
+      const payUrlData = payUrlPayload?.data ?? payUrlPayload;
+      paymentUrl = payUrlData.payUrl;
+    } catch (payErr) {
+      console.error("Failed to create PayOS URL:", payErr);
+      throw payErr;
     }
 
     return {
