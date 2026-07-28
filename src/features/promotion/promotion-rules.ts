@@ -1,11 +1,21 @@
-export function applyPromotion(subtotal: number, code?: string) {
-  if (!code) {
-    return 0;
-  }
+import { apiClient } from "@/lib/api-client";
+import { type ApiEnvelope, unwrapApiData } from "@/lib/api-contract";
 
-  if (code.toUpperCase() === "B2BSTART") {
-    return Math.min(subtotal * 0.05, 500_000);
-  }
+export type ValidatePromotionInput = {
+  code: string;
+  orderValue: number;
+};
 
-  return 0;
+export type ValidatePromotionResult = {
+  valid: boolean;
+  code: string;
+  discountAmount: number;
+  message?: string;
+};
+
+export async function validatePromotion(input: ValidatePromotionInput) {
+  const response = await apiClient.post<
+    ApiEnvelope<ValidatePromotionResult> | ValidatePromotionResult
+  >("/promotions/validate", input);
+  return unwrapApiData(response.data);
 }

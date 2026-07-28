@@ -24,9 +24,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuthStore } from "@/stores/auth-store";
 import { logout, changePassword, updateProfile } from "@/features/auth/services/auth.service";
 import { getAddresses, addAddress, deleteAddress, setDefaultAddress, updateAddress } from "@/features/checkout/services/checkout.service";
+
+const addressLabelOptions = ["Nhà riêng", "Văn phòng", "Cửa hàng", "Kho hàng", "Địa chỉ khác"];
 
 export default function AccountPage() {
   const router = useRouter();
@@ -92,7 +101,7 @@ export default function AccountPage() {
 
   const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addrRecipient || !addrPhone || !addrLine) {
+    if (!addrLabel || !addrRecipient || !addrPhone || !addrLine) {
       toast.error("Vui lòng điền đầy đủ các thông tin bắt buộc.");
       return;
     }
@@ -101,7 +110,7 @@ export default function AccountPage() {
       if (editingAddressId) {
         // Edit mode
         const updated = await updateAddress(editingAddressId, {
-          label: addrLabel || "Địa chỉ khác",
+          label: addrLabel,
           recipientName: addrRecipient,
           phone: addrPhone,
           line: addrLine,
@@ -114,7 +123,7 @@ export default function AccountPage() {
       } else {
         // Create mode
         const updated = await addAddress({
-          label: addrLabel || "Địa chỉ khác",
+          label: addrLabel,
           recipientName: addrRecipient,
           phone: addrPhone,
           line: addrLine,
@@ -215,26 +224,21 @@ export default function AccountPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64String = reader.result as string;
-      setIsUploadingAvatar(true);
-      try {
-        const updated = await updateProfile({ avatar: base64String });
-        setUser({
-          ...user!,
-          avatar: updated.avatar || base64String,
-        });
-        toast.success("Cập nhật ảnh đại diện thành công!");
-      } catch (err: any) {
-        console.error(err);
-        const errMsg = err.response?.data?.message || "Lỗi khi cập nhật ảnh đại diện.";
-        toast.error(errMsg);
-      } finally {
-        setIsUploadingAvatar(false);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingAvatar(true);
+    try {
+      const updated = await updateProfile({ avatarFile: file });
+      setUser({
+        ...user!,
+        avatar: updated.avatar,
+      });
+      toast.success("Cập nhật ảnh đại diện thành công!");
+    } catch (err: any) {
+      console.error(err);
+      const errMsg = err.response?.data?.message || "Lỗi khi cập nhật ảnh đại diện.";
+      toast.error(errMsg);
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -261,7 +265,10 @@ export default function AccountPage() {
       setIsEditing(false);
     } catch (err: any) {
       console.error(err);
-      const errMsg = err.response?.data?.message || "Cập nhật thất bại. Vui lòng kiểm tra lại.";
+      const errMsg =
+        err.response?.status === 404
+          ? "BE chưa có API PATCH /auth/profile để cập nhật hồ sơ."
+          : err.response?.data?.message || "Cập nhật thất bại. Vui lòng kiểm tra lại.";
       toast.error(errMsg);
     } finally {
       setIsSavingProfile(false);
@@ -552,13 +559,25 @@ export default function AccountPage() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="addrLabel" className="text-xs font-bold text-[#78858F] tracking-wide">Tên gợi nhớ (Ví dụ: Nhà riêng, Công ty)</Label>
-                      <Input
-                        id="addrLabel"
+                      <Select
                         value={addrLabel}
-                        onChange={(e) => setAddrLabel(e.target.value)}
-                        placeholder="Nhà riêng"
-                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs text-[#253D4E]"
-                      />
+                        onValueChange={setAddrLabel}
+                      >
+                        <SelectTrigger id="addrLabel" className="h-10 min-h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-0 text-xs leading-none text-[#253D4E] shadow-xs transition-colors hover:border-primary/40 focus-visible:border-primary focus-visible:ring-primary/15">
+                          <SelectValue placeholder="Chọn tên địa chỉ" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
+                          {addressLabelOptions.map((label) => (
+                            <SelectItem
+                              key={label}
+                              value={label}
+                              className="h-9 rounded-lg px-3 pr-8 text-sm font-medium text-slate-700 focus:bg-emerald-50 focus:text-[#253D4E] data-[state=checked]:bg-emerald-50 data-[state=checked]:font-bold data-[state=checked]:text-[#253D4E]"
+                            >
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="addrRecipient" className="text-xs font-bold text-[#78858F] tracking-wide">Họ tên người nhận *</Label>

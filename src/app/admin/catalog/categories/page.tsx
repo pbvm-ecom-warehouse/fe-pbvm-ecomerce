@@ -231,7 +231,23 @@ export default function AdminCategoriesPage() {
     }
   };
 
-  const handleRestoreCategoryConfirm = async (_cat: any) => {};
+  const handleRestoreCategoryConfirm = async (cat: any) => {
+    const cId = cat.id || cat._id;
+    if (!cId) return;
+
+    setRestoringId(cId);
+    try {
+      await adminRestoreCategory(cId, cat.slug, products);
+      toast.success(`Đã khôi phục danh mục "${cat.name}" thành công.`);
+      await revalidateShopCache();
+      await Promise.all([fetchData(), fetchHiddenCategories()]);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.response?.data?.message || "Khôi phục danh mục thất bại.");
+    } finally {
+      setRestoringId(null);
+    }
+  };
 
   // ─── Revalidate shop ecom cache sau khi CRUD danh mục ───────────────────────
   const revalidateShopCache = async () => {
@@ -252,9 +268,10 @@ export default function AdminCategoriesPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [catRes, prodRes] = await Promise.all([
+      const [catRes, prodRes, hiddenCatRes] = await Promise.all([
         adminListCategories(),
         adminListProducts(),
+        adminListHiddenCategories(),
       ]);
 
       const catList = catRes || [];
@@ -262,6 +279,7 @@ export default function AdminCategoriesPage() {
 
       setCategories(catList);
       setProducts(prodList);
+      setHiddenCategories(hiddenCatRes || []);
 
       // Keep activeCategory in sync if updated
       if (activeCategory) {
@@ -695,20 +713,18 @@ export default function AdminCategoriesPage() {
                 Duyệt &amp; Đẩy hàng
               </Button>
 
-              {hiddenCategories.length > 0 && (
-                <Button
-                  onClick={() => {
-                    fetchHiddenCategories();
-                    setIsHiddenModalOpen(true);
-                  }}
-                  variant="outline"
-                  className="h-9 rounded-xl border border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-2xs"
-                  title="Xem và khôi phục các danh mục đã ẩn"
-                >
-                  <EyeOff className="size-3.5 text-amber-600" />
-                  <span>Danh mục đã ẩn ({hiddenCategories.length})</span>
-                </Button>
-              )}
+              <Button
+                onClick={() => {
+                  fetchHiddenCategories();
+                  setIsHiddenModalOpen(true);
+                }}
+                variant="outline"
+                className="h-9 rounded-xl border border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 flex items-center gap-1.5 cursor-pointer text-xs font-bold shadow-2xs"
+                title="Xem và khôi phục các danh mục đã ẩn"
+              >
+                <EyeOff className="size-3.5 text-amber-600" />
+                <span>Danh mục đã ẩn ({hiddenCategories.length})</span>
+              </Button>
 
               <Button
                 onClick={fetchData}

@@ -1,133 +1,157 @@
-import type { CupMaterialType, CupStyle, CupSize } from "@/types/api";
+import type { CupMaterialType, CupSize, CupStyle } from "@/types/api";
 import {
   CUP_MATERIAL_LABELS,
-  CUP_STYLE_LABELS,
   CUP_SIZE_LABELS,
+  CUP_STYLE_LABELS,
 } from "@/features/cup-designer/utils/artwork";
+import { coerceVariantAttributes } from "@/features/catalog/utils/variant-attributes";
 
-function parseSpecsFromText(text: string) {
-  const t = (text || "").toLowerCase();
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .toLowerCase();
+}
 
-  let size = "";
-  if (t.includes("1000ml") || t.includes("1000 ml") || t.includes("1l")) size = "1000ml";
-  else if (t.includes("750ml") || t.includes("750 ml") || t.includes("750")) size = "750ml";
-  else if (t.includes("700ml") || t.includes("700 ml") || t.includes("700")) size = "700ml";
-  else if (t.includes("500ml") || t.includes("500 ml") || t.includes("500")) size = "500ml";
-  else if (t.includes("350ml") || t.includes("350 ml") || t.includes("350")) size = "350ml";
+function getItemKind(item: any): "cup" | "ingredient" | "packaging" | "generic" {
+  const source = normalizeText(
+    [item.name, item.slug, item.sku, item.productRefId, item.category, item.categoryName]
+      .filter(Boolean)
+      .join(" "),
+  );
 
-  let material = "";
-  if (t.includes("pet") || t.includes("nhựa trong") || t.includes("trong")) material = "clear";
-  else if (t.includes("pp") || t.includes("nhựa mờ") || t.includes("mờ")) material = "frosted";
-  else if (t.includes("giấy") || t.includes("paper") || t.includes("kraft")) material = "paper";
-  else if (t.includes("thủy tinh") || t.includes("glass")) material = "glass";
+  if (source.includes("bao bi") || source.includes("packaging") || source.includes("hop") || source.includes("tui") || source.includes("nap")) {
+    return "packaging";
+  }
+  if (source.includes("nguyen lieu") || source.includes("ingredient") || source.includes("tra") || source.includes("sua") || source.includes("bot") || source.includes("siro") || source.includes("topping")) {
+    return "ingredient";
+  }
+  if (source.includes("ly") || source.includes("cup") || item.isPrintItem || item.fulfillmentType === "CUSTOM_PRINT") {
+    return "cup";
+  }
+  return "generic";
+}
 
-  let style = "";
-  if (t.includes("bầu") || t.includes("u-shape") || t.includes("đáy u")) style = "u_shape";
-  else if (t.includes("tim")) style = "heart";
-  else if (t.includes("thẳng") || t.includes("straight")) style = "straight";
-  else if (t.includes("mug") || t.includes("quai")) style = "mug";
+function prettifyAttributeKey(key: string) {
+  return key
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
-  return { size, material, style };
+function labelFor(key: string, kind: ReturnType<typeof getItemKind>) {
+  const normalizedKey = normalizeText(key).replace(/[^a-z0-9]+/g, "");
+  const common: Record<string, string> = {
+    color: "Màu sắc",
+    mau: "Màu sắc",
+    mausac: "Màu sắc",
+    brand: "Thương hiệu",
+    thuonghieu: "Thương hiệu",
+    origin: "Xuất xứ",
+    xuatxu: "Xuất xứ",
+  };
+  const cup: Record<string, string> = {
+    capacity: "Dung tích",
+    size: "Dung tích",
+    spec: "Dung tích",
+    dungtich: "Dung tích",
+    material: "Chất liệu",
+    chatlieu: "Chất liệu",
+    style: "Kiểu dáng",
+    kieudang: "Kiểu dáng",
+  };
+  const ingredient: Record<string, string> = {
+    capacity: "Quy cách",
+    size: "Khối lượng",
+    spec: "Quy cách",
+    weight: "Khối lượng",
+    khoiluong: "Khối lượng",
+    flavor: "Hương vị",
+    huongvi: "Hương vị",
+    material: "Thành phần",
+    thanhphan: "Thành phần",
+  };
+  const packaging: Record<string, string> = {
+    capacity: "Dung tích",
+    size: "Kích thước",
+    spec: "Kích thước",
+    kichthuoc: "Kích thước",
+    material: "Chất liệu",
+    chatlieu: "Chất liệu",
+    style: "Kiểu dáng",
+    kieudang: "Kiểu dáng",
+    thickness: "Độ dày",
+    doday: "Độ dày",
+  };
+
+  if (kind === "ingredient") return ingredient[normalizedKey] || common[normalizedKey] || prettifyAttributeKey(key);
+  if (kind === "packaging") return packaging[normalizedKey] || common[normalizedKey] || prettifyAttributeKey(key);
+  if (kind === "cup") return cup[normalizedKey] || common[normalizedKey] || prettifyAttributeKey(key);
+  return common[normalizedKey] || cup[normalizedKey] || ingredient[normalizedKey] || packaging[normalizedKey] || prettifyAttributeKey(key);
+}
+
+function displayValue(key: string, value: string, kind: ReturnType<typeof getItemKind>) {
+  if (kind !== "cup") return value;
+  const normalizedKey = normalizeText(key).replace(/[^a-z0-9]+/g, "");
+  if (normalizedKey === "size" || normalizedKey === "capacity" || normalizedKey === "dungtich") {
+    return CUP_SIZE_LABELS[value as CupSize] || value;
+  }
+  if (normalizedKey === "material" || normalizedKey === "chatlieu") {
+    return CUP_MATERIAL_LABELS[value as CupMaterialType] || value;
+  }
+  if (normalizedKey === "style" || normalizedKey === "kieudang") {
+    return CUP_STYLE_LABELS[value as CupStyle] || value;
+  }
+  return value;
 }
 
 export function CupConfigDetails({ item }: { item: any }) {
   if (!item) return null;
 
-  // Parse artwork from designFile (object or JSON string)
   let artwork = item.designFile?.artwork;
   if (!artwork && typeof item.designFile === "string") {
     try {
       const parsed = JSON.parse(item.designFile);
       artwork = parsed.artwork;
-    } catch {
-      // ignore
-    }
+    } catch {}
   }
 
-  const parsedFromText = parseSpecsFromText(`${item.name || ""} ${item.slug || ""} ${item.sku || ""}`);
-
-  // Resolve Specs dynamically from data
-  const rawSize =
-    artwork?.cup?.size ||
-    item.selectedSize ||
-    item.attributes?.size ||
-    item.attributes?.capacity ||
-    item.attributes?.["dung tích"] ||
-    parsedFromText.size ||
-    (item.isPrintItem || item.fulfillmentType === "CUSTOM_PRINT" || item.name?.toLowerCase().includes("ly") ? "500ml" : "");
-
-  const sizeLabel = rawSize ? (CUP_SIZE_LABELS[rawSize as CupSize] || rawSize) : "";
-
-  const rawMaterial =
-    artwork?.cup?.materialType ||
-    item.selectedMaterial ||
-    item.attributes?.material ||
-    item.attributes?.["chất liệu"] ||
-    parsedFromText.material ||
-    (item.isPrintItem || item.fulfillmentType === "CUSTOM_PRINT" || item.name?.toLowerCase().includes("ly") ? "frosted" : "");
-
-  const materialLabel = rawMaterial ? (CUP_MATERIAL_LABELS[rawMaterial as CupMaterialType] || rawMaterial) : "";
-
-  const rawStyle =
-    artwork?.cup?.style ||
-    item.selectedStyle ||
-    item.attributes?.style ||
-    item.attributes?.["kiểu dáng"] ||
-    parsedFromText.style ||
-    (item.isPrintItem || item.fulfillmentType === "CUSTOM_PRINT" || item.name?.toLowerCase().includes("ly") ? "straight" : "");
-
-  const styleLabel = rawStyle ? (CUP_STYLE_LABELS[rawStyle as CupStyle] || rawStyle) : "";
-
+  const attrs = {
+    ...coerceVariantAttributes(item.attributes),
+    ...(item.selectedSize ? { size: item.selectedSize } : {}),
+    ...(item.selectedMaterial ? { material: item.selectedMaterial } : {}),
+    ...(item.selectedStyle ? { style: item.selectedStyle } : {}),
+    ...(artwork?.cup?.size ? { size: artwork.cup.size } : {}),
+    ...(artwork?.cup?.materialType ? { material: artwork.cup.materialType } : {}),
+    ...(artwork?.cup?.style ? { style: artwork.cup.style } : {}),
+  };
+  const kind = getItemKind(item);
+  const rows = Object.entries(attrs)
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
+    .map(([key, value]) => ({
+      key,
+      label: labelFor(key, kind),
+      value: displayValue(key, String(value).trim(), kind),
+    }));
   const printHeightPercent = artwork?.artboard?.printHeightPercent || artwork?.printHeightPercent;
 
-  // Check if item is a cup or has any specs
-  const isCup = Boolean(
-    sizeLabel ||
-    materialLabel ||
-    styleLabel ||
-    item.isPrintItem ||
-    item.fulfillmentType === "CUSTOM_PRINT" ||
-    item.name?.toLowerCase().includes("ly") ||
-    item.sku?.toLowerCase().includes("cup")
-  );
-
-  if (!isCup && (!item.attributes || Object.keys(item.attributes).length === 0)) {
-    return null;
-  }
+  if (rows.length === 0 && !printHeightPercent) return null;
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground font-medium">
-      {sizeLabel && (
-        <span>
-          Dung tích: <strong className="font-bold text-[#253D4E] dark:text-zinc-200">{sizeLabel}</strong>
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted-foreground">
+      {rows.map((row, index) => (
+        <span key={`${row.key}-${row.value}`} className="text-slate-600">
+          {index > 0 ? <span className="mr-2 text-slate-300">•</span> : null}
+          {row.label}: <strong className="font-bold text-[#253D4E] dark:text-zinc-200">{row.value}</strong>
         </span>
-      )}
-      {sizeLabel && materialLabel && <span className="text-slate-300">•</span>}
-      {materialLabel && (
-        <span>
-          Loại ly: <strong className="font-bold text-[#253D4E] dark:text-zinc-200">{materialLabel}</strong>
+      ))}
+      {printHeightPercent ? (
+        <span className="text-primary font-bold">
+          {rows.length > 0 ? <span className="mr-2 text-slate-300">•</span> : null}
+          Vùng in {printHeightPercent}%
         </span>
-      )}
-      {(sizeLabel || materialLabel) && styleLabel && styleLabel !== "Dáng tiêu chuẩn" && <span className="text-slate-300">•</span>}
-      {styleLabel && styleLabel !== "Dáng tiêu chuẩn" && (
-        <span>
-          Dáng: <strong className="font-bold text-[#253D4E] dark:text-zinc-200">{styleLabel}</strong>
-        </span>
-      )}
-      {printHeightPercent && (
-        <>
-          <span className="text-slate-300">•</span>
-          <span className="text-primary font-bold">Vùng in {printHeightPercent}%</span>
-        </>
-      )}
-      {item.attributes &&
-        Object.entries(item.attributes)
-          .filter(([k]) => !["size", "capacity", "dung tích", "material", "chất liệu", "style", "kiểu dáng"].includes(k.toLowerCase()))
-          .map(([k, v]) => (
-            <span key={k} className="text-slate-600">
-              • {k}: <strong className="font-semibold">{String(v)}</strong>
-            </span>
-          ))}
+      ) : null}
     </div>
   );
 }

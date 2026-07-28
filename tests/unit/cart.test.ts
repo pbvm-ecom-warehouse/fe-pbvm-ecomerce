@@ -25,12 +25,12 @@ describe("cart utilities", () => {
     expect(countCartItems(items)).toBe(2);
   });
 
-  it("calculates subtotal, shipping, tax and grand total", () => {
+  it("calculates subtotal with zero shipping fee", () => {
     expect(calculateCartTotals(items)).toEqual({
       subtotal: 200_000,
-      shippingFee: 45_000,
+      shippingFee: 0,
       tax: 0,
-      grandTotal: 245_000,
+      grandTotal: 200_000,
     });
   });
 });

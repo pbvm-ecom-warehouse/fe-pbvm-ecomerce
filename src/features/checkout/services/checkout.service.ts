@@ -6,6 +6,7 @@ import { useCartStore } from "@/stores/cart-store";
 import type { CheckoutInput } from "../schemas/checkout.schema";
 
 export type CreateOrderPayload = CheckoutInput & {
+  addressId?: string;
   items: Array<{
     productId: string;
     quantity: number;
@@ -111,44 +112,10 @@ export async function createOrder(payload: CreateOrderPayload) {
       console.error("Failed to sync cart before checkout:", syncErr);
     }
 
-    // 1. Fetch user's saved addresses
-    const addresses = await getAddresses();
-    let addressId = "";
-
-    // Find if there is any matching address
-    const matching = addresses.find(
-      (addr) =>
-        addr.line === payload.address &&
-        addr.recipientName === payload.customerName &&
-        addr.phone === payload.phone,
-    );
-
-    if (matching) {
-      addressId = matching.id;
-    } else {
-      // Create a new address on the backend
-      const newAddresses = await addAddress({
-        label: `Địa chỉ giao hàng ${addresses.length + 1}`,
-        recipientName: payload.customerName,
-        phone: payload.phone,
-        line: payload.address,
-        ward: "N/A",
-        district: "N/A",
-        province: "N/A",
-        isDefault: addresses.length === 0,
-      });
-      // The last added address might be the default or matching one
-      const created = newAddresses.find(
-        (addr) =>
-          addr.line === payload.address &&
-          addr.recipientName === payload.customerName &&
-          addr.phone === payload.phone,
-      );
-      addressId = created?.id || newAddresses[newAddresses.length - 1]?.id || "";
-    }
+    const addressId = payload.addressId || "";
 
     if (!addressId) {
-      throw new Error("Cannot get or create delivery address");
+      throw new Error("Missing delivery address. Please choose or save an address before checkout.");
     }
 
     // 2. Call backend orders checkout

@@ -5,14 +5,14 @@ export function calculateCartTotals(items: CartItem[]) {
     (total, item) => total + item.price * item.quantity,
     0,
   );
-  const shippingFee = subtotal >= 5_000_000 || subtotal === 0 ? 0 : 45_000;
+  const shippingFee = 0;
   const tax = 0;
 
   return {
     subtotal,
     shippingFee,
     tax,
-    grandTotal: subtotal + shippingFee,
+    grandTotal: subtotal,
   };
 }
 

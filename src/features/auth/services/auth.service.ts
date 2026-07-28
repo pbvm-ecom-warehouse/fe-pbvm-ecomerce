@@ -6,9 +6,10 @@ import {
   setAuthTokens,
   setTenantId,
 } from "@/lib/auth-token";
-import { useAuthStore } from "@/stores/auth-store";
+import { type CustomerSession, useAuthStore } from "@/stores/auth-store";
 import { auth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import { signInWithPopup } from "firebase/auth";
+import { env } from "@/lib/env";
 
 import type { LoginInput, RegisterInput } from "../schemas/login.schema";
 
@@ -61,53 +62,98 @@ export async function logout() {
   }
 }
 
-export async function getMe() {
-  const response = await apiClient.get<ApiEnvelope<any> | any>("/auth/me");
-  return unwrapApiData(response.data);
+type EcomMeResponse = {
+  id: string;
+  email: string;
+  name?: string;
+  phone?: string;
+  type: "customer" | "admin";
+  customerType?: "B2B" | "B2C";
+  tenantId?: string;
+  avatar?: string;
+  avatarUrl?: string;
+};
+
+type AuthenticatedCustomerSession = CustomerSession & {
+  email: string;
+};
+
+export async function getMe(): Promise<AuthenticatedCustomerSession> {
+  const response = await apiClient.get<ApiEnvelope<EcomMeResponse> | EcomMeResponse>("/auth/me");
+  const data = unwrapApiData(response.data);
+  return {
+    id: data.id,
+    email: data.email,
+    name: data.name || data.email,
+    type: data.type,
+    customerType: data.customerType || "B2B",
+    tenantId: data.tenantId || env.NEXT_PUBLIC_DEFAULT_TENANT_ID,
+    phone: data.phone,
+    avatar: data.avatar ?? data.avatarUrl,
+  };
 }
 
-export async function changePassword(input: any) {
-  const response = await apiClient.post<ApiEnvelope<any> | any>("/auth/change-password", input);
+type ChangePasswordInput = {
+  oldPassword: string;
+  newPassword: string;
+};
+
+type SuccessResponse = {
+  success?: boolean;
+  message?: string;
+};
+
+export async function changePassword(input: ChangePasswordInput) {
+  const response = await apiClient.post<ApiEnvelope<SuccessResponse> | SuccessResponse>("/auth/change-password", input);
   return unwrapApiData(response.data);
 }
 
 /**
  * Cập nhật thông tin cá nhân và upload avatar lên Backend
  */
-export async function updateProfile(input: { name?: string; phone?: string; avatar?: string; customerType?: string }) {
-  let updatedAvatarUrl = input.avatar;
+export type UpdateProfileInput = {
+  name?: string;
+  phone?: string;
+  avatar?: string;
+  avatarFile?: File;
+  customerType?: "B2B" | "B2C";
+};
 
-  if (input.avatar && input.avatar.startsWith("data:")) {
-    try {
-      const arr = input.avatar.split(",");
-      const mime = arr[0].match(/:(.*?);/)?.[1] || "image/png";
-      const bstr = atob(arr[1]);
-      let n = bstr.length;
-      const u8arr = new Uint8Array(n);
-      while (n--) {
-        u8arr[n] = bstr.charCodeAt(n);
-      }
-      const fileObj = new File([u8arr], "avatar.png", { type: mime });
+type ProfileResponse = Partial<CustomerSession> & {
+  avatarUrl?: string;
+};
 
-      const formData = new FormData();
-      formData.append("file", fileObj);
+function normalizeProfileResponse(data: ProfileResponse) {
+  return {
+    ...data,
+    avatar: data?.avatar ?? data?.avatarUrl,
+  };
+}
 
-      const response = await apiClient.post<any>("/auth/me/avatar", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const data = unwrapApiData(response.data);
-      if (data?.avatar || data?.avatarUrl) {
-        updatedAvatarUrl = data.avatar || data.avatarUrl;
-      }
-    } catch (err) {
-      console.warn("Upload avatar to BE failed, using local avatar fallback:", err);
-    }
+export async function updateProfile(input: UpdateProfileInput) {
+  if (input.avatarFile) {
+    const formData = new FormData();
+    formData.append("file", input.avatarFile);
+
+    const response = await apiClient.post<
+      ApiEnvelope<ProfileResponse> | ProfileResponse
+    >("/auth/me/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return normalizeProfileResponse(unwrapApiData(response.data));
   }
 
-  return {
-    ...input,
-    avatar: updatedAvatarUrl,
+  const payload = {
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
+    ...(input.customerType !== undefined ? { customerType: input.customerType } : {}),
   };
+
+  const response = await apiClient.patch<
+    ApiEnvelope<ProfileResponse> | ProfileResponse
+  >("/auth/profile", payload);
+  return normalizeProfileResponse(unwrapApiData(response.data));
 }
 
 export async function loginWithGoogle() {
