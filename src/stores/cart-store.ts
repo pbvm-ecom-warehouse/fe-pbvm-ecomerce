@@ -32,7 +32,11 @@ type CartState = {
     quantity: number;
     designId: string;
     designFile: DesignFileSnapshot;
-  }) => void;
+    selectedSize?: string;
+    selectedMaterial?: string;
+    selectedStyle?: string;
+    attributes?: Record<string, string>;
+  }) => Promise<void>;
   updateQuantity: (cartItemId: string, quantity: number) => void;
   removeItem: (cartItemId: string) => void;
   clearCart: () => void;
@@ -52,6 +56,14 @@ function safeWarn(action: string, error: any) {
   const data = error?.response?.data;
   const msg = data?.message || data?.error || error?.message || String(error);
   console.warn(`[CartStore] ${action} failed:`, msg);
+}
+
+function canSyncCartItemToBackend(item: CartItem) {
+  return item.fulfillmentType !== "CUSTOM_PRINT" || Boolean(item.designFile);
+}
+
+function canSyncProductAddToBackend(product: CatalogProduct) {
+  return product.fulfillmentType !== "CUSTOM_PRINT";
 }
 
 function resolveCartVariant(product: CatalogProduct, options?: AddProductOptions) {
@@ -130,7 +142,7 @@ export const useCartStore = create<CartState>()(
             if (options?.selectedStyle) existing.selectedStyle = options.selectedStyle;
             if (options?.attributes) existing.attributes = { ...existing.attributes, ...options.attributes };
 
-            if (isLoggedIn()) {
+            if (isLoggedIn() && canSyncProductAddToBackend(product)) {
               updateCartItem(cartSku, existing.quantity).catch((err) => safeWarn("updateCartItem", err));
             }
             return;
@@ -153,12 +165,21 @@ export const useCartStore = create<CartState>()(
             attributes: options?.attributes,
           });
 
-          if (isLoggedIn()) {
+          if (isLoggedIn() && canSyncProductAddToBackend(product)) {
             addCartItem({ sku: cartSku, quantity }).catch((err) => safeWarn("addCartItem", err));
           }
         }),
 
-      addCustomPrintItem: ({ product, quantity, designId, designFile }) =>
+      addCustomPrintItem: async ({
+        product,
+        quantity,
+        designId,
+        designFile,
+        selectedSize,
+        selectedMaterial,
+        selectedStyle,
+        attributes,
+      }) => {
         set((state) => {
           const cartItemId = `custom:${product.id}:${designId}:${Date.now()}`;
           state.items.push({
@@ -174,21 +195,27 @@ export const useCartStore = create<CartState>()(
             fulfillmentType: "CUSTOM_PRINT",
             designId,
             designFile,
-            selectedSize: designFile.artwork?.cup?.size,
-            selectedMaterial: designFile.artwork?.cup?.materialType,
-            selectedStyle: designFile.artwork?.cup?.style,
+            selectedSize: selectedSize || attributes?.capacity || attributes?.size || designFile.artwork?.cup?.size,
+            selectedMaterial: selectedMaterial || attributes?.material || designFile.artwork?.cup?.materialType,
+            selectedStyle: selectedStyle || attributes?.style || designFile.artwork?.cup?.style,
+            attributes,
           });
+        });
 
-          if (isLoggedIn()) {
-            const sku = product.productRefId || product.id;
-            addCartItem({
+        if (isLoggedIn()) {
+          const sku = product.productRefId || product.id;
+          try {
+            await addCartItem({
               sku,
               quantity,
               designId,
               designFile: JSON.stringify(designFile),
-            }).catch((err) => safeWarn("addCustomPrintItem", err));
+            });
+          } catch (err) {
+            safeWarn("addCustomPrintItem", err);
           }
-        }),
+        }
+      },
 
       updateQuantity: (cartItemId, quantity) =>
         set((state) => {
@@ -229,6 +256,7 @@ export const useCartStore = create<CartState>()(
           try {
             await clearBackendCart();
             for (const item of newItems) {
+              if (!canSyncCartItemToBackend(item)) continue;
               const sku = item.productRefId || item.productId;
               await addCartItem({
                 sku,
@@ -285,6 +313,7 @@ export const useCartStore = create<CartState>()(
           // Upload any local items to server if they are not already in the server cart
           if (localItems.length > 0) {
             for (const item of localItems) {
+              if (!canSyncCartItemToBackend(item)) continue;
               const sku = item.productRefId || item.productId;
               const existsOnBackend = backendCart?.items?.some((bi) => bi.sku === sku);
               if (!existsOnBackend) {
@@ -359,9 +388,30 @@ export const useCartStore = create<CartState>()(
                 }
 
                 // 1. Find existing item in current local items
-                const localMatch = currentLocalItems.find(
-                  (li) => li.productRefId === item.sku || li.productId === item.sku || li.slug === item.sku || li.cartItemId.includes(item.sku)
+                const skuMatchesLocalItem = (li: CartItem) =>
+                  li.productRefId === item.sku ||
+                  li.productId === item.sku ||
+                  li.slug === item.sku ||
+                  li.cartItemId.includes(item.sku);
+                const localMatch =
+                  currentLocalItems.find(
+                    (li) =>
+                      skuMatchesLocalItem(li) &&
+                      (!isCustom || !item.designId || li.designId === item.designId),
+                  ) || currentLocalItems.find(skuMatchesLocalItem);
+                const localDesignMatch =
+                  currentLocalItems.find(
+                    (li) =>
+                      skuMatchesLocalItem(li) &&
+                      Boolean(li.designFile || li.designId),
+                  ) || localMatch;
+                const shouldPreserveLocalDesign = Boolean(
+                  localDesignMatch?.designFile || localDesignMatch?.designId,
                 );
+
+                if (!designFileSnapshot && shouldPreserveLocalDesign) {
+                  designFileSnapshot = localDesignMatch?.designFile;
+                }
 
                 // 2. Find product in catalogList matching SKU or variant SKU
                 const catalogMatch = catalogList.find((p) => {
@@ -369,9 +419,17 @@ export const useCartStore = create<CartState>()(
                   if (Array.isArray(p.variants) && p.variants.some((v: any) => v.sku === item.sku)) return true;
                   return false;
                 });
+                const catalogVariant = resolveCatalogVariant(catalogMatch, item.sku);
+                const resolvedAttributes =
+                  localMatch?.attributes ||
+                  catalogVariant?.attributes ||
+                  undefined;
 
                 // Resolve product name
-                let resolvedName = localMatch?.name;
+                let resolvedName =
+                  isCustom && designFileSnapshot?.name
+                    ? designFileSnapshot.name
+                    : localMatch?.name;
                 if (!resolvedName || resolvedName === item.sku) {
                   resolvedName = catalogMatch?.name || (item as any).name;
                 }
@@ -398,8 +456,8 @@ export const useCartStore = create<CartState>()(
                 const resolvedUnit = localMatch?.unit || catalogMatch?.unit || "cái";
 
                 return {
-                  cartItemId: isCustom
-                    ? `custom:${item.sku}:${item.designId || ""}:${Date.now()}`
+                  cartItemId: (isCustom || shouldPreserveLocalDesign)
+                    ? `custom:${item.sku}:${item.designId || localDesignMatch?.designId || ""}:${Date.now()}`
                     : `standard:${item.sku}`,
                   productId: catalogMatch?.id || localMatch?.productId || item.sku,
                   productRefId: item.sku,
@@ -409,12 +467,13 @@ export const useCartStore = create<CartState>()(
                   quantity: item.quantity,
                   unit: resolvedUnit,
                   imageUrl: resolvedImage,
-                  fulfillmentType: isCustom ? "CUSTOM_PRINT" : (catalogMatch?.fulfillmentType || localMatch?.fulfillmentType || "STANDARD"),
-                  designId: item.designId ?? undefined,
+                  fulfillmentType: (isCustom || shouldPreserveLocalDesign) ? "CUSTOM_PRINT" : (catalogMatch?.fulfillmentType || localMatch?.fulfillmentType || "STANDARD"),
+                  designId: item.designId ?? localDesignMatch?.designId ?? undefined,
                   designFile: designFileSnapshot,
-                  selectedSize: localMatch?.selectedSize || designFileSnapshot?.artwork?.cup?.size,
-                  selectedMaterial: localMatch?.selectedMaterial || designFileSnapshot?.artwork?.cup?.materialType,
-                  selectedStyle: localMatch?.selectedStyle || designFileSnapshot?.artwork?.cup?.style,
+                  selectedSize: localMatch?.selectedSize || resolvedAttributes?.capacity || resolvedAttributes?.size || designFileSnapshot?.artwork?.cup?.size,
+                  selectedMaterial: localMatch?.selectedMaterial || resolvedAttributes?.material || designFileSnapshot?.artwork?.cup?.materialType,
+                  selectedStyle: localMatch?.selectedStyle || resolvedAttributes?.style || designFileSnapshot?.artwork?.cup?.style,
+                  attributes: resolvedAttributes,
                 } satisfies CartItem;
               });
             });

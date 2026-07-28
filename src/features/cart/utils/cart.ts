@@ -5,14 +5,18 @@ export function calculateCartTotals(items: CartItem[]) {
     (total, item) => total + item.price * item.quantity,
     0,
   );
+  const totalQuantity = items.reduce((total, item) => total + item.quantity, 0);
+  const bulkBoxDiscount = Math.floor(totalQuantity / 3) * 20_000;
   const shippingFee = 0;
   const tax = 0;
+  const grandTotal = Math.max(0, subtotal - bulkBoxDiscount);
 
   return {
     subtotal,
+    bulkBoxDiscount,
     shippingFee,
     tax,
-    grandTotal: subtotal,
+    grandTotal,
   };
 }
 

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -68,6 +68,7 @@ import {
   createDesignSnapshot,
   getArtboardDimensions,
 } from "../utils/artwork";
+import { resolveCupColorFromVariant } from "../utils/cup-color";
 
 /* ─── DYNAMIC IMPORTS ─── */
 const ArtworkEditor2D = dynamic(
@@ -244,6 +245,13 @@ export function CupDesignerPage() {
   function handleSetCupColor(newColor: string) {
     setBaseCupColor(newColor);
     setColorShadePercent(0);
+  }
+
+  function applyVariantCupColor(variant: InStockVariant) {
+    const resolvedColor = resolveCupColorFromVariant(variant);
+    if (resolvedColor) {
+      handleSetCupColor(resolvedColor);
+    }
   }
 
   const [printHeightPercent, setPrintHeightPercent] = useState(() => loadDraft()?.printHeightPercent ?? DEFAULT_CUP_CONFIG.printHeightPercent);
@@ -533,6 +541,7 @@ export function CupDesignerPage() {
   const addCustomPrintItem = useCartStore((s) => s.addCustomPrintItem);
   const user = useAuthStore((s) => s.user);
 
+  const router = useRouter();
   const searchParams = useSearchParams();
   /** productId truyền vào từ trang sản phẩm — có nghĩa là "Product-based mode" */
   const productIdFromUrl = searchParams?.get("productId") ?? null;
@@ -634,6 +643,7 @@ export function CupDesignerPage() {
     setMaterialType(preferred.materialType);
     setStyle(preferred.style);
     setSize(preferred.size);
+    applyVariantCupColor(preferred);
   }, [inStockVariants, selectedBlankVariantId, productIdFromUrl, variantIdFromUrl, skuFromUrl]);
 
   const currentCupSku = useMemo(() => {
@@ -650,6 +660,7 @@ export function CupDesignerPage() {
     setMaterialType(variant.materialType);
     setStyle(variant.style);
     setSize(variant.size);
+    applyVariantCupColor(variant);
     setPrintHeightPercent(DEFAULT_CUP_CONFIG.printHeightPercent);
   }
 
@@ -733,6 +744,7 @@ export function CupDesignerPage() {
     setMaterialType(match.materialType);
     setStyle(match.style);
     setSize(match.size);
+    applyVariantCupColor(match);
   }, [inStockVariants, productIdFromUrl, productSlugFromUrl, variantIdFromUrl, skuFromUrl]);
 
   /** Combo hiện tại có hàng trong kho không? */
@@ -921,7 +933,15 @@ export function CupDesignerPage() {
         // Hết hàng: chỉ lưu design, không add vào giỏ
         toast.success(`Đã lưu thiết kế thành công! Combo này hiện hết hàng, bạn có thể đặt khi kho có lại.`);
       } else {
-        addCustomPrintItem({
+        const cartDesignFile = { ...designFile, designId: savedDesign.id };
+        const variantAttributes = {
+          ...(selectedVariantInfo.attributes ?? {}),
+          capacity: getVariantDisplayAttr(selectedVariantInfo, "capacity"),
+          style: getVariantDisplayAttr(selectedVariantInfo, "style"),
+          material: getVariantDisplayAttr(selectedVariantInfo, "material"),
+          color: getVariantDisplayAttr(selectedVariantInfo, "color"),
+        };
+        await addCustomPrintItem({
           product: {
             id: selectedVariantInfo.productId || selectedVariantInfo.variantId || selectedVariantInfo.sku || "",
             productRefId: selectedVariantInfo.sku || "",
@@ -938,10 +958,15 @@ export function CupDesignerPage() {
           },
           quantity,
           designId: savedDesign.id,
-          designFile: { ...designFile, designId: savedDesign.id },
+          designFile: cartDesignFile,
+          selectedSize: variantAttributes.capacity,
+          selectedMaterial: variantAttributes.material,
+          selectedStyle: variantAttributes.style,
+          attributes: variantAttributes,
         });
 
         toast.success("Đã lưu thiết kế và thêm ly in vào giỏ hàng thành công!");
+        router.push("/cart");
       }
 
       refreshSavedDesigns();
@@ -1071,7 +1096,7 @@ export function CupDesignerPage() {
                 {/* BANNER NẾU ĐẠT TỐI ĐA 15 MAU THIET KE */}
                 {!isLoadingDb && inStockVariants.length === 0 && (
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
-                    Chưa lấy được phôi ly từ DB catalog. Sản phẩm cần có variants kèm attributes dung tích, kiểu dáng và chất liệu.
+                    Chưa có sản phẩm
                   </div>
                 )}
 

@@ -27,7 +27,7 @@ import type { CatalogProduct, ProductVariant } from "@/types/api";
 import { formatCurrency } from "@/utils/format-currency";
 import { cn } from "@/lib/utils";
 import {
-  buildVariantAttributeRows,
+  collectVariantAttributes,
   normalizeVariantAttributes,
 } from "@/features/catalog/utils/variant-attributes";
 
@@ -58,10 +58,13 @@ function getProductSizes(product: CatalogProduct | null): string[] {
   if (product.variants && product.variants.length > 0) {
     const extracted = product.variants
       .map((v) => {
+        const attrs = collectVariantAttributes(v);
         const sizeAttr =
-          v.attributes?.size ||
-          v.attributes?.capacity ||
-          v.attributes?.["dung tích"];
+          attrs.capacity ||
+          attrs.size ||
+          attrs.weight ||
+          attrs.spec ||
+          attrs["dung tích"];
         if (sizeAttr) return sizeAttr;
 
         const text = `${v.sku} ${v.attributes ? JSON.stringify(v.attributes) : ""}`.toLowerCase();
@@ -83,12 +86,43 @@ function getProductSizes(product: CatalogProduct | null): string[] {
 }
 
 function getVariantLabel(v: ProductVariant): string {
-  const attrs = normalizeVariantAttributes(v.attributes || {}, v.sku || "");
+  const attrs = normalizeVariantAttributes(collectVariantAttributes(v), v.sku || "");
   return attrs.capacity || attrs.style || attrs.material || attrs.color || v.sku;
 }
 
 function getVariantAttribute(v: ProductVariant, key: "capacity" | "style" | "material" | "color") {
-  return normalizeVariantAttributes(v.attributes || {}, v.sku || "")[key];
+  return normalizeVariantAttributes(collectVariantAttributes(v), v.sku || "")[key];
+}
+
+function getVariantDisplayRows(variant: ProductVariant) {
+  const attrs = collectVariantAttributes(variant);
+  const sku = String(variant.sku || "").toUpperCase();
+  const prefix = sku.split("-")[0];
+  const rows =
+    prefix === "MAT"
+      ? [
+          ["Danh mục", attrs.category],
+          ["Loại", attrs.type || attrs.material],
+          ["Hương vị", attrs.flavor],
+          ["Quy cách", attrs.weight || attrs.spec || attrs.size],
+        ]
+      : prefix === "PKG"
+        ? [
+            ["Loại bao bì", attrs.packaging || attrs.style],
+            ["Kích thước", attrs.size || attrs.capacity],
+            ["Chất liệu", attrs.material],
+            ["Màu sắc", attrs.color],
+          ]
+        : [
+            ["Dung tích", attrs.capacity || attrs.size],
+            ["Kiểu dáng", attrs.style],
+            ["Chất liệu", attrs.material],
+            ["Màu sắc", attrs.color],
+          ];
+
+  return rows
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
+    .map(([label, value]) => ({ label: String(label), value: String(value).trim() }));
 }
 
 export function ProductDetailView({
@@ -172,7 +206,7 @@ export function ProductDetailView({
 
     return (
       product.variants.find((variant) => {
-        const attrs = normalizeVariantAttributes(variant.attributes || {}, variant.sku || "");
+        const attrs = normalizeVariantAttributes(collectVariantAttributes(variant), variant.sku || "");
         return selectedVariantEntries.every(
           ([key, value]) => attrs[key as keyof typeof attrs] === value,
         );
@@ -183,7 +217,7 @@ export function ProductDetailView({
   const isVariantComboUnavailable = isVariantComboComplete && !selectedVariant;
 
   const activePrice = selectedVariant ? selectedVariant.price : ((product?.b2bPrice || product?.price) ?? 0);
-  const hasSalePrice = Boolean(product && product.price > activePrice);
+  const hasSalePrice = Boolean(product && activePrice > 0 && product.price > activePrice);
   const discountPercent = hasSalePrice && product
     ? Math.round(((product.price - activePrice) / product.price) * 100)
     : 0;
@@ -201,7 +235,7 @@ export function ProductDetailView({
     : selectedVariantEntries.map(([, value]) => value).join(" / ") || selectedSize || "";
 
   const selectedVariantAttributes = selectedVariant
-    ? normalizeVariantAttributes(selectedVariant.attributes || {}, selectedVariant.sku || "")
+    ? normalizeVariantAttributes(collectVariantAttributes(selectedVariant), selectedVariant.sku || "")
     : null;
   const allVariantAttributeGroups = useMemo(() => {
     if (!product?.variants?.length) return [];
@@ -210,7 +244,7 @@ export function ProductDetailView({
       sku: variant.sku || `#${index + 1}`,
       price: variant.price,
       availableQty: variant.availableQty,
-      rows: buildVariantAttributeRows(variant.attributes || {}),
+      rows: getVariantDisplayRows(variant),
     }));
   }, [product]);
   const activeProductToAddToCart = useMemo(() => {
@@ -252,6 +286,7 @@ export function ProductDetailView({
       (isCupProduct && !nameLower.includes("in sẵn") && !nameLower.includes("in hình"))
     );
   }, [product, isCupProduct]);
+  const showCupOutOfStockBanner = canBeCustomDesigned && isSelectedVariantOutOfStock;
 
   const inferredMaterial = useMemo(() => {
     if (!product) return "frosted";
@@ -339,6 +374,7 @@ export function ProductDetailView({
                     alt={product.name}
                     fill
                     priority
+                    sizes="(min-width: 1024px) 42vw, 100vw"
                     className="object-contain transition-transform duration-300 group-hover:scale-105 mix-blend-multiply dark:mix-blend-normal"
                   />
                 </div>
@@ -449,66 +485,6 @@ export function ProductDetailView({
               ) : null}
             </div>
 
-            {false && allVariantAttributeGroups.length > 0 && (
-              <div className="mt-5 space-y-3">
-                <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  Biến thể sản phẩm
-                </div>
-                <div className="space-y-3">
-                  {allVariantAttributeGroups.map((variant) => (
-                    <div
-                      key={variant.id}
-                      className={cn(
-                        "rounded-xl border p-3 transition-colors",
-                        selectedVariant?.id === variant.id || selectedVariant?.sku === variant.sku
-                          ? "border-[#BCE3C9] bg-[#F8FBFA]"
-                          : "border-[#E2EDE8] bg-white",
-                      )}
-                    >
-                      <button
-                        suppressHydrationWarning
-                        type="button"
-                        onClick={() => {
-                          const found = product!.variants?.find(
-                            (item) => item.id === variant.id || item.sku === variant.sku,
-                          );
-                          if (found) {
-                            setSelectedVariantAttrs(
-                              normalizeVariantAttributes(found.attributes || {}, found.sku || ""),
-                            );
-                          }
-                        }}
-                        className="flex w-full flex-wrap items-center justify-between gap-2 text-left"
-                      >
-                        <span className="text-xs font-black text-[#253D4E]">
-                          {variant.sku}
-                        </span>
-                        <span className="text-xs font-bold text-[#3BB77E]">
-                          {formatCurrency(variant.price || 0)}
-                          {" · "}
-                          {(variant.availableQty ?? 0).toLocaleString("vi-VN")} {product!.unit}
-                        </span>
-                      </button>
-                      {variant.rows.length > 0 ? (
-                        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                          {variant.rows.map((attr) => (
-                            <div key={`${variant.id}-${attr.label}-${attr.value}`} className="min-w-0">
-                              <div className="text-[10px] font-bold uppercase text-muted-foreground">
-                                {attr.label}
-                              </div>
-                              <div className="mt-1 break-words text-xs font-extrabold text-[#253D4E]">
-                                {attr.value}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Actions: Quantity Selector & Add Button + Design Button side by side */}
             <div className="mt-6 flex flex-wrap items-center gap-3 pb-4">
               {/* Custom Spin quantity box */}
@@ -584,7 +560,7 @@ export function ProductDetailView({
             </div>
 
             {/* Banner hết hàng */}
-            {isVariantSelectionBlocked && (
+            {showCupOutOfStockBanner && (
               <div className="mb-4 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold animate-in fade-in duration-200">
                 <span className="text-base">⚠️</span>
                 <span>Dung tích <strong>{activeLabel}</strong> hiện đang hết hàng. Vui lòng chọn dung tích khác hoặc tạo mẫu trước.</span>
@@ -701,7 +677,7 @@ export function ProductDetailView({
                     <span className="font-bold text-[#253D4E] dark:text-zinc-200">{product.fulfillmentType ?? "STANDARD"}</span>
                   </div>
                 </div>
-                {false && allVariantAttributeGroups.length > 0 && (
+                {allVariantAttributeGroups.length > 0 && (
                   <div className="mt-6 space-y-3">
                     <h5 className="text-xs font-extrabold uppercase tracking-wider text-muted-foreground">
                       Thuộc tính biến thể

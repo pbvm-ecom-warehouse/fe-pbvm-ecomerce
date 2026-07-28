@@ -42,6 +42,10 @@ import { getOrder, cancelOrder } from "@/features/order/services/order.service";
 import { cleanProductName } from "@/features/catalog/services/catalog.service";
 import { useCartStore } from "@/stores/cart-store";
 import { CupConfigDetails } from "@/features/cart/components/cup-config-details";
+import {
+  canPayNextOnlineStage,
+  getNextPaymentButtonLabel,
+} from "@/features/order/utils/payment-flow";
 import { formatCurrency } from "@/utils/format-currency";
 import { formatDateTime } from "@/utils/format-date";
 import { apiClient } from "@/lib/api-client";
@@ -82,23 +86,7 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
   });
 
   const order = orderQuery.data as any;
-  const payableStatuses = ["UNPAID", "DEPOSIT_PAID", "PROGRESS_PAID"];
-  const canPayNextOnlineStage =
-    order &&
-    payableStatuses.includes(order.paymentStatus) &&
-    order.status !== "CANCELLED" &&
-    !(order.paymentMethod === "COD" && order.paymentStatus === "PROGRESS_PAID") &&
-    !(order.paymentMethod === "COD" && !order.hasPrintItems && order.paymentStatus === "DEPOSIT_PAID");
-
-  const getNextPaymentButtonLabel = () => {
-    if (!order) return "Thanh toán";
-    if (order.paymentStatus === "UNPAID") return "Thanh toán cọc";
-    if (order.paymentStatus === "DEPOSIT_PAID") {
-      return order.hasPrintItems ? "Thanh toán đợt 2" : "Thanh toán phần còn lại";
-    }
-    if (order.paymentStatus === "PROGRESS_PAID") return "Thanh toán phần còn lại";
-    return "Thanh toán";
-  };
+  const canPayNextStage = canPayNextOnlineStage(order);
 
   const handleConfirmCancel = async () => {
     try {
@@ -663,14 +651,14 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
                 {/* Action buttons inside the header on desktop */}
                 <div className="flex gap-2 flex-wrap sm:flex-nowrap shrink-0">
                   {/* Repay online if unpaid */}
-                  {canPayNextOnlineStage && (
+                  {canPayNextStage && (
                     <Button
                       onClick={handleRepay}
                       disabled={isRepaying}
                       className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2.5 rounded-xl font-bold flex items-center justify-center gap-1.5 shadow-md text-xs cursor-pointer select-none"
                     >
                       <QrCode className="size-4" />
-                      {isRepaying ? "Đang tạo mã QR..." : getNextPaymentButtonLabel()}
+                      {isRepaying ? "Đang tạo mã QR..." : getNextPaymentButtonLabel(order)}
                     </Button>
                   )}
 

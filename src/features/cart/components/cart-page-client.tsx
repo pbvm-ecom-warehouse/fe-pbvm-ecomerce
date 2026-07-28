@@ -278,6 +278,7 @@ export function CartPageClient() {
                           src={item.imageUrl}
                           alt={item.name}
                           fill
+                          sizes="96px"
                           className="object-cover p-1"
                         />
                       </div>
@@ -420,6 +421,12 @@ export function CartPageClient() {
                           : formatCurrency(totals.shippingFee)}
                       </span>
                     </div>
+                    {totals.bulkBoxDiscount > 0 && (
+                      <div className="flex justify-between gap-4 font-semibold text-emerald-600">
+                        <span>Giảm theo thùng</span>
+                        <span>-{formatCurrency(totals.bulkBoxDiscount)}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-baseline justify-between gap-4 border-t border-border pt-4">

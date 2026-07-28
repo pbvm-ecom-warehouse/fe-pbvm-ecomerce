@@ -266,9 +266,9 @@ export default function AccountPage() {
     } catch (err: any) {
       console.error(err);
       const errMsg =
-        err.response?.status === 404
-          ? "BE chưa có API PATCH /auth/profile để cập nhật hồ sơ."
-          : err.response?.data?.message || "Cập nhật thất bại. Vui lòng kiểm tra lại.";
+        err.message ||
+        err.response?.data?.message ||
+        "Cập nhật thất bại. Vui lòng kiểm tra lại.";
       toast.error(errMsg);
     } finally {
       setIsSavingProfile(false);

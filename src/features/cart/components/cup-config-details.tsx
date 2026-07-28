@@ -106,6 +106,26 @@ function displayValue(key: string, value: string, kind: ReturnType<typeof getIte
   return value;
 }
 
+function getCanonicalCupAttrs(attrs: Record<string, string>) {
+  const findValue = (keys: string[]) => {
+    const expected = new Set(keys.map((key) => normalizeText(key).replace(/[^a-z0-9]+/g, "")));
+    for (const [key, value] of Object.entries(attrs)) {
+      const normalizedKey = normalizeText(key).replace(/[^a-z0-9]+/g, "");
+      if (expected.has(normalizedKey) && value !== undefined && value !== null && String(value).trim()) {
+        return String(value).trim();
+      }
+    }
+    return "";
+  };
+
+  return {
+    capacity: findValue(["capacity", "size", "spec", "dung_tich", "dung tích", "dung tich"]),
+    material: findValue(["material", "chat_lieu", "chất liệu", "chat lieu", "materialType"]),
+    style: findValue(["style", "cup_style", "kieu_dang", "kiểu dáng", "kieu dang", "dáng"]),
+    color: findValue(["color", "colour", "mau_sac", "màu sắc", "mau sac", "màu", "mau"]),
+  };
+}
+
 export function CupConfigDetails({ item }: { item: any }) {
   if (!item) return null;
 
@@ -117,16 +137,17 @@ export function CupConfigDetails({ item }: { item: any }) {
     } catch {}
   }
 
-  const attrs = {
-    ...coerceVariantAttributes(item.attributes),
-    ...(item.selectedSize ? { size: item.selectedSize } : {}),
-    ...(item.selectedMaterial ? { material: item.selectedMaterial } : {}),
-    ...(item.selectedStyle ? { style: item.selectedStyle } : {}),
-    ...(artwork?.cup?.size ? { size: artwork.cup.size } : {}),
+  const rawAttrs = {
+    ...(artwork?.cup?.size ? { capacity: artwork.cup.size } : {}),
     ...(artwork?.cup?.materialType ? { material: artwork.cup.materialType } : {}),
     ...(artwork?.cup?.style ? { style: artwork.cup.style } : {}),
+    ...(item.selectedSize ? { capacity: item.selectedSize } : {}),
+    ...(item.selectedMaterial ? { material: item.selectedMaterial } : {}),
+    ...(item.selectedStyle ? { style: item.selectedStyle } : {}),
+    ...coerceVariantAttributes(item.attributes),
   };
   const kind = getItemKind(item);
+  const attrs = kind === "cup" ? getCanonicalCupAttrs(rawAttrs) : rawAttrs;
   const rows = Object.entries(attrs)
     .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
     .map(([key, value]) => ({
@@ -134,9 +155,7 @@ export function CupConfigDetails({ item }: { item: any }) {
       label: labelFor(key, kind),
       value: displayValue(key, String(value).trim(), kind),
     }));
-  const printHeightPercent = artwork?.artboard?.printHeightPercent || artwork?.printHeightPercent;
-
-  if (rows.length === 0 && !printHeightPercent) return null;
+  if (rows.length === 0) return null;
 
   return (
     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted-foreground">
@@ -146,12 +165,6 @@ export function CupConfigDetails({ item }: { item: any }) {
           {row.label}: <strong className="font-bold text-[#253D4E] dark:text-zinc-200">{row.value}</strong>
         </span>
       ))}
-      {printHeightPercent ? (
-        <span className="text-primary font-bold">
-          {rows.length > 0 ? <span className="mr-2 text-slate-300">•</span> : null}
-          Vùng in {printHeightPercent}%
-        </span>
-      ) : null}
     </div>
   );
 }

@@ -56,7 +56,7 @@ describe("catalog product detail", () => {
     expect(product?.stockSnapshot).toBe(8);
   });
 
-  it("keeps raw variant attributes from the public product variants endpoint without inferring", async () => {
+  it("maps coded cup variant attributes from the public product variants endpoint", async () => {
     publicApiFetchMock
       .mockResolvedValueOnce({
         id: "product-1",
@@ -90,10 +90,56 @@ describe("catalog product detail", () => {
         hrt: "Trái tim",
         pet: "Nhựa PET",
         clr: "Trong suốt",
-        capacity: "",
-        style: "",
-        material: "",
-        color: "",
+        capacity: "500ml",
+        size: "500ml",
+        style: "Trái tim",
+        material: "Nhựa PET",
+        color: "Trong suốt",
+      }),
+    );
+  });
+
+  it("maps coded material variant attributes from the public product variants endpoint", async () => {
+    publicApiFetchMock
+      .mockResolvedValueOnce({
+        id: "product-material",
+        name: "Sản phẩm kho - MATERIAL",
+        slug: "san-pham-kho-material",
+        categoryId: "category-material",
+        price: 0,
+        variants: [],
+      })
+      .mockResolvedValueOnce([
+        {
+          id: "variant-material-1",
+          sku: "MAT-TEA-BLK-ORG-500G",
+          productId: "product-material",
+          price: 0,
+          availableQty: 0,
+          attributes: {
+            tea: "Trà",
+            blk: "Trà đen",
+            org: "Nguyên bản",
+            "500g": "500g",
+          },
+        },
+      ]);
+
+    const product = await getCatalogProductBySlug("san-pham-kho-material");
+
+    expect(product?.variants?.[0]?.attributes).toEqual(
+      expect.objectContaining({
+        tea: "Trà",
+        blk: "Trà đen",
+        org: "Nguyên bản",
+        "500g": "500g",
+        category: "Trà",
+        type: "Trà đen",
+        material: "Trà đen",
+        flavor: "Nguyên bản",
+        weight: "500g",
+        spec: "500g",
+        size: "500g",
       }),
     );
   });

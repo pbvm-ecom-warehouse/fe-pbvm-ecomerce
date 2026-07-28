@@ -16,33 +16,12 @@ describe("promotion service", () => {
     mockedPost.mockReset();
   });
 
-  it("validates promotion codes through the backend", async () => {
-    mockedPost.mockResolvedValueOnce({
-      data: {
-        data: {
-          valid: true,
-          code: "B2BSTART",
-          discountAmount: 50_000,
-          message: "Applied",
-        },
-        meta: {},
-      },
-    });
-
-    const result = await validatePromotion({
+  it("does not call a promotion endpoint that the backend has not exposed", async () => {
+    await expect(validatePromotion({
       code: "B2BSTART",
       orderValue: 1_000_000,
-    });
+    })).rejects.toThrow("BE chưa có API /promotions/validate");
 
-    expect(mockedPost).toHaveBeenCalledWith("/promotions/validate", {
-      code: "B2BSTART",
-      orderValue: 1_000_000,
-    });
-    expect(result).toEqual({
-      valid: true,
-      code: "B2BSTART",
-      discountAmount: 50_000,
-      message: "Applied",
-    });
+    expect(mockedPost).not.toHaveBeenCalled();
   });
 });

@@ -55,12 +55,27 @@ const customPrintItem: CartItem = {
 };
 
 describe("custom print checkout contract", () => {
-  it("allows COD for custom print items because COD still starts with an online deposit", () => {
+  it("requires staged online checkout for custom print items", () => {
     expect(cartRequiresOnlinePayment([customPrintItem])).toBe(true);
-    expect(isPaymentAllowedForCart("COD", [customPrintItem])).toBe(true);
-    expect(getPaymentOptionsForCart([customPrintItem]).map((item) => item.value)).toEqual([
-      "COD",
-      "PAYOS",
+    expect(isPaymentAllowedForCart("COD", [customPrintItem])).toBe(false);
+    expect(isPaymentAllowedForCart("PAYOS", [customPrintItem])).toBe(true);
+    expect(getPaymentOptionsForCart([customPrintItem])).toEqual([
+      { value: "PAYOS", label: "Thanh toán online theo từng đợt" },
+    ]);
+  });
+
+  it("shows COD deposit and full-online options for non-design items", () => {
+    const standardItem: CartItem = {
+      ...customPrintItem,
+      cartItemId: "standard:CUP-RND-PP-700-WHT",
+      fulfillmentType: "STANDARD",
+      designId: undefined,
+      designFile: undefined,
+    };
+
+    expect(getPaymentOptionsForCart([standardItem])).toEqual([
+      { value: "COD", label: "Cọc 50% online, 50% khi nhận hàng" },
+      { value: "PAYOS", label: "Thanh toán online 100%" },
     ]);
   });
 

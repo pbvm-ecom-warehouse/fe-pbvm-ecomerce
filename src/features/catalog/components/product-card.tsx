@@ -282,7 +282,7 @@ export function ProductCard({
     ? product.variants.reduce((s, v) => s + (v.availableQty ?? 0), 0)
     : product.stockSnapshot ?? 0;
 
-  const hasDiscount = product.price > product.b2bPrice;
+  const hasDiscount = product.b2bPrice > 0 && product.price > product.b2bPrice;
   const discountPct = hasDiscount
     ? Math.round(((product.price - product.b2bPrice) / product.price) * 100)
     : 0;
@@ -464,11 +464,7 @@ export function ProductCard({
             <DialogDescription>{optionProduct.name}</DialogDescription>
           </DialogHeader>
 
-          {loadingOptions ? (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              Đang tải thông số từ API...
-            </div>
-          ) : optionGroups.length === 0 ? (
+          {loadingOptions && optionGroups.length === 0 ? null : optionGroups.length === 0 ? (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
               Sản phẩm này chưa có thông số biến thể từ API.
             </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useTransition } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -41,15 +41,42 @@ import {
   adminGetProductVariants,
   adminUpdateProduct,
   adminUpdateVariant,
-  adminPublishProduct,
-  adminActivateVariant,
+  adminActivateProductVariants,
+  adminPublishProductWithVariants,
   adminUploadProductImage,
   adminListProducts,
 } from "@/features/catalog/services/admin-catalog.service";
 import { publicApiFetch } from "@/lib/public-api";
 import { formatCurrency } from "@/utils/format-currency";
 import type { FulfillmentType } from "@/types/api";
-import { normalizeVariantAttributes } from "@/features/catalog/utils/variant-attributes";
+import {
+  collectVariantAttributes,
+  collectWmsItemVariantAttributes,
+  normalizeVariantAttributes,
+} from "@/features/catalog/utils/variant-attributes";
+import { listWmsItems } from "@/features/catalog/services/wms-stock.service";
+
+type AdminProductVariantState = {
+  id?: string;
+  sku: string;
+  price: number;
+  availableQty: number;
+  attributes: Record<string, string>;
+  fulfillmentType: FulfillmentType;
+};
+
+type AdminProductPageCacheEntry = {
+  categories: any[];
+  product: any;
+  prodName: string;
+  prodSlug: string;
+  prodDesc: string;
+  prodImage: string;
+  prodCategoryId: string;
+  prodVariants: AdminProductVariantState[];
+};
+
+const adminProductPageCache = new Map<string, AdminProductPageCacheEntry>();
 
 const FULFILLMENT_LABELS: Record<string, string> = {
   STANDARD: "Hàng sẵn kho",
@@ -98,30 +125,30 @@ function getProductType(product: any, sku: string = ""): "CUP" | "MATERIAL" | "P
 
 function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Record<string, any> = {}) {
   const normalizedAttrs = normalizeVariantAttributes(attrs, String(attrs.sku || ""));
-  const capacityVal = normalizedAttrs.capacity || attrs.weight || "";
-  const styleVal = normalizedAttrs.style || attrs.specification || "";
-  const materialVal = normalizedAttrs.material || attrs.type || attrs.brand || "";
+  const capacityVal = normalizedAttrs.capacity || attrs.weight || attrs.size || attrs.spec || "";
+  const styleVal = normalizedAttrs.style || attrs.specification || attrs.packaging || "";
+  const materialVal = normalizedAttrs.material || attrs.type || attrs.brand || attrs.origin || "";
   const colorVal = normalizedAttrs.color || attrs.color || attrs.colour || attrs.mauSac || attrs.mau_sac || "";
 
   if (type === "MATERIAL") {
     return {
-      col1Label: "TRỌNG LƯỢNG",
-      col1Val: capacityVal || "-",
-      col2Label: "ĐÓNG GÓI",
-      col2Val: styleVal || "-",
-      col3Label: "NGUỒN GỐC",
-      col3Val: materialVal || "-",
-      col4Label: "MÀU SẮC",
-      col4Val: colorVal || "-",
+      col1Label: "DANH MỤC",
+      col1Val: attrs.category || "-",
+      col2Label: "LOẠI",
+      col2Val: attrs.type || materialVal || "-",
+      col3Label: "HƯƠNG VỊ",
+      col3Val: attrs.flavor || "-",
+      col4Label: "QUY CÁCH",
+      col4Val: attrs.weight || attrs.spec || capacityVal || "-",
     };
   }
 
   if (type === "PACKAGING") {
     return {
-      col1Label: "KÍCH THƯỚC",
-      col1Val: capacityVal || "-",
-      col2Label: "QUY CÁCH BAO BÌ",
-      col2Val: styleVal || "-",
+      col1Label: "LOẠI BAO BÌ",
+      col1Val: attrs.packaging || styleVal || "-",
+      col2Label: "KÍCH THƯỚC",
+      col2Val: capacityVal || "-",
       col3Label: "CHẤT LIỆU",
       col3Val: materialVal || "-",
       col4Label: "MÀU SẮC",
@@ -142,37 +169,38 @@ function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Rec
   };
 }
 
+function hasAnyVariantAttribute(attrs: Record<string, any> = {}) {
+  return Object.values(attrs).some(
+    (value) => value !== undefined && value !== null && String(value).trim(),
+  );
+}
+
 export default function ProductVariantManagementPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [isNavigating, startNavigation] = useTransition();
   const productId = (params.id as string) || "";
   const categoryIdFromUrl = searchParams.get("categoryId") || "";
 
-  const [categories, setCategories] = useState<any[]>([]);
-  const [product, setProduct] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedPage = adminProductPageCache.get(productId);
+  const [categories, setCategories] = useState<any[]>(() => cachedPage?.categories || []);
+  const [product, setProduct] = useState<any | null>(() => cachedPage?.product || null);
+  const [loading, setLoading] = useState(!cachedPage);
   const [saving, setSaving] = useState(false);
 
   // Form State
-  const [prodName, setProdName] = useState("");
-  const [prodSlug, setProdSlug] = useState("");
-  const [prodDesc, setProdDesc] = useState("");
-  const [prodImage, setProdImage] = useState("");
-  const [prodCategoryId, setProdCategoryId] = useState("");
+  const [prodName, setProdName] = useState(() => cachedPage?.prodName || "");
+  const [prodSlug, setProdSlug] = useState(() => cachedPage?.prodSlug || "");
+  const [prodDesc, setProdDesc] = useState(() => cachedPage?.prodDesc || "");
+  const [prodImage, setProdImage] = useState(() => cachedPage?.prodImage || "");
+  const [prodCategoryId, setProdCategoryId] = useState(() => cachedPage?.prodCategoryId || "");
   const [isUploadingProdImage, setIsUploadingProdImage] = useState(false);
 
   // Variants State
   const [prodVariants, setProdVariants] = useState<
-    Array<{
-      id?: string;
-      sku: string;
-      price: number;
-      availableQty: number;
-      attributes: Record<string, string>;
-      fulfillmentType: FulfillmentType;
-    }>
-  >([]);
+    AdminProductVariantState[]
+  >(() => cachedPage?.prodVariants || []);
 
   // Which variant row is currently being edited (-1 = none)
   const [editingVariantIdx, setEditingVariantIdx] = useState<number>(-1);
@@ -232,9 +260,48 @@ export default function ProductVariantManagementPage() {
       );
 
       // 2. GỌI API LẤY VARIANT THỰC TẾ TỪ CSDL DATABASE
-      const fetchedVariants = await adminGetProductVariants(
-        String(foundProd.id || foundProd._id || productId),
+      const resolvedProductId = String(foundProd.id || foundProd._id || productId);
+      let fetchedVariants = await adminGetProductVariants(
+        resolvedProductId,
         foundProd.slug
+      );
+      const productIsActive =
+        String(foundProd.status || "").toUpperCase() === "ACTIVE" ||
+        foundProd.isActive === true;
+      if (
+        productIsActive &&
+        fetchedVariants.some((variant: any) => variant?.isActive !== true)
+      ) {
+        fetchedVariants = await adminActivateProductVariants(resolvedProductId);
+      }
+      fetchedVariants = await Promise.all(
+        fetchedVariants.map(async (variant: any) => {
+          const rawAttrs = collectVariantAttributes(variant);
+          if (hasAnyVariantAttribute(rawAttrs) || !variant?.sku || !variant?.id) {
+            return variant;
+          }
+
+          try {
+            const wmsResult = await listWmsItems({
+              search: String(variant.sku),
+              page: 1,
+              limit: 10,
+            });
+            const wmsItem = (wmsResult.data || []).find(
+              (item) => String(item.sku || "").toUpperCase() === String(variant.sku).toUpperCase(),
+            );
+            const wmsAttrs = collectWmsItemVariantAttributes(wmsItem);
+            if (!hasAnyVariantAttribute(wmsAttrs)) return variant;
+
+            return await adminUpdateVariant(String(variant.id || variant._id), {
+              attributes: { ...rawAttrs, ...wmsAttrs },
+              productId: resolvedProductId,
+            });
+          } catch (error) {
+            console.warn("Could not enrich variant attributes from WMS:", variant.sku, error);
+            return variant;
+          }
+        }),
       );
 
       const rawVars =
@@ -244,24 +311,37 @@ export default function ProductVariantManagementPage() {
             ? foundProd.variants
             : [];
 
-      if (rawVars.length > 0) {
-        setProdVariants(
-          rawVars.map((v: any) => {
-            const sku = v.sku || (foundProd?.slug ? foundProd.slug.toUpperCase() : "SKU");
-            const normalizedAttrs = normalizeVariantAttributes(v.attributes || {}, sku);
-            return {
-              id: v.id || v._id,
-              sku,
-              price: v.price !== undefined ? Number(v.price) : Number(foundProd?.price || 0),
-              availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
-              attributes: { ...(v.attributes || {}), ...normalizedAttrs },
-              fulfillmentType: v.fulfillmentType || "STANDARD",
-            };
-          })
-        );
-      } else {
-        setProdVariants([]);
-      }
+      const mappedVariants: AdminProductVariantState[] = rawVars.map((v: any) => {
+        const sku = v.sku || (foundProd?.slug ? foundProd.slug.toUpperCase() : "SKU");
+        const rawAttrs = collectVariantAttributes(v);
+        const normalizedAttrs = normalizeVariantAttributes(rawAttrs, sku);
+        return {
+          id: v.id || v._id,
+          sku,
+          price: v.price !== undefined ? Number(v.price) : Number(foundProd?.price || 0),
+          availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
+          attributes: { ...rawAttrs, ...normalizedAttrs },
+          fulfillmentType: v.fulfillmentType || "STANDARD",
+        };
+      });
+      setProdVariants(mappedVariants);
+      adminProductPageCache.set(productId, {
+        categories: catsList,
+        product: foundProd,
+        prodName: foundProd.name || "",
+        prodSlug: foundProd.slug || "",
+        prodDesc: foundProd.description || "",
+        prodImage:
+          foundProd.images && foundProd.images[0]
+            ? foundProd.images[0]
+            : foundProd.imageUrl || "",
+        prodCategoryId:
+          foundProd.categoryId ||
+          foundProd.category?._id ||
+          foundFoundCategory(catsList, foundProd) ||
+          (catsList[0]?.id || ""),
+        prodVariants: mappedVariants,
+      });
     } catch (error) {
       console.error("Error loading product variants page:", error);
       toast.error("Lỗi khi tải dữ liệu sản phẩm & variant.");
@@ -287,20 +367,6 @@ export default function ProductVariantManagementPage() {
       next[index] = { ...next[index], price: val };
       return next;
     });
-  };
-
-  const activateAllProductVariants = async () => {
-    await Promise.all(
-      prodVariants
-        .map((variant) => variant.id)
-        .filter((id): id is string => Boolean(id))
-        .map((variantId) =>
-          adminActivateVariant(variantId).catch((error) => {
-            console.warn("adminActivateVariant warning:", variantId, error);
-            return null;
-          }),
-        ),
-    );
   };
 
   const handleVariantSkuChange = (index: number, val: string) => {
@@ -399,11 +465,7 @@ export default function ProductVariantManagementPage() {
         categoryId: prodCategoryId,
         images: imageToSave ? [imageToSave] : [],
       });
-      await activateAllProductVariants();
-
-      toast.success(
-        `Đã lưu cập nhật sản phẩm "${prodName.trim()}" & ${updatedVariantsList.length} Variant từ API CSDL!`
-      );
+      toast.success("Đã lưu");
       loadData();
     } catch (error: any) {
       console.error(error);
@@ -417,8 +479,7 @@ export default function ProductVariantManagementPage() {
     if (!product) return;
     const pId = product.id || product._id || productId;
     try {
-      await adminPublishProduct(pId);
-      await activateAllProductVariants();
+      await adminPublishProductWithVariants(pId);
       toast.success("Đã đưa sản phẩm lên kệ Ecommerce thành công!");
       loadData();
     } catch (error: any) {
@@ -435,6 +496,12 @@ export default function ProductVariantManagementPage() {
   }, [prodVariants, product]);
 
   const handleBackToCategory = () => {
+    startNavigation(() => {
+      router.replace(getBackToCategoryHref());
+    });
+  };
+
+  const getBackToCategoryHref = () => {
     const backCategoryId =
       categoryIdFromUrl ||
       prodCategoryId ||
@@ -442,10 +509,10 @@ export default function ProductVariantManagementPage() {
       product?.category?._id ||
       product?.category?.id;
     const categoryQuery = backCategoryId ? `?categoryId=${encodeURIComponent(String(backCategoryId))}` : "";
-    router.push(`/admin/catalog/categories${categoryQuery}`);
+    return `/admin/catalog/categories${categoryQuery}`;
   };
 
-  if (loading) {
+  if (loading && !product) {
     return (
       <div className="flex flex-col items-center justify-center py-24 space-y-3">
         <Loader2 className="size-8 animate-spin text-emerald-600" />
@@ -480,6 +547,9 @@ export default function ProductVariantManagementPage() {
               variant="outline"
               size="sm"
               onClick={handleBackToCategory}
+              onMouseEnter={() => router.prefetch(getBackToCategoryHref())}
+              onFocus={() => router.prefetch(getBackToCategoryHref())}
+              disabled={isNavigating}
               className="h-9 px-3 rounded-xl border-slate-200 text-slate-700 font-bold hover:bg-slate-50 gap-1.5 cursor-pointer"
             >
               <ArrowLeft className="size-4 text-emerald-600" />
@@ -666,7 +736,7 @@ export default function ProductVariantManagementPage() {
               </div>
 
               {/* READ-ONLY LIST */}
-              <div className="rounded-2xl border border-[#E9E3DD] overflow-hidden">
+              <div className="max-h-[520px] overflow-y-auto rounded-2xl border border-[#E9E3DD]">
                 {prodVariants.length === 0 ? (
                   <div className="py-12 text-center text-xs text-slate-400 font-medium bg-slate-50">
                     Không tìm thấy variant nào từ CSDL.
@@ -696,7 +766,9 @@ export default function ProductVariantManagementPage() {
 
                           <div className="flex-1 flex items-center gap-4 min-w-0">
                             <span className="text-xs text-slate-500 truncate hidden sm:block">
-                              {[info.col1Val, info.col2Val, info.col3Val].filter(Boolean).join(" · ")}
+                              {[info.col1Val, info.col2Val, info.col3Val]
+                                .filter((value) => value && value !== "-")
+                                .join(" · ")}
                             </span>
                           </div>
 

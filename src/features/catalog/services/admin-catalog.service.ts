@@ -43,10 +43,17 @@ function normalizeProductList(payload: any): any[] {
   return [];
 }
 
+export function isApprovedCatalogProduct(product: any): boolean {
+  const status = String(product?.status || "").toUpperCase();
+  if (status && status !== "ACTIVE") return false;
+  if (product?.isActive === false) return false;
+  return status === "ACTIVE" || product?.isActive === true;
+}
+
 export async function adminListProducts() {
   try {
-    const rawProducts = await publicApiFetch<any[]>("/catalog/products");
-    const activeList = Array.isArray(rawProducts) ? rawProducts : [];
+    const rawProducts = await publicApiFetch<any>("/catalog/products");
+    const activeList = normalizeProductList(rawProducts);
     return activeList.map((p) => {
       const id = String(p.id || p._id || "");
       const finalImages = cleanImageCandidate(
@@ -74,8 +81,8 @@ export async function adminListInactiveProducts() {
     product?.status === "INACTIVE";
 
   try {
-    const rawProducts = await publicApiFetch<any[]>("/catalog/products");
-    const list = Array.isArray(rawProducts) ? rawProducts : [];
+    const rawProducts = await publicApiFetch<any>("/catalog/products");
+    const list = normalizeProductList(rawProducts);
     return list.filter(isInactiveProduct);
   } catch (error) {
     console.warn("adminListInactiveProducts public endpoint error:", error);
@@ -158,6 +165,38 @@ export async function adminPublishProduct(id: string) {
   const published = unwrapApiData(response.data);
   notifyProductSync(published?.slug ? [`/products/${published.slug}`] : []);
   return published;
+}
+
+function getVariantId(variant: any): string {
+  return String(variant?.id || variant?._id || "");
+}
+
+export async function adminActivateProductVariants(id: string): Promise<ProductVariant[]> {
+  const variants = await adminGetProductVariants(id);
+  const inactiveVariantIds = variants
+    .filter((variant: any) => variant?.isActive !== true)
+    .map(getVariantId)
+    .filter(Boolean);
+
+  if (inactiveVariantIds.length === 0) {
+    return variants;
+  }
+
+  await Promise.all(
+    inactiveVariantIds.map((variantId) => adminActivateVariant(variantId)),
+  );
+
+  return adminGetProductVariants(id);
+}
+
+export async function adminPublishProductWithVariants(id: string) {
+  const published = await adminPublishProduct(id);
+  const variants = await adminActivateProductVariants(id);
+
+  return {
+    product: published,
+    variants,
+  };
 }
 export async function adminDeleteProduct(id: string, slug?: string, extraKeys: string[] = []) {
   await apiClient.patch<any>(`/admin/catalog/products/${id}`, {
@@ -275,7 +314,9 @@ export async function adminCreateCategory(data: {
     cleanData.parentId = data.parentId;
   }
   const response = await apiClient.post<any>("/admin/catalog/categories", cleanData);
-  return unwrapApiData(response.data);
+  const created = unwrapApiData(response.data);
+  notifyProductSync([`/products?category=${created?.slug || cleanData.slug}`]);
+  return created;
 }
 
 export async function adminUpdateCategory(
@@ -296,7 +337,9 @@ export async function adminUpdateCategory(
   }
 
   const response = await apiClient.patch<any>(`/admin/catalog/categories/${id}`, cleanData);
-  return unwrapApiData(response.data);
+  const updated = unwrapApiData(response.data);
+  notifyProductSync(updated?.slug || cleanData.slug ? [`/products?category=${updated?.slug || cleanData.slug}`] : []);
+  return updated;
 }
 export async function adminDeleteCategory(
   id: string,

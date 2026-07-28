@@ -96,6 +96,18 @@ export type CatalogProduct = {
   variants?: ProductVariant[];
 };
 
+export type CatalogCategory = {
+  id?: string;
+  _id?: string;
+  name: string;
+  slug?: string;
+  code?: string;
+  position?: number;
+  isActive?: boolean;
+  isDeleted?: boolean;
+  deletedAt?: string | null;
+};
+
 export type ProductVariant = {
   id: string;
   sku: string;

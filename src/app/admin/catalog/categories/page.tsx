@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -66,14 +66,25 @@ import {
   adminRestoreCategory,
   adminListProducts,
   adminUpdateProduct,
-  adminPublishProduct,
+  adminPublishProductWithVariants,
   adminDeleteProduct,
   adminUpdateVariant,
   adminGetProductVariants,
   adminUploadProductImage,
+  isApprovedCatalogProduct,
 } from "@/features/catalog/services/admin-catalog.service";
 import { formatCurrency } from "@/utils/format-currency";
 import type { FulfillmentType } from "@/types/api";
+import {
+  buildCategorySubmitPayload,
+  sanitizeCategorySlug,
+} from "@/features/catalog/utils/category-form";
+
+let adminCategoriesPageCache: {
+  categories: any[];
+  products: any[];
+  hiddenCategories: any[];
+} | null = null;
 
 const FULFILLMENT_LABELS: Record<string, string> = {
   STANDARD: "Hàng sẵn kho",
@@ -84,10 +95,15 @@ const FULFILLMENT_LABELS: Record<string, string> = {
 export default function AdminCategoriesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const categoryIdFromUrl = searchParams.get("categoryId");
-  const [categories, setCategories] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isNavigating, startNavigation] = useTransition();
+  const viewSwitchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [categoryIdFromUrl, setCategoryIdFromUrl] = useState<string | null>(
+    () => searchParams.get("categoryId"),
+  );
+  const [isViewSwitching, setIsViewSwitching] = useState(false);
+  const [categories, setCategories] = useState<any[]>(() => adminCategoriesPageCache?.categories || []);
+  const [products, setProducts] = useState<any[]>(() => adminCategoriesPageCache?.products || []);
+  const [loading, setLoading] = useState(!adminCategoriesPageCache);
   const [search, setSearch] = useState("");
 
   // Active Selected Category (null = Category Table View, categoryObj = Product List View for that category)
@@ -218,7 +234,9 @@ export default function AdminCategoriesPage() {
   const [deletingCat, setDeletingCat] = useState(false);
   const [deletingProduct, setDeletingProduct] = useState<any | null>(null);
   const [deletingProd, setDeletingProd] = useState(false);
-  const [hiddenCategories, setHiddenCategories] = useState<any[]>([]);
+  const [hiddenCategories, setHiddenCategories] = useState<any[]>(
+    () => adminCategoriesPageCache?.hiddenCategories || [],
+  );
   const [isHiddenModalOpen, setIsHiddenModalOpen] = useState(false);
   const [restoringId, setRestoringId] = useState<string | null>(null);
 
@@ -276,10 +294,16 @@ export default function AdminCategoriesPage() {
 
       const catList = catRes || [];
       const prodList = prodRes || [];
+      const hiddenCatList = hiddenCatRes || [];
 
       setCategories(catList);
       setProducts(prodList);
-      setHiddenCategories(hiddenCatRes || []);
+      setHiddenCategories(hiddenCatList);
+      adminCategoriesPageCache = {
+        categories: catList,
+        products: prodList,
+        hiddenCategories: hiddenCatList,
+      };
 
       // Keep activeCategory in sync if updated
       if (activeCategory) {
@@ -301,7 +325,38 @@ export default function AdminCategoriesPage() {
   }, []);
 
   useEffect(() => {
-    if (!categoryIdFromUrl || categories.length === 0) return;
+    return () => {
+      if (viewSwitchTimer.current) clearTimeout(viewSwitchTimer.current);
+    };
+  }, []);
+
+  const startViewSwitch = () => {
+    setIsViewSwitching(true);
+    if (viewSwitchTimer.current) clearTimeout(viewSwitchTimer.current);
+    viewSwitchTimer.current = setTimeout(() => {
+      setIsViewSwitching(false);
+    }, 140);
+  };
+
+  useEffect(() => {
+    setCategoryIdFromUrl(searchParams.get("categoryId"));
+  }, [searchParams]);
+
+  useEffect(() => {
+    const syncCategoryFromLocation = () => {
+      startViewSwitch();
+      setCategoryIdFromUrl(new URLSearchParams(window.location.search).get("categoryId"));
+    };
+    window.addEventListener("popstate", syncCategoryFromLocation);
+    return () => window.removeEventListener("popstate", syncCategoryFromLocation);
+  }, []);
+
+  useEffect(() => {
+    if (!categoryIdFromUrl) {
+      if (activeCategory) setActiveCategory(null);
+      return;
+    }
+    if (categories.length === 0) return;
 
     const matchedCategory = categories.find((category) => {
       const id = category.id || category._id;
@@ -314,14 +369,53 @@ export default function AdminCategoriesPage() {
   }, [categoryIdFromUrl, categories, activeCategory]);
 
   const handleBackToCategoryList = () => {
+    startViewSwitch();
     setActiveCategory(null);
-    router.push("/admin/catalog/categories");
+    setCategoryIdFromUrl(null);
+    window.history.replaceState(null, "", "/admin/catalog/categories");
+  };
+
+  const handleOpenCategoryProducts = (category: any) => {
+    startViewSwitch();
+    setActiveCategory(category);
+    const categoryId = category?.id || category?._id || category?.slug;
+    if (categoryId) {
+      const nextCategoryId = String(categoryId);
+      setCategoryIdFromUrl(nextCategoryId);
+      window.history.pushState(
+        null,
+        "",
+        `/admin/catalog/categories?categoryId=${encodeURIComponent(nextCategoryId)}`,
+      );
+    }
+  };
+
+  const prefetchCategoryProducts = (category: any) => {
+    // Same-page view switch: no route prefetch needed.
+  };
+
+  const getProductManagementHref = (prod: any) => {
+    const targetId = prod.id || prod._id || prod.slug;
+    const catId = activeCategory?.id || activeCategory?._id || prod.categoryId || prod.category?._id || prod.category?.id;
+    const categoryQuery = catId ? `?categoryId=${encodeURIComponent(String(catId))}` : "";
+    return `/admin/catalog/products/${encodeURIComponent(String(targetId))}${categoryQuery}`;
   };
 
   // Map product count per category
   const productCountByCat = useMemo(() => {
     const counts: Record<string, number> = {};
     products.forEach((p) => {
+      const catId = p.categoryId || p.category?._id || p.category?.id;
+      if (catId) {
+        counts[catId] = (counts[catId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [products]);
+
+  const approvedProductCountByCat = useMemo(() => {
+    const counts: Record<string, number> = {};
+    products.filter(isApprovedCatalogProduct).forEach((p) => {
       const catId = p.categoryId || p.category?._id || p.category?.id;
       if (catId) {
         counts[catId] = (counts[catId] || 0) + 1;
@@ -354,6 +448,7 @@ export default function AdminCategoriesPage() {
     if (!activeCategory) return [];
     const catId = String(activeCategory.id || activeCategory._id || "");
     let list = products.filter((p) => {
+      if (!isApprovedCatalogProduct(p)) return false;
       const pCatId = p.categoryId || p.category?._id || p.category?.id;
       return String(pCatId || "") === catId;
     });
@@ -425,9 +520,23 @@ export default function AdminCategoriesPage() {
         slug: calculatedSlug,
         position: Number(catPosition) || 1,
       };
+      const { payload: cleanPayload } = buildCategorySubmitPayload({
+        name: catName,
+        slug: catSlug,
+        position: catPosition,
+        editingCategory,
+      });
+      Object.keys(payload).forEach((key) => {
+        delete (payload as Record<string, any>)[key];
+      });
+      Object.assign(payload, cleanPayload);
 
       if (editingCategory) {
         const catId = editingCategory.id || editingCategory._id;
+        if (!catId) {
+          toast.error("Không tìm thấy ID danh mục để cập nhật.");
+          return;
+        }
         await adminUpdateCategory(catId, payload);
         toast.success(`Cập nhật danh mục "${catName.trim()}" thành công!`);
       } else {
@@ -559,10 +668,10 @@ export default function AdminCategoriesPage() {
 
   // PRODUCT EDIT HANDLERS - Chuyển sang trang riêng quản lý Variant theo yêu cầu
   const handleOpenEditProduct = (prod: any) => {
-    const targetId = prod.id || prod._id || prod.slug;
-    const catId = activeCategory?.id || activeCategory?._id || prod.categoryId || prod.category?._id || prod.category?.id;
-    const categoryQuery = catId ? `?categoryId=${encodeURIComponent(String(catId))}` : "";
-    router.push(`/admin/catalog/products/${encodeURIComponent(targetId)}${categoryQuery}`);
+    const href = getProductManagementHref(prod);
+    startNavigation(() => {
+      router.push(href);
+    });
   };
 
   const handleProductUpdateSubmit = async (e: React.FormEvent) => {
@@ -664,7 +773,7 @@ export default function AdminCategoriesPage() {
 
   const handlePublishProduct = async (id: string) => {
     try {
-      await adminPublishProduct(id);
+      await adminPublishProductWithVariants(id);
       toast.success("Đưa sản phẩm lên kệ Ecommerce thành công!");
       fetchData();
     } catch (error: any) {
@@ -674,7 +783,7 @@ export default function AdminCategoriesPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" aria-busy={isNavigating || loading}>
       {/* Modal for WMS Sync (Duyệt & Đẩy Hàng WMS với SKU sẵn có) */}
       <WmsSyncToEcomModal
         open={showSyncModal}
@@ -779,8 +888,12 @@ export default function AdminCategoriesPage() {
         </div>
 
         {/* TABLE CONTENT */}
-        <CardContent className="p-0">
-          {loading ? (
+        <CardContent
+          className={`min-h-[360px] overflow-hidden p-0 transition-opacity duration-150 ease-out ${
+            isViewSwitching || isNavigating ? "opacity-95" : "opacity-100"
+          }`}
+        >
+          {loading && categories.length === 0 && products.length === 0 ? (
             <div className="flex h-64 items-center justify-center bg-white">
               <div className="flex flex-col items-center gap-2">
                 <div className="size-8 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin" />
@@ -810,7 +923,7 @@ export default function AdminCategoriesPage() {
                 ) : (
                   filteredCategories.map((c, index) => {
                     const id = c.id || c._id;
-                    const count = productCountByCat[id] || 0;
+                    const count = approvedProductCountByCat[id] || 0;
 
                     return (
                       <TableRow key={id} className="border-b border-[#E9E3DD]/60 hover:bg-slate-50/60 transition-colors">
@@ -819,7 +932,12 @@ export default function AdminCategoriesPage() {
                             {index + 1}
                           </div>
                         </TableCell>
-                        <TableCell className="w-[32%] align-middle text-left font-extrabold text-slate-800 text-xs cursor-pointer" onClick={() => setActiveCategory(c)}>
+                        <TableCell
+                          className="w-[32%] align-middle text-left font-extrabold text-slate-800 text-xs cursor-pointer"
+                          onMouseEnter={() => prefetchCategoryProducts(c)}
+                          onFocus={() => prefetchCategoryProducts(c)}
+                          onClick={() => handleOpenCategoryProducts(c)}
+                        >
                           <div className="flex items-center gap-2 hover:text-emerald-700 transition-colors">
                             <Folder className="size-4 text-emerald-600 shrink-0" />
                             <span className="underline decoration-slate-300 underline-offset-4">{c.name}</span>
@@ -844,7 +962,9 @@ export default function AdminCategoriesPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             <Button
                               size="sm"
-                              onClick={() => setActiveCategory(c)}
+                              onClick={() => handleOpenCategoryProducts(c)}
+                              onMouseEnter={() => prefetchCategoryProducts(c)}
+                              onFocus={() => prefetchCategoryProducts(c)}
                               className="h-8 px-3 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer gap-1 border-0 shadow-2xs"
                               title="Xem các sản phẩm thuộc danh mục này"
                             >
@@ -961,6 +1081,8 @@ export default function AdminCategoriesPage() {
                             <Button
                               size="sm"
                               onClick={() => handleOpenEditProduct(product)}
+                              onMouseEnter={() => router.prefetch(getProductManagementHref(product))}
+                              onFocus={() => router.prefetch(getProductManagementHref(product))}
                               className="h-8 px-3 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-[11.5px] font-black rounded-lg gap-1.5 cursor-pointer shadow-2xs transition-all hover:scale-105"
                               title="Bấm để tải biến thể từ DB và chỉnh sửa giá, thông số"
                             >
@@ -1012,6 +1134,9 @@ export default function AdminCategoriesPage() {
                       .trim()
                       .replace(/\s+/g, "-"),
                   );
+                  if (editingCategory) {
+                    setCatSlug(catSlug);
+                  }
                 }}
                 placeholder="VD: Ly chưa in"
                 className="h-10 text-xs rounded-xl font-semibold"
