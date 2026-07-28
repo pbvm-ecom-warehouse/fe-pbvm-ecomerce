@@ -26,6 +26,8 @@ import {
   adminListInactiveProducts,
   adminListInactiveVariants,
   adminGetProductVariants,
+  adminListHiddenCategories,
+  adminRestoreCategory,
 } from "@/features/catalog/services/admin-catalog.service";
 import { buildSyncItemsFromCatalogProducts } from "@/features/catalog/components/wms-sync-to-ecom-modal";
 
@@ -178,6 +180,42 @@ describe("admin catalog variant activation API", () => {
     );
     expect(apiClientMock.patch).toHaveBeenCalledWith(
       "/admin/catalog/variants/variant-1/activate",
+    );
+  });
+
+  it("lists soft-deleted categories from the admin deleted endpoint", async () => {
+    const deletedCategories = [
+      {
+        id: "cat-1",
+        name: "Ly da an",
+        slug: "ly-da-an",
+        deletedAt: "2026-07-28T00:00:00.000Z",
+      },
+    ];
+    apiClientMock.get.mockResolvedValueOnce({
+      data: { data: deletedCategories, meta: {} },
+    });
+
+    await expect(adminListHiddenCategories()).resolves.toEqual(deletedCategories);
+    expect(apiClientMock.get).toHaveBeenCalledWith(
+      "/admin/catalog/categories/deleted",
+    );
+  });
+
+  it("restores a soft-deleted category through the admin restore endpoint", async () => {
+    const restoredCategory = {
+      id: "cat-1",
+      name: "Ly da an",
+      slug: "ly-da-an",
+      isDeleted: false,
+    };
+    apiClientMock.patch.mockResolvedValueOnce({
+      data: { data: restoredCategory, meta: {} },
+    });
+
+    await expect(adminRestoreCategory("cat-1")).resolves.toEqual(restoredCategory);
+    expect(apiClientMock.patch).toHaveBeenCalledWith(
+      "/admin/catalog/categories/cat-1/restore",
     );
   });
 

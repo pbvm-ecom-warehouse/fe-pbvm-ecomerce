@@ -43,7 +43,7 @@ import {
   isPaymentAllowedForCart,
 } from "@/features/payment/payment-options";
 import { formatCurrency } from "@/utils/format-currency";
-import { applyPromotion } from "@/features/promotion/promotion-rules";
+import { validatePromotion } from "@/features/promotion/promotion-rules";
 
 import {
   checkoutSchema,
@@ -55,10 +55,18 @@ import {
   addAddress,
   type AddressResponse,
 } from "@/features/checkout/services/checkout.service";
+import {
+  getVietnamAdministrativeUnits,
+  type VietnamDistrict,
+  type VietnamProvince,
+  type VietnamWard,
+} from "@/features/checkout/services/vietnam-address.service";
 import { cleanProductName } from "@/features/catalog/services/catalog.service";
 import { getOrder, cancelOrder } from "@/features/order/services/order.service";
 import { apiClient } from "@/lib/api-client";
 import { unwrapApiData } from "@/lib/api-contract";
+
+const addressLabelOptions = ["Nhà riêng", "Văn phòng", "Cửa hàng", "Kho hàng", "Địa chỉ khác"];
 
 export function CheckoutForm() {
   const [mounted, setMounted] = useState(false);
@@ -69,10 +77,17 @@ export function CheckoutForm() {
   const rawItems = useCartStore((state) => state.items);
   const items = rawItems.filter((item) => item.selected !== false);
   const clearSelectedItems = useCartStore((state) => state.clearSelectedItems);
+  const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
+  const user = useAuthStore((state) => state.user);
   const totals = calculateCartTotals(items);
   const availablePaymentOptions = getPaymentOptionsForCart(items);
   const requiresOnlinePayment = cartRequiresOnlinePayment(items);
   const hasCustomPrint = items.some((item) => item.fulfillmentType === "CUSTOM_PRINT");
+
+  useEffect(() => {
+    if (!mounted || !user) return;
+    fetchAndSyncCart();
+  }, [fetchAndSyncCart, mounted, user]);
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedOrder, setSubmittedOrder] = useState<{
@@ -85,12 +100,19 @@ export function CheckoutForm() {
   const [couponCode, setCouponCode] = useState("");
   const [discountAmount, setDiscountAmount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
 
   // Address selection state
   const [savedAddresses, setSavedAddresses] = useState<AddressResponse[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string | "new" | null>(null);
   const [isLoadingAddresses, setIsLoadingAddresses] = useState(true);
   const [isAddingAddress, setIsAddingAddress] = useState(false);
+  const [isLoadingAdministrativeUnits, setIsLoadingAdministrativeUnits] = useState(false);
+  const [administrativeUnitsError, setAdministrativeUnitsError] = useState("");
+  const [provinces, setProvinces] = useState<VietnamProvince[]>([]);
+  const [provinceSearch, setProvinceSearch] = useState("");
+  const [districtSearch, setDistrictSearch] = useState("");
+  const [wardSearch, setWardSearch] = useState("");
   const [newAddressForm, setNewAddressForm] = useState({
     label: "",
     recipientName: "",
@@ -100,6 +122,41 @@ export function CheckoutForm() {
     district: "",
     province: "",
   });
+
+  const selectedProvince = provinces.find((province) => province.name === newAddressForm.province);
+  const districts: VietnamDistrict[] = selectedProvince?.districts ?? [];
+  const selectedDistrict = districts.find((district) => district.name === newAddressForm.district);
+  const wards: VietnamWard[] = selectedDistrict?.wards ?? [];
+  const filterAdministrativeUnits = <T extends { name: string }>(items: T[], keyword: string) => {
+    const normalizedKeyword = keyword
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "d")
+      .toLowerCase()
+      .trim();
+    if (!normalizedKeyword) return items;
+    return items.filter((item) =>
+      item.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "d")
+        .toLowerCase()
+        .includes(normalizedKeyword),
+    );
+  };
+  const filteredProvinces = filterAdministrativeUnits(provinces, provinceSearch);
+  const filteredDistricts = filterAdministrativeUnits(districts, districtSearch);
+  const filteredWards = filterAdministrativeUnits(wards, wardSearch);
+
+  const syncCheckoutAddress = (next: Partial<typeof newAddressForm>) => {
+    const merged = { ...newAddressForm, ...next };
+    const full = [merged.line, merged.ward, merged.district, merged.province]
+      .filter(Boolean)
+      .join(", ");
+    setValue("address", full);
+  };
 
   // Pending order recovery states & actions
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
@@ -119,6 +176,25 @@ export function CheckoutForm() {
         }
       }
     }
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingAdministrativeUnits(true);
+    setAdministrativeUnitsError("");
+    getVietnamAdministrativeUnits()
+      .then((data) => {
+        if (active) setProvinces(data);
+      })
+      .catch(() => {
+        if (active) setAdministrativeUnitsError("Không tải được danh sách tỉnh/thành từ API.");
+      })
+      .finally(() => {
+        if (active) setIsLoadingAdministrativeUnits(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -168,7 +244,6 @@ export function CheckoutForm() {
     }
   };
 
-  const user = useAuthStore((state) => state.user);
   const router = useRouter();
 
   const handleRestoreCart = async () => {
@@ -253,9 +328,9 @@ export function CheckoutForm() {
   } = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
-      customerName: user?.name || "",
-      phone: user?.phone || "",
-      customerType: user?.customerType || "B2B",
+      customerName: user?.name,
+      phone: user?.phone,
+      customerType: user?.customerType,
       paymentProvider: "PAYOS",
       shippingMethod: "TRUCK",
     },
@@ -327,14 +402,22 @@ export function CheckoutForm() {
   };
 
   const handleSaveNewAddress = async () => {
-    if (!newAddressForm.line || !newAddressForm.recipientName || !newAddressForm.phone) {
+    if (
+      !newAddressForm.label ||
+      !newAddressForm.line ||
+      !newAddressForm.recipientName ||
+      !newAddressForm.phone ||
+      !newAddressForm.province ||
+      !newAddressForm.district ||
+      !newAddressForm.ward
+    ) {
       toast.error("Vui lòng điền đầy đủ thông tin địa chỉ");
       return;
     }
     try {
       setIsAddingAddress(true);
       const updated = await addAddress({
-        label: newAddressForm.label || `Địa chỉ ${savedAddresses.length + 1}`,
+        label: newAddressForm.label,
         recipientName: newAddressForm.recipientName,
         phone: newAddressForm.phone,
         line: newAddressForm.line,
@@ -356,6 +439,41 @@ export function CheckoutForm() {
       toast.error("Không thể lưu địa chỉ mới");
     } finally {
       setIsAddingAddress(false);
+    }
+  };
+
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim();
+    if (!code) {
+      toast.error("Vui lòng nhập mã giảm giá.");
+      return;
+    }
+
+    setIsApplyingCoupon(true);
+    try {
+      const result = await validatePromotion({
+        code,
+        orderValue: totals.subtotal,
+      });
+
+      if (result.valid && result.discountAmount > 0) {
+        setDiscountAmount(result.discountAmount);
+        setAppliedCoupon(result.code || code);
+        toast.success(
+          `Áp dụng mã ${result.code || code} thành công! Giảm ${formatCurrency(result.discountAmount)}.`,
+        );
+        return;
+      }
+
+      toast.error(result.message || "Mã giảm giá không hợp lệ hoặc đã hết hạn.");
+    } catch (err: any) {
+      if (err?.response?.status === 404) {
+        toast.error("BE chưa có API /promotions/validate để kiểm tra mã giảm giá.");
+      } else {
+        toast.error(err?.response?.data?.message || "Không thể kiểm tra mã giảm giá.");
+      }
+    } finally {
+      setIsApplyingCoupon(false);
     }
   };
 
@@ -591,8 +709,14 @@ export function CheckoutForm() {
         }
 
         try {
+          if (!selectedAddressId || selectedAddressId === "new") {
+            toast.error("Vui lòng chọn hoặc lưu địa chỉ giao hàng trước khi đặt hàng.");
+            return;
+          }
+
           const order = await createOrder({
             ...values,
+            addressId: selectedAddressId,
             customerType: values.customerType as "B2B" | "B2C",
             items: items.map((item) => ({
               productId: item.productId,
@@ -732,22 +856,35 @@ export function CheckoutForm() {
 
                 {/* New address form */}
                 {selectedAddressId === "new" && (
-                  <div className="rounded-xl border border-primary/20 bg-muted/30 p-4 space-y-3">
-                    <div className="grid gap-2">
+                  <div className="rounded-2xl border border-primary/20 bg-muted/30 p-5">
+                    <div className="grid grid-cols-1 gap-x-3 gap-y-4 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="grid gap-1.5">
                       <Label className="text-[11px] font-bold text-muted-foreground">Tên địa chỉ (nhãn)</Label>
-                      <Input
-                        placeholder="VD: Nhà riêng, Văn phòng..."
-                        className="h-9 rounded-lg border-border bg-white text-sm"
+                      <Select
                         value={newAddressForm.label}
-                        onChange={(e) => setNewAddressForm((p) => ({ ...p, label: e.target.value }))}
-                      />
+                        onValueChange={(value) => setNewAddressForm((p) => ({ ...p, label: value }))}
+                      >
+                        <SelectTrigger className="h-10 min-h-10 w-full rounded-xl border-border bg-white px-3 py-0 text-sm leading-none shadow-xs transition-colors hover:border-primary/40 focus-visible:border-primary focus-visible:ring-primary/15">
+                          <SelectValue placeholder="Chọn tên địa chỉ" />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
+                          {addressLabelOptions.map((label) => (
+                            <SelectItem
+                              key={label}
+                              value={label}
+                              className="h-9 rounded-lg px-3 pr-8 text-sm font-medium text-slate-700 focus:bg-emerald-50 focus:text-[#253D4E] data-[state=checked]:bg-emerald-50 data-[state=checked]:font-bold data-[state=checked]:text-[#253D4E]"
+                            >
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
                       <div className="grid gap-1.5">
                         <Label className="text-[11px] font-bold text-muted-foreground">Người nhận *</Label>
                         <Input
                           placeholder="Nguyễn Văn A"
-                          className="h-9 rounded-lg border-border bg-white text-sm"
+                          className="h-10 rounded-xl border-border bg-white px-3 text-sm"
                           value={newAddressForm.recipientName}
                           onChange={(e) => {
                             setNewAddressForm((p) => ({ ...p, recipientName: e.target.value }));
@@ -759,7 +896,7 @@ export function CheckoutForm() {
                         <Label className="text-[11px] font-bold text-muted-foreground">Số điện thoại *</Label>
                         <Input
                           placeholder="0900000000"
-                          className="h-9 rounded-lg border-border bg-white text-sm"
+                          className="h-10 rounded-xl border-border bg-white px-3 text-sm"
                           value={newAddressForm.phone}
                           onChange={(e) => {
                             setNewAddressForm((p) => ({ ...p, phone: e.target.value }));
@@ -767,69 +904,145 @@ export function CheckoutForm() {
                           }}
                         />
                       </div>
-                    </div>
                     <div className="grid gap-1.5">
                       <Label className="text-[11px] font-bold text-muted-foreground">Số nhà, tên đường *</Label>
                       <Input
                         placeholder="VD: 123 Nguyễn Huệ"
-                        className="h-9 rounded-lg border-border bg-white text-sm"
+                        className="h-10 rounded-xl border-border bg-white px-3 text-sm"
                         value={newAddressForm.line}
                         onChange={(e) => {
                           const newLine = e.target.value;
                           setNewAddressForm((p) => ({ ...p, line: newLine }));
-                          const full = [newLine, newAddressForm.ward, newAddressForm.district, newAddressForm.province]
-                            .filter(Boolean).join(", ");
-                          setValue("address", full);
+                          syncCheckoutAddress({ line: newLine });
                         }}
                       />
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
                       <div className="grid gap-1.5">
-                        <Label className="text-[11px] font-bold text-muted-foreground">Phường/Xã</Label>
-                        <Input
-                          placeholder="Phường 1"
-                          className="h-9 rounded-lg border-border bg-white text-sm"
-                          value={newAddressForm.ward}
-                          onChange={(e) => {
-                            const newWard = e.target.value;
-                            setNewAddressForm((p) => ({ ...p, ward: newWard }));
-                            const full = [newAddressForm.line, newWard, newAddressForm.district, newAddressForm.province]
-                              .filter(Boolean).join(", ");
-                            setValue("address", full);
+                        <Label className="text-[11px] font-bold text-muted-foreground">Tỉnh/Thành phố</Label>
+                        <Select
+                          value={newAddressForm.province}
+                          disabled={isLoadingAdministrativeUnits || provinces.length === 0}
+                          onValueChange={(value) => {
+                            setNewAddressForm((p) => ({ ...p, province: value, district: "", ward: "" }));
+                            syncCheckoutAddress({ province: value, district: "", ward: "" });
+                            setProvinceSearch("");
+                            setDistrictSearch("");
+                            setWardSearch("");
                           }}
-                        />
+                        >
+                          <SelectTrigger className="h-10 min-h-10 w-full rounded-xl border-border bg-white px-3 py-0 text-sm leading-none shadow-xs transition-colors hover:border-primary/40 focus-visible:border-primary focus-visible:ring-primary/15">
+                            <SelectValue placeholder={isLoadingAdministrativeUnits ? "Đang tải..." : "Chọn tỉnh/thành"} />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
+                            <div className="sticky top-0 z-10 bg-white pb-1">
+                              <Input
+                                value={provinceSearch}
+                                onChange={(e) => setProvinceSearch(e.target.value)}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                placeholder="Tìm tỉnh/thành..."
+                                className="h-9 rounded-lg border-slate-200 bg-slate-50 px-3 text-sm"
+                              />
+                            </div>
+                            {filteredProvinces.length === 0 ? (
+                              <div className="px-3 py-2 text-xs font-medium text-muted-foreground">Không tìm thấy</div>
+                            ) : null}
+                            {filteredProvinces.map((province) => (
+                              <SelectItem
+                                key={province.code}
+                                value={province.name}
+                                className="h-9 rounded-lg px-3 pr-8 text-sm font-medium text-slate-700 focus:bg-emerald-50 focus:text-[#253D4E] data-[state=checked]:bg-emerald-50 data-[state=checked]:font-bold data-[state=checked]:text-[#253D4E]"
+                              >
+                                {province.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="grid gap-1.5">
                         <Label className="text-[11px] font-bold text-muted-foreground">Quận/Huyện</Label>
-                        <Input
-                          placeholder="Quận 1"
-                          className="h-9 rounded-lg border-border bg-white text-sm"
+                        <Select
                           value={newAddressForm.district}
-                          onChange={(e) => {
-                            const newDistrict = e.target.value;
-                            setNewAddressForm((p) => ({ ...p, district: newDistrict }));
-                            const full = [newAddressForm.line, newAddressForm.ward, newDistrict, newAddressForm.province]
-                              .filter(Boolean).join(", ");
-                            setValue("address", full);
+                          disabled={!selectedProvince}
+                          onValueChange={(value) => {
+                            setNewAddressForm((p) => ({ ...p, district: value, ward: "" }));
+                            syncCheckoutAddress({ district: value, ward: "" });
+                            setDistrictSearch("");
+                            setWardSearch("");
                           }}
-                        />
+                        >
+                          <SelectTrigger className="h-10 min-h-10 w-full rounded-xl border-border bg-white px-3 py-0 text-sm leading-none shadow-xs transition-colors hover:border-primary/40 focus-visible:border-primary focus-visible:ring-primary/15">
+                            <SelectValue placeholder="Chọn quận/huyện" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
+                            <div className="sticky top-0 z-10 bg-white pb-1">
+                              <Input
+                                value={districtSearch}
+                                onChange={(e) => setDistrictSearch(e.target.value)}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                placeholder="Tìm quận/huyện..."
+                                className="h-9 rounded-lg border-slate-200 bg-slate-50 px-3 text-sm"
+                              />
+                            </div>
+                            {filteredDistricts.length === 0 ? (
+                              <div className="px-3 py-2 text-xs font-medium text-muted-foreground">Không tìm thấy</div>
+                            ) : null}
+                            {filteredDistricts.map((district) => (
+                              <SelectItem
+                                key={district.code}
+                                value={district.name}
+                                className="h-9 rounded-lg px-3 pr-8 text-sm font-medium text-slate-700 focus:bg-emerald-50 focus:text-[#253D4E] data-[state=checked]:bg-emerald-50 data-[state=checked]:font-bold data-[state=checked]:text-[#253D4E]"
+                              >
+                                {district.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="grid gap-1.5">
-                        <Label className="text-[11px] font-bold text-muted-foreground">Tỉnh/Thành</Label>
-                        <Input
-                          placeholder="TP.HCM"
-                          className="h-9 rounded-lg border-border bg-white text-sm"
-                          value={newAddressForm.province}
-                          onChange={(e) => {
-                            const newProvince = e.target.value;
-                            setNewAddressForm((p) => ({ ...p, province: newProvince }));
-                            const full = [newAddressForm.line, newAddressForm.ward, newAddressForm.district, newProvince]
-                              .filter(Boolean).join(", ");
-                            setValue("address", full);
+                        <Label className="text-[11px] font-bold text-muted-foreground">Phường/Xã</Label>
+                        <Select
+                          value={newAddressForm.ward}
+                          disabled={!selectedDistrict}
+                          onValueChange={(value) => {
+                            setNewAddressForm((p) => ({ ...p, ward: value }));
+                            syncCheckoutAddress({ ward: value });
+                            setWardSearch("");
                           }}
-                        />
+                        >
+                          <SelectTrigger className="h-10 min-h-10 w-full rounded-xl border-border bg-white px-3 py-0 text-sm leading-none shadow-xs transition-colors hover:border-primary/40 focus-visible:border-primary focus-visible:ring-primary/15">
+                            <SelectValue placeholder="Chọn phường/xã" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl shadow-slate-900/10">
+                            <div className="sticky top-0 z-10 bg-white pb-1">
+                              <Input
+                                value={wardSearch}
+                                onChange={(e) => setWardSearch(e.target.value)}
+                                onKeyDown={(e) => e.stopPropagation()}
+                                placeholder="Tìm phường/xã..."
+                                className="h-9 rounded-lg border-slate-200 bg-slate-50 px-3 text-sm"
+                              />
+                            </div>
+                            {filteredWards.length === 0 ? (
+                              <div className="px-3 py-2 text-xs font-medium text-muted-foreground">Không tìm thấy</div>
+                            ) : null}
+                            {filteredWards.map((ward) => (
+                              <SelectItem
+                                key={ward.code}
+                                value={ward.name}
+                                className="h-9 rounded-lg px-3 pr-8 text-sm font-medium text-slate-700 focus:bg-emerald-50 focus:text-[#253D4E] data-[state=checked]:bg-emerald-50 data-[state=checked]:font-bold data-[state=checked]:text-[#253D4E]"
+                              >
+                                {ward.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
+                    {administrativeUnitsError && (
+                      <p className="mt-3 text-xs font-bold text-destructive">
+                        {administrativeUnitsError}
+                      </p>
+                    )}
                     {errors.address && (
                       <p className="text-xs font-bold text-destructive">{errors.address.message}</p>
                     )}
@@ -839,7 +1052,7 @@ export function CheckoutForm() {
                       size="sm"
                       disabled={isAddingAddress}
                       onClick={handleSaveNewAddress}
-                      className="h-8 rounded-lg border-primary text-primary hover:bg-primary hover:text-white text-xs font-bold"
+                      className="ml-auto mt-4 flex h-10 rounded-xl border-primary px-4 text-xs font-bold text-primary hover:bg-primary hover:text-white"
                     >
                       {isAddingAddress ? "Đang lưu..." : "Lưu địa chỉ này"}
                     </Button>
@@ -973,7 +1186,7 @@ export function CheckoutForm() {
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value)}
                   className="h-9 text-xs rounded-xl border-border bg-white"
-                  disabled={!!appliedCoupon}
+                  disabled={!!appliedCoupon || isApplyingCoupon}
                 />
                 {appliedCoupon ? (
                   <Button
@@ -991,19 +1204,11 @@ export function CheckoutForm() {
                 ) : (
                   <Button
                     type="button"
-                    onClick={() => {
-                      const disc = applyPromotion(totals.subtotal, couponCode);
-                      if (disc > 0) {
-                        setDiscountAmount(disc);
-                        setAppliedCoupon(couponCode);
-                        toast.success(`Áp dụng mã ${couponCode} thành công! Giảm ${formatCurrency(disc)}.`);
-                      } else {
-                        toast.error("Mã giảm giá không hợp lệ hoặc đã hết hạn.");
-                      }
-                    }}
+                    onClick={handleApplyCoupon}
+                    disabled={isApplyingCoupon}
                     className="h-9 px-4 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-xl shrink-0 border-0"
                   >
-                    Áp dụng
+                    {isApplyingCoupon ? "Đang kiểm tra..." : "Áp dụng"}
                   </Button>
                 )}
               </div>

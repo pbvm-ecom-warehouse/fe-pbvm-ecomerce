@@ -54,6 +54,57 @@ function safeWarn(action: string, error: any) {
   console.warn(`[CartStore] ${action} failed:`, msg);
 }
 
+function resolveCartVariant(product: CatalogProduct, options?: AddProductOptions) {
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  if (variants.length === 0) return null;
+
+  const optionSize = options?.selectedSize || options?.attributes?.size || options?.attributes?.capacity;
+  const matchingVariant = optionSize
+    ? variants.find((variant) => {
+        const attrs = variant.attributes || {};
+        return (
+          attrs.size === optionSize ||
+          attrs.capacity === optionSize ||
+          variant.sku === product.productRefId
+        );
+      })
+    : null;
+
+  return (
+    matchingVariant ||
+    variants.find((variant) => variant.isActive !== false && (variant.availableQty ?? 0) > 0) ||
+    variants.find((variant) => variant.isActive !== false) ||
+    variants[0] ||
+    null
+  );
+}
+
+function resolveCartSku(product: CatalogProduct, options?: AddProductOptions) {
+  return resolveCartVariant(product, options)?.sku || product.productRefId || product.id;
+}
+
+function resolveCatalogVariant(product: CatalogProduct | undefined, sku: string) {
+  if (!product || !Array.isArray(product.variants)) return null;
+  return product.variants.find((variant) => variant.sku === sku) || null;
+}
+
+function resolveLatestCartPrice(input: {
+  sku: string;
+  backendUnitPrice: number;
+  catalogProduct?: CatalogProduct;
+  localItem?: CartItem;
+}) {
+  const catalogVariant = resolveCatalogVariant(input.catalogProduct, input.sku);
+  const latestPrice =
+    catalogVariant?.price ??
+    input.catalogProduct?.b2bPrice ??
+    input.catalogProduct?.price ??
+    input.backendUnitPrice ??
+    input.localItem?.price;
+
+  return Number(latestPrice) || 0;
+}
+
 export const useCartStore = create<CartState>()(
   persist(
     immer((set) => ({
@@ -63,8 +114,9 @@ export const useCartStore = create<CartState>()(
         set((state) => {
           if (quantity <= 0 || product.stockSnapshot <= 0) return;
 
+          const cartSku = resolveCartSku(product, options);
           const sizeKey = options?.selectedSize || options?.attributes?.size || "default";
-          const cartItemId = `standard:${product.id}:${sizeKey}`;
+          const cartItemId = `standard:${cartSku}${sizeKey === "default" ? "" : `:${sizeKey}`}`;
           const existing = state.items.find(
             (item) =>
               item.cartItemId === cartItemId &&
@@ -79,8 +131,7 @@ export const useCartStore = create<CartState>()(
             if (options?.attributes) existing.attributes = { ...existing.attributes, ...options.attributes };
 
             if (isLoggedIn()) {
-              const sku = product.productRefId || product.id;
-              updateCartItem(sku, existing.quantity).catch((err) => safeWarn("updateCartItem", err));
+              updateCartItem(cartSku, existing.quantity).catch((err) => safeWarn("updateCartItem", err));
             }
             return;
           }
@@ -88,7 +139,7 @@ export const useCartStore = create<CartState>()(
           state.items.push({
             cartItemId,
             productId: product.id,
-            productRefId: product.productRefId,
+            productRefId: cartSku,
             name: cleanProductName(product.name, product.productRefId || product.id),
             slug: product.slug,
             price: product.price,
@@ -103,8 +154,7 @@ export const useCartStore = create<CartState>()(
           });
 
           if (isLoggedIn()) {
-            const sku = product.productRefId || product.id;
-            addCartItem({ sku, quantity }).catch((err) => safeWarn("addCartItem", err));
+            addCartItem({ sku: cartSku, quantity }).catch((err) => safeWarn("addCartItem", err));
           }
         }),
 
@@ -333,6 +383,12 @@ export const useCartStore = create<CartState>()(
                   }
                 }
 
+                const latestPrice = resolveLatestCartPrice({
+                  sku: item.sku,
+                  backendUnitPrice: item.unitPrice,
+                  catalogProduct: catalogMatch,
+                  localItem: localMatch,
+                });
                 const resolvedSlug = catalogMatch?.slug || localMatch?.slug || item.sku;
                 const resolvedImage = designFileSnapshot?.previewDataUrl || localMatch?.imageUrl || catalogMatch?.imageUrl || "/images/product-placeholder.svg";
                 const resolvedUnit = localMatch?.unit || catalogMatch?.unit || "cái";
@@ -345,7 +401,7 @@ export const useCartStore = create<CartState>()(
                   productRefId: item.sku,
                   name: cleanProductName(resolvedName, item.sku),
                   slug: resolvedSlug,
-                  price: item.unitPrice,
+                  price: latestPrice,
                   quantity: item.quantity,
                   unit: resolvedUnit,
                   imageUrl: resolvedImage,

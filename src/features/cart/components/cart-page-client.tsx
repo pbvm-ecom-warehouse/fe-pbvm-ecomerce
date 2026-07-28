@@ -51,6 +51,12 @@ export function CartPageClient() {
   const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const isCanceledParam = params.get("cancel") === "true" || params.get("canceled") === "true";
+      const hasPendingCheckoutBackup = Boolean(sessionStorage.getItem("pendingCartBackup"));
+      if (isCanceledParam || hasPendingCheckoutBackup) return;
+    }
     fetchAndSyncCart();
   }, [fetchAndSyncCart]);
 
@@ -60,12 +66,27 @@ export function CartPageClient() {
     const params = new URLSearchParams(window.location.search);
     const isCanceledParam = params.get("cancel") === "true" || params.get("canceled") === "true";
     const savedOrderId = sessionStorage.getItem("lastCreatedOrderId");
+    const restoreBackupItems = async () => {
+      const backupStr = sessionStorage.getItem("pendingCartBackup");
+      if (!backupStr) return false;
+      try {
+        const parsed = JSON.parse(backupStr);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          await restoreItems(parsed);
+          return true;
+        }
+      } catch {
+        // ignore invalid backup
+      }
+      return false;
+    };
 
     if (isCanceledParam || savedOrderId) {
       const processCanceledOrder = async () => {
         if (savedOrderId) {
           if (!/^[0-9a-fA-F]{24}$/.test(savedOrderId)) {
             sessionStorage.removeItem("lastCreatedOrderId");
+            await restoreBackupItems();
             if (isCanceledParam) {
               toast.info("Bạn đã hủy thanh toán đơn hàng.");
             }
@@ -79,6 +100,11 @@ export function CartPageClient() {
               order.orderStatus === "PLACED"
             ) {
               await cancelOrder(savedOrderId, "Khách hàng hủy thanh toán và quay về giỏ hàng");
+              const restoredFromBackup = await restoreBackupItems();
+              if (restoredFromBackup) {
+                toast.success("Đã hủy thanh toán. Sản phẩm vẫn giữ nguyên trong giỏ hàng.", { id: "restore-cart" });
+                return;
+              }
               const cartItems = order.items.map((item: any) => {
                 const isCustom = item.isPrintItem;
                 let designFileSnapshot: any = undefined;
@@ -118,16 +144,27 @@ export function CartPageClient() {
               await restoreItems(cartItems);
               toast.success("Đã hủy thanh toán. Các sản phẩm của bạn đã được khôi phục vào giỏ hàng!", { id: "restore-cart" });
             } else {
-              toast.dismiss("restore-cart");
+              const restoredFromBackup = await restoreBackupItems();
+              if (restoredFromBackup) {
+                toast.success("Đã hủy thanh toán. Sản phẩm vẫn còn trong giỏ hàng.", { id: "restore-cart" });
+              } else {
+                toast.dismiss("restore-cart");
+              }
             }
           } catch (err) {
             console.error("Failed to restore canceled order to cart:", err);
-            toast.dismiss("restore-cart");
+            const restoredFromBackup = await restoreBackupItems();
+            if (restoredFromBackup) {
+              toast.success("Đã khôi phục giỏ hàng sau khi hủy thanh toán.", { id: "restore-cart" });
+            } else {
+              toast.dismiss("restore-cart");
+            }
           } finally {
             sessionStorage.removeItem("lastCreatedOrderId");
           }
         }
       } else if (isCanceledParam) {
+          await restoreBackupItems();
           toast.info("Bạn đã hủy thanh toán đơn hàng.");
         }
 

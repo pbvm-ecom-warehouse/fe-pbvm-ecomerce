@@ -232,7 +232,9 @@ export async function adminListCategories(_includeHidden: boolean = false) {
 }
 
 export async function adminListHiddenCategories() {
-  return [];
+  const response = await apiClient.get<any>("/admin/catalog/categories/deleted");
+  const categories = unwrapApiData(response.data);
+  return Array.isArray(categories) ? categories : [];
 }
 
 export async function adminRestoreCategory(
@@ -240,9 +242,9 @@ export async function adminRestoreCategory(
   _catSlug?: string,
   _allProducts: any[] = [],
 ) {
-  const response = await apiClient.patch<any>(`/admin/catalog/categories/${id}`, {
-    isActive: true,
-  });
+  const response = await apiClient.patch<any>(
+    `/admin/catalog/categories/${id}/restore`,
+  );
   notifyProductSync();
   return unwrapApiData(response.data) || { id, success: true };
 }

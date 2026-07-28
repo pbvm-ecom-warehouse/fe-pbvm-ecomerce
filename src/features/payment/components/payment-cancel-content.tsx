@@ -39,22 +39,24 @@ export function PaymentCancelContent() {
   const [order, setOrder] = useState<any>(null);
   const [isRepaying, setIsRepaying] = useState(false);
 
-  // Ensure items are retained in cart when payment is cancelled
+  // Ensure checkout items are retained in cart when payment is cancelled.
   useEffect(() => {
     if (typeof window !== "undefined") {
       const backupStr = sessionStorage.getItem("pendingCartBackup");
-      if (backupStr && cartItems.length === 0) {
+      const restoredKey = `restoredCancelledCart:${orderCodeParam || "latest"}`;
+      if (backupStr && sessionStorage.getItem(restoredKey) !== "true") {
         try {
           const parsed = JSON.parse(backupStr);
           if (Array.isArray(parsed) && parsed.length > 0) {
             restoreItems(parsed);
+            sessionStorage.setItem(restoredKey, "true");
           }
         } catch {
           // ignore
         }
       }
     }
-  }, [cartItems.length, restoreItems]);
+  }, [orderCodeParam, restoreItems]);
 
   // Robustly load order details
   useEffect(() => {
