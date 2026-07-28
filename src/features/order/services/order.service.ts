@@ -18,7 +18,7 @@ function normalizePaymentStatus(order: any) {
     return "PAID";
   }
 
-  if (["REFUND_PENDING", "REFUNDED"].includes(status)) {
+  if (["DEPOSIT_PAID", "PROGRESS_PAID", "REFUND_PENDING", "REFUNDED"].includes(status)) {
     return status;
   }
 

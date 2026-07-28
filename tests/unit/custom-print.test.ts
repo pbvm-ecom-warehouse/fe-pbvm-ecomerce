@@ -55,10 +55,11 @@ const customPrintItem: CartItem = {
 };
 
 describe("custom print checkout contract", () => {
-  it("blocks COD when a cart contains custom print items", () => {
+  it("allows COD for custom print items because COD still starts with an online deposit", () => {
     expect(cartRequiresOnlinePayment([customPrintItem])).toBe(true);
-    expect(isPaymentAllowedForCart("COD", [customPrintItem])).toBe(false);
+    expect(isPaymentAllowedForCart("COD", [customPrintItem])).toBe(true);
     expect(getPaymentOptionsForCart([customPrintItem]).map((item) => item.value)).toEqual([
+      "COD",
       "PAYOS",
     ]);
   });
