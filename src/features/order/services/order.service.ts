@@ -51,10 +51,15 @@ export function mapOrderToSummary(order: any): OrderSummary & Record<string, any
   };
 }
 
-export async function listOrders() {
+export async function listOrders(filter?: {
+  orderStatus?: string;
+  paymentStatus?: string;
+  fulfillmentStatus?: string;
+}) {
   const response =
     await apiClient.get<ApiEnvelope<any[]> | ApiListResponse<any>>(
       "/orders",
+      filter ? { params: filter } : undefined,
     );
   const payload = unwrapApiData(response.data) as any;
 
