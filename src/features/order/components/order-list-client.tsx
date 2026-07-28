@@ -133,14 +133,14 @@ export function OrderListClient({
   const getOrderStatusBadge = (status: string) => {
     switch (status) {
       case "PLACED":
-        return <Badge className="bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-50">Chá» xá»­ lĂ½</Badge>;
+        return <Badge className="bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-50">Chờ xử lý</Badge>;
       case "CONFIRMED":
-        return <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100">ÄĂ£ xĂ¡c nháº­n</Badge>;
+        return <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100">Đã xác nhận</Badge>;
       case "COMPLETED":
       case "CLOSED":
-        return <Badge className="bg-emerald-600 text-white border-transparent hover:bg-emerald-600">HoĂ n thĂ nh</Badge>;
+        return <Badge className="bg-emerald-600 text-white border-transparent hover:bg-emerald-600">Hoàn thành</Badge>;
       case "CANCELLED":
-        return <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-100">ÄĂ£ há»§y</Badge>;
+        return <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-100">Đã hủy</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -149,17 +149,17 @@ export function OrderListClient({
   const getPaymentStatusBadge = (status: string) => {
     switch (status) {
       case "PAID":
-        return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100">ÄĂ£ thanh toĂ¡n</Badge>;
+        return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100">Đã thanh toán</Badge>;
       case "DEPOSIT_PAID":
         return <Badge className="bg-lime-100 text-lime-800 border-lime-200 hover:bg-lime-100">Đã cọc</Badge>;
       case "PROGRESS_PAID":
-        return <Badge className="bg-teal-100 text-teal-800 border-teal-200 hover:bg-teal-100">Da thanh toan tien do</Badge>;
+        return <Badge className="bg-teal-100 text-teal-800 border-teal-200 hover:bg-teal-100">Đã thanh toán tiến độ</Badge>;
       case "UNPAID":
-        return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100">Chá» thanh toĂ¡n</Badge>;
+        return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100">Chờ thanh toán</Badge>;
       case "REFUND_PENDING":
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100">Chá» hoĂ n tiá»n</Badge>;
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100">Chờ hoàn tiền</Badge>;
       case "REFUNDED":
-        return <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">ÄĂ£ hoĂ n tiá»n</Badge>;
+        return <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">Đã hoàn tiền</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -168,18 +168,18 @@ export function OrderListClient({
   const getFulfillmentStatusBadge = (status: string) => {
     switch (status) {
       case "NONE":
-        return <Badge className="bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-100">Chá» xuáº¥t kho</Badge>;
+        return <Badge className="bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-100">Chờ xuất kho</Badge>;
       case "PRINTING":
       case "AWAITING_PRINT":
-        return <Badge className="bg-cyan-100 text-cyan-800 border-cyan-200 hover:bg-cyan-100">Äang in ly</Badge>;
+        return <Badge className="bg-cyan-100 text-cyan-800 border-cyan-200 hover:bg-cyan-100">Đang in ly</Badge>;
       case "SHIPPED":
       case "READY_TO_PICK":
       case "ISSUED":
-        return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100">Äang giao</Badge>;
+        return <Badge className="bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100">Đang giao</Badge>;
       case "DELIVERED":
-        return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100">ÄĂ£ giao</Badge>;
+        return <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 hover:bg-emerald-100">Đã giao</Badge>;
       case "RETURNED":
-        return <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-100">ÄĂ£ tráº£ hĂ ng</Badge>;
+        return <Badge className="bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-100">Đã trả hàng</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -194,7 +194,7 @@ export function OrderListClient({
           </div>
           <div>
             <CardTitle className="text-base font-black text-[#253D4E] uppercase tracking-wider">
-              ÄÆ¡n hĂ ng cá»§a tĂ´i
+              Đơn hàng của tôi
             </CardTitle>
           </div>
         </div>
@@ -203,12 +203,12 @@ export function OrderListClient({
       {/* Status Filter Tabs */}
       <div className="border-b border-slate-100 bg-slate-50/30 px-6 py-2.5 flex items-center gap-2 overflow-x-auto scrollbar-none">
         {[
-          { id: "PROCESSING", label: "Chá» xá»­ lĂ½", count: countProcessing },
-          { id: "UNPAID", label: "Chá» thanh toĂ¡n", count: countUnpaid },
-          { id: "PAID", label: "ÄĂ£ thanh toĂ¡n", count: countPaid },
-          { id: "COMPLETED", label: "ÄĂ£ hoĂ n thĂ nh", count: countCompleted },
-          { id: "CANCELLED", label: "ÄĂ£ há»§y", count: countCancelled },
-          { id: "RETURN_REFUND", label: "Tráº£ hĂ ng / HoĂ n tiá»n", count: countReturnRefund },
+          { id: "PROCESSING", label: "Chờ xử lý", count: countProcessing },
+          { id: "UNPAID", label: "Chờ thanh toán", count: countUnpaid },
+          { id: "PAID", label: "Đã thanh toán", count: countPaid },
+          { id: "COMPLETED", label: "Đã hoàn thành", count: countCompleted },
+          { id: "CANCELLED", label: "Đã hủy", count: countCancelled },
+          { id: "RETURN_REFUND", label: "Trả hàng / Hoàn tiền", count: countReturnRefund },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -243,10 +243,10 @@ export function OrderListClient({
           <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 space-y-1.5 shadow-sm">
             <div className="flex items-center gap-2 font-bold text-amber-950 text-sm">
               <Bell className="size-4 text-amber-600" />
-              ThĂ´ng bĂ¡o thanh toĂ¡n
+              Thông báo thanh toán
             </div>
             <p className="text-amber-800 leading-relaxed">
-              Báº¡n vá»«a dá»«ng giao dá»‹ch thanh toĂ¡n trá»±c tuyáº¿n. ÄÆ¡n hĂ ng cá»§a báº¡n Ä‘Ă£ Ä‘Æ°á»£c giá»¯ láº¡i á»Ÿ tráº¡ng thĂ¡i <strong>Chá» thanh toĂ¡n</strong>. CĂ¡c sáº£n pháº©m cá»§a báº¡n váº«n náº±m nguyĂªn trong giá» hĂ ng.
+              Bạn vừa dừng giao dịch thanh toán trực tuyến. Đơn hàng của bạn đã được giữ lại ở trạng thái <strong>Chờ thanh toán</strong>. Các sản phẩm của bạn vẫn nằm nguyên trong giỏ hàng.
             </p>
           </div>
         )}
@@ -254,21 +254,21 @@ export function OrderListClient({
         {ordersQuery.isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-2 text-sm text-slate-400">
             <div className="size-6 animate-spin rounded-full border-3 border-primary border-t-transparent" />
-            <p className="font-semibold">Äang táº£i lá»‹ch sá»­ Ä‘Æ¡n hĂ ng...</p>
+            <p className="font-semibold">Đang tải lịch sử đơn hàng...</p>
           </div>
         ) : null}
 
         {ordersQuery.isError ? (
           <div className="rounded-xl border border-dashed border-rose-200 bg-rose-50/30 p-6 text-center text-xs font-semibold text-rose-700 flex flex-col items-center justify-center gap-2">
             <AlertCircle size={28} className="text-rose-500" />
-            <p>KhĂ´ng thá»ƒ káº¿t ná»‘i Ä‘áº¿n mĂ¡y chá»§ Ecommerce API hoáº·c phiĂªn lĂ m viá»‡c Ä‘Ă£ háº¿t háº¡n.</p>
+            <p>Không thể kết nối đến máy chủ Ecommerce API hoặc phiên làm việc đã hết hạn.</p>
           </div>
         ) : null}
 
         {!ordersQuery.isLoading && !ordersQuery.isError && filteredOrders.length === 0 ? (
           <div className="rounded-xl border-2 border-dashed border-slate-100 py-16 text-center text-xs font-bold text-slate-400 flex flex-col items-center justify-center gap-2 bg-slate-50/20">
             <Package size={32} className="text-slate-300" />
-            <p>KhĂ´ng cĂ³ Ä‘Æ¡n hĂ ng nĂ o thuá»™c tráº¡ng thĂ¡i nĂ y.</p>
+            <p>Không có đơn hàng nào thuộc trạng thái này.</p>
           </div>
         ) : null}
 
@@ -310,7 +310,7 @@ export function OrderListClient({
                       </span>
                       <span className="flex items-center gap-1">
                         <CreditCard size={12} />
-                        {order.paymentMethod === "ONLINE" ? "Cá»•ng PayOS" : "Tiá»n máº·t (COD)"}
+                        {order.paymentMethod === "ONLINE" ? "Cổng PayOS" : "Tiền mặt (COD)"}
                       </span>
                       {order.warehouseName && (
                         <span className="flex items-center gap-1">
@@ -323,7 +323,7 @@ export function OrderListClient({
 
                   <div className="flex items-center justify-between sm:justify-end gap-4 border-t border-slate-50 pt-3 sm:border-t-0 sm:pt-0 shrink-0">
                     <div className="text-left sm:text-right">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tá»•ng tiá»n thanh toĂ¡n</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tổng tiền thanh toán</p>
                       <p className="font-black text-primary text-base sm:text-lg mt-0.5">
                         {formatCurrency(order.totalAmount)}
                       </p>
@@ -345,7 +345,7 @@ export function OrderListClient({
         {!ordersQuery.isLoading && totalFilteredOrders > 0 && (
           <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
             <span className="text-muted-foreground font-medium text-center sm:text-left">
-              Hiá»ƒn thá»‹ <strong className="text-foreground">{startIndex + 1} - {endIndex}</strong> trong tá»•ng sá»‘ <strong className="text-foreground">{totalFilteredOrders}</strong> Ä‘Æ¡n hĂ ng
+              Hiển thị <strong className="text-foreground">{startIndex + 1} - {endIndex}</strong> trong tổng số <strong className="text-foreground">{totalFilteredOrders}</strong> đơn hàng
             </span>
 
             {totalPages > 1 && (
@@ -356,7 +356,7 @@ export function OrderListClient({
                   className="size-8 rounded-lg"
                   disabled={validCurrentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  aria-label="Trang trÆ°á»›c"
+                  aria-label="Trang trước"
                 >
                   <ChevronLeft className="size-4" />
                 </Button>
