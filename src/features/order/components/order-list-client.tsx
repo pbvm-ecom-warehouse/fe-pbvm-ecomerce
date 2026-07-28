@@ -53,7 +53,7 @@ export function OrderListClient({
 
   const ordersQuery = useQuery({
     queryKey: ["orders"],
-    queryFn: listOrders,
+    queryFn: () => listOrders(),
     staleTime: 0,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,

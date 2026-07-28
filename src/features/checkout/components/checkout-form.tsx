@@ -730,6 +730,9 @@ export function CheckoutForm() {
             toast.success("Đang chuyển hướng sang cổng thanh toán...");
             if (typeof window !== "undefined") {
               sessionStorage.setItem("lastCreatedOrderId", order.id || order.orderId);
+              if (order.code || order.orderId) {
+                sessionStorage.setItem("lastCreatedOrderCode", order.code || order.orderId);
+              }
               sessionStorage.setItem("pendingCartBackup", JSON.stringify(items));
             }
             window.location.href = order.paymentUrl;

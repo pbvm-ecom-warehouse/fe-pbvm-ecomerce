@@ -69,6 +69,7 @@ function PaymentReturnContent() {
 
         if (typeof window !== "undefined") {
           sessionStorage.removeItem("lastCreatedOrderId");
+          sessionStorage.removeItem("lastCreatedOrderCode");
           sessionStorage.removeItem("pendingCartBackup");
         }
       }
@@ -87,64 +88,97 @@ function PaymentReturnContent() {
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     async function findOrderFromApi() {
-      let foundOrder: any = null;
+      const candidates: any[] = [];
+      const identifiers = new Set<string>();
+      if (orderCodeParam) {
+        identifiers.add(String(orderCodeParam));
+        identifiers.add(String(orderCodeParam).replace(/[^0-9]/g, ""));
+      }
+      if (typeof window !== "undefined") {
+        const savedId = sessionStorage.getItem("lastCreatedOrderId");
+        const savedCode = sessionStorage.getItem("lastCreatedOrderCode");
+        if (savedId) {
+          identifiers.add(savedId);
+          identifiers.add(savedId.replace(/[^0-9]/g, ""));
+        }
+        if (savedCode) {
+          identifiers.add(savedCode);
+          identifiers.add(savedCode.replace(/[^0-9]/g, ""));
+        }
+      }
+
+      const isMatchingOrder = (candidate: any) => {
+        if (!candidate) return false;
+        const candidateKeys = [
+          candidate.id,
+          candidate._id,
+          candidate.orderId,
+          candidate.code,
+          candidate.orderCode,
+          candidate.code ? String(candidate.code).replace(/[^0-9]/g, "") : null,
+          candidate.orderCode ? String(candidate.orderCode).replace(/[^0-9]/g, "") : null,
+        ]
+          .filter(Boolean)
+          .map((value) => String(value));
+
+        return candidateKeys.some((key) => identifiers.has(key));
+      };
+
+      const collectMatchingFromList = async (filter?: { paymentStatus?: string }) => {
+        try {
+          const res = await listOrders(filter);
+          const list = Array.isArray(res) ? res : res?.data || [];
+          candidates.push(...list.filter(isMatchingOrder));
+          if (!isGatewaySuccess && candidates.length === 0 && list.length > 0) {
+            candidates.push(list[0]);
+          }
+        } catch {
+          // ignore
+        }
+      };
 
       if (orderCodeParam && /^[0-9a-fA-F]{24}$/.test(orderCodeParam)) {
         try {
-          foundOrder = await getOrder(orderCodeParam);
+          candidates.push(await getOrder(orderCodeParam));
         } catch {
           // ignore
         }
       }
 
-      if (!foundOrder && typeof window !== "undefined") {
+      if (typeof window !== "undefined") {
         const savedId = sessionStorage.getItem("lastCreatedOrderId");
         if (savedId && /^[0-9a-fA-F]{24}$/.test(savedId)) {
           try {
-            foundOrder = await getOrder(savedId);
+            candidates.push(await getOrder(savedId));
           } catch {
             // ignore
           }
         }
       }
 
-      if (!foundOrder) {
-        try {
-          const res = await listOrders();
-          const list = Array.isArray(res) ? res : res?.data || [];
-          if (list.length > 0) {
-            if (orderCodeParam) {
-              const cleanParam = String(orderCodeParam).replace(/[^0-9]/g, "");
-              foundOrder = list.find(
-                (o: any) =>
-                  o.id === orderCodeParam ||
-                  o._id === orderCodeParam ||
-                  String(o.code) === String(orderCodeParam) ||
-                  (o.code && String(o.code).replace(/[^0-9]/g, "") === cleanParam),
-              );
-            }
-            if (!foundOrder && !isGatewaySuccess) {
-              foundOrder = list[0]; // fallback to latest order
-            }
-          }
-        } catch {
-          // ignore
-        }
+      await collectMatchingFromList();
+      if (isGatewaySuccess) {
+        await collectMatchingFromList({ paymentStatus: "PAID" });
       }
 
-      return foundOrder;
+      return (
+        candidates.find((candidate) => candidate?.paymentStatus === "PAID") ||
+        candidates.find(isMatchingOrder) ||
+        candidates[0] ||
+        null
+      );
     }
 
     async function loadOrder() {
       setIsLoadingOrder(true);
       let foundOrder: any = null;
-      const attempts = isGatewaySuccess ? 8 : 1;
+      const attempts = isGatewaySuccess ? 15 : 1;
 
       for (let attempt = 0; attempt < attempts; attempt += 1) {
         foundOrder = await findOrderFromApi();
         if (!isMounted) return;
         if (!isGatewaySuccess || foundOrder?.paymentStatus === "PAID") break;
-        await wait(1500);
+        await wait(2000);
       }
 
       if (isMounted) {
