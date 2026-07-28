@@ -2,18 +2,44 @@ import { apiClient } from "@/lib/api-client";
 import { type ApiEnvelope, unwrapApiData } from "@/lib/api-contract";
 import type { ApiListResponse, OrderSummary } from "@/types/api";
 
+function normalizePaymentStatus(order: any) {
+  const raw =
+    order?.paymentStatus ??
+    order?.payment?.paymentStatus ??
+    order?.payment?.status ??
+    order?.payStatus ??
+    order?.paymentState;
+  const status = raw ? String(raw).toUpperCase() : "";
+
+  if (
+    order?.paidAt ||
+    ["PAID", "SUCCESS", "SUCCEEDED", "COMPLETED", "SETTLED"].includes(status)
+  ) {
+    return "PAID";
+  }
+
+  if (["REFUND_PENDING", "REFUNDED"].includes(status)) {
+    return status;
+  }
+
+  return status || "UNPAID";
+}
+
 /**
  * Hàm map ảo (Virtual mapper) để đồng bộ thuộc tính dữ liệu từ BE sang FE
  */
 export function mapOrderToSummary(order: any): OrderSummary & Record<string, any> {
   if (!order) return order;
+  const mappedId = order.id || order._id;
+  const paymentStatus = normalizePaymentStatus(order);
+
   return {
     ...order,
-    id: order.id || order._id,
+    id: mappedId,
     // status: Ánh xạ từ orderStatus (đơn hàng)
     status: order.orderStatus || order.status || "PLACED",
     // paymentStatus: Khởi tạo giá trị mặc định nếu thiếu
-    paymentStatus: order.paymentStatus || "UNPAID",
+    paymentStatus,
     // fulfillmentStatus: Khởi tạo giá trị mặc định nếu thiếu
     fulfillmentStatus: order.fulfillmentStatus || "NONE",
     // totalAmount: Ánh xạ từ total (tổng tiền)

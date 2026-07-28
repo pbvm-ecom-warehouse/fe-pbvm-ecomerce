@@ -54,6 +54,21 @@ export function OrderListClient({
   const ordersQuery = useQuery({
     queryKey: ["orders"],
     queryFn: listOrders,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const data = query.state.data as any;
+      const orders = Array.isArray(data) ? data : (data?.data ?? []);
+      return orders.some(
+        (order: any) =>
+          order.paymentMethod === "ONLINE" &&
+          order.paymentStatus === "UNPAID" &&
+          order.status !== "CANCELLED",
+      )
+        ? 5000
+        : false;
+    },
   });
 
   const orders: any[] = Array.isArray(ordersQuery.data)

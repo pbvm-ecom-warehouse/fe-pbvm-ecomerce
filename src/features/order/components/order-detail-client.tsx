@@ -70,6 +70,15 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
     queryKey: ["orders", orderId],
     queryFn: () => getOrder(orderId),
     enabled: /^[0-9a-fA-F]{24}$/.test(orderId),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const data = query.state.data as any;
+      return data?.paymentMethod === "ONLINE" && data?.paymentStatus === "UNPAID"
+        ? 5000
+        : false;
+    },
   });
 
   const order = orderQuery.data as any;

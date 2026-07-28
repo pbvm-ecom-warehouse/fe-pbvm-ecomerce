@@ -40,7 +40,7 @@ type CartState = {
   restoreItems: (items: CartItem[]) => Promise<void>;
   toggleSelectItem: (cartItemId: string) => void;
   toggleSelectAll: (selected: boolean) => void;
-  clearSelectedItems: () => void;
+  clearSelectedItems: () => Promise<void>;
 };
 
 function isLoggedIn() {
@@ -107,7 +107,7 @@ function resolveLatestCartPrice(input: {
 
 export const useCartStore = create<CartState>()(
   persist(
-    immer((set) => ({
+    immer((set, get) => ({
       items: [],
 
       addProduct: (product, quantity = 1, options) =>
@@ -258,18 +258,22 @@ export const useCartStore = create<CartState>()(
           });
         }),
 
-      clearSelectedItems: () =>
+      clearSelectedItems: async () => {
+        const selected = get().items.filter((item) => item.selected !== false);
+
         set((state) => {
-          const unselected = state.items.filter((i) => i.selected === false);
-          const selected = state.items.filter((i) => i.selected !== false);
-          state.items = unselected;
-          if (isLoggedIn() && selected.length > 0) {
-            for (const item of selected) {
+          state.items = state.items.filter((item) => item.selected === false);
+        });
+
+        if (isLoggedIn() && selected.length > 0) {
+          await Promise.all(
+            selected.map((item) => {
               const sku = item.productRefId || item.productId;
-              removeCartItem(sku).catch((err) => safeWarn("removeSelectedCartItem", err));
-            }
-          }
-        }),
+              return removeCartItem(sku).catch((err) => safeWarn("removeSelectedCartItem", err));
+            }),
+          );
+        }
+      },
 
       fetchAndSyncCart: async () => {
         if (!isLoggedIn()) return;

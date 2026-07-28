@@ -741,7 +741,7 @@ export function CheckoutForm() {
             paymentProvider: values.paymentProvider,
           });
           setIsSubmitted(true);
-          clearSelectedItems();
+          await clearSelectedItems();
           toast.success(
             order.offline
               ? "Đã lưu đơn tạm trong chế độ fallback"
