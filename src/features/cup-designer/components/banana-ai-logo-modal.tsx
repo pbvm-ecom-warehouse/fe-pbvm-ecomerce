@@ -5,7 +5,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Sparkles } from "lucide-react";
-import { generateBananaLogoArtworkAsync } from "../services/artwork-generator.service";
+import {
+  generateBananaLogoArtworkAsync,
+  parsePromptToBananaLogoOptions,
+} from "../services/artwork-generator.service";
 
 interface BananaAiLogoModalProps {
   isOpen: boolean;
@@ -22,7 +25,8 @@ export function BananaAiLogoModal({ isOpen, onClose, onApplyLogo }: BananaAiLogo
     if (!prompt.trim()) return;
     setIsGenerating(true);
     try {
-      const dataUrl = await generateBananaLogoArtworkAsync({ brandName: prompt }, prompt);
+      const options = parsePromptToBananaLogoOptions(prompt);
+      const dataUrl = await generateBananaLogoArtworkAsync(options, prompt);
       setGeneratedLogo(dataUrl);
     } catch (e) {
       console.error(e);

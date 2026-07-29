@@ -56,6 +56,10 @@ function readArrayPayload(payload: any): any[] | null {
   return null;
 }
 
+function looksLikeObjectId(value: string) {
+  return /^[a-f\d]{24}$/i.test(value);
+}
+
 function getCategoryId(category: any) {
   return category?.id ?? category?._id;
 }
@@ -152,9 +156,10 @@ async function withFreshProductVariants(product: any) {
 
   const identifiers = Array.from(
     new Set(
-      [product?.id, product?._id, product?.slug, product?.productRefId, product?.sku]
+      [product?.id, product?._id]
         .filter((value) => value !== undefined && value !== null && String(value).trim())
-        .map((value) => String(value).trim()),
+        .map((value) => String(value).trim())
+        .filter(looksLikeObjectId),
     ),
   );
   if (identifiers.length === 0) return product;
@@ -244,6 +249,7 @@ export function mapProductDetail(p: any): CatalogProduct {
     const normalizedAttrs = normalizeVariantAttributes(rawAttrs, sku);
     return {
       id: v.id ?? v._id,
+      name: cleanProductName(v.name ?? v.variantName ?? v.title, sku),
       sku,
       productId: v.productId ?? mergedP.id ?? mergedP._id,
       attributes: { ...rawAttrs, ...normalizedAttrs },
@@ -251,6 +257,7 @@ export function mapProductDetail(p: any): CatalogProduct {
       availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
       fulfillmentType: v.fulfillmentType ?? "STANDARD",
       isActive: v.isActive !== false,
+      image: v.image ?? v.imageUrl ?? v.thumbnail ?? null,
     };
   });
 
@@ -325,6 +332,7 @@ function mapProductListItem(p: any): CatalogProduct {
     const normalizedAttrs = normalizeVariantAttributes(rawAttrs, sku);
     return {
       id: v.id ?? v._id,
+      name: cleanProductName(v.name ?? v.variantName ?? v.title, sku),
       sku,
       productId: v.productId ?? mergedP.id ?? mergedP._id,
       attributes: { ...rawAttrs, ...normalizedAttrs },
@@ -332,6 +340,7 @@ function mapProductListItem(p: any): CatalogProduct {
       availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
       fulfillmentType: v.fulfillmentType ?? "STANDARD",
       isActive: v.isActive !== false,
+      image: v.image ?? v.imageUrl ?? v.thumbnail ?? null,
     };
   });
 

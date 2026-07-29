@@ -23,59 +23,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuthStore } from "@/stores/auth-store";
-import { useCartStore } from "@/stores/cart-store";
-import { createCustomCupProduct } from "@/features/cup-designer/utils/artwork";
 import { listMyDesigns, deleteDesign } from "@/features/cup-designer/services/design.service";
-
-const SAVED_DESIGNS_KEY = "cup_designer_saved_designs_v1";
-
-function loadSavedDesigns(): any[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(SAVED_DESIGNS_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as any[];
-  } catch {
-    return [];
-  }
-}
-
-function persistSavedDesigns(designs: any[]) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(SAVED_DESIGNS_KEY, JSON.stringify(designs));
-  } catch {
-    // localStorage full
-  }
-}
-
-function mergeDesigns(local: any[], remote: any[]): any[] {
-  const remoteIds = new Set(remote.map((d) => d.id));
-  const localOnly = local.filter((d) => !remoteIds.has(d.id));
-  return [...remote, ...localOnly];
-}
 
 export default function AccountDesignsPage() {
   const user = useAuthStore((state) => state.user);
 
   // Saved designs state
-  const [designs, setDesigns] = useState<any[]>(() => loadSavedDesigns());
+  const [designs, setDesigns] = useState<any[]>([]);
   const [loadingDesigns, setLoadingDesigns] = useState(false);
-  const addCustomPrintItem = useCartStore((state) => state.addCustomPrintItem);
 
   const fetchDesigns = async () => {
     setLoadingDesigns(true);
-    const local = loadSavedDesigns();
-    setDesigns(local);
 
     if (user && user.type !== "admin") {
       try {
         const data = await listMyDesigns();
-        const merged = mergeDesigns(local, data || []);
-        setDesigns(merged);
-        persistSavedDesigns(merged);
+        setDesigns(data || []);
       } catch (err) {
         console.error("Failed to fetch designs from API:", err);
+        setDesigns([]);
       } finally {
         setLoadingDesigns(false);
       }
@@ -95,14 +61,10 @@ export default function AccountDesignsPage() {
     if (!designToDelete) return;
     const id = designToDelete.id;
     try {
-      if (user && id && !String(id).startsWith("auto_")) {
+      if (user && id) {
         await deleteDesign(id).catch((e) => console.warn("Delete design API error:", e));
       }
-      setDesigns((current) => {
-        const updated = current.filter((d) => d.id !== id);
-        persistSavedDesigns(updated);
-        return updated;
-      });
+      setDesigns((current) => current.filter((d) => d.id !== id));
       toast.success("Xóa thiết kế thành công!");
     } catch (err: any) {
       console.error(err);
@@ -202,28 +164,6 @@ export default function AccountDesignsPage() {
           ) : (
             <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {designs.map((design) => {
-                const handleAddToCart = () => {
-                  const product = createCustomCupProduct({ size: "500ml", price: 3500 });
-                  addCustomPrintItem({
-                    product,
-                    quantity: 100, // minimum custom print order quantity
-                    designId: design.id,
-                    designFile: {
-                      snapshotVersion: 1,
-                      designId: `design_${design.id}`,
-                      name: design.name,
-                      previewDataUrl: design.thumbnail || design.file,
-                      artwork: {
-                        artboard: { width: 400, height: 250, printHeightPercent: 60 },
-                        cup: { size: "500ml" as const, style: "straight" as const, materialType: "clear" as const, cupColor: "#ffffff" },
-                        layers: []
-                      },
-                      exportedAt: new Date().toISOString(),
-                    },
-                  });
-                  toast.success(`Đã thêm mẫu "${design.name}" vào giỏ hàng với số lượng mặc định (100 ly).`);
-                };
-
                 const handleEditDesign = () => {
                   let snapshot: any = null;
                   if (typeof design.file === "string" && design.file.trimStart().startsWith("{")) {
@@ -275,10 +215,12 @@ export default function AccountDesignsPage() {
 
                       <div className="flex gap-1.5 w-full">
                         <Button
-                          onClick={handleAddToCart}
+                          asChild
                           className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[11px] h-8 font-bold border-0 shadow-xs active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1 px-2"
                         >
-                          Đặt in
+                          <Link href={`/design-cup?loadDesignId=${design.id}`} onClick={handleEditDesign}>
+                            Dùng lại
+                          </Link>
                         </Button>
                         <Button
                           asChild

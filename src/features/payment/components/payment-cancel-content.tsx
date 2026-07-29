@@ -42,6 +42,11 @@ export function PaymentCancelContent() {
   // Ensure checkout items are retained in cart when payment is cancelled.
   useEffect(() => {
     if (typeof window !== "undefined") {
+      if (sessionStorage.getItem("pendingDirectPrintCheckout")) {
+        sessionStorage.removeItem("pendingDirectPrintCheckout");
+        sessionStorage.removeItem("directPrintCheckoutItem");
+        return;
+      }
       const backupStr = sessionStorage.getItem("pendingCartBackup");
       const restoredKey = `restoredCancelledCart:${orderCodeParam || "latest"}`;
       if (backupStr && sessionStorage.getItem(restoredKey) !== "true") {

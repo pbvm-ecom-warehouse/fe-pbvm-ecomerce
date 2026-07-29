@@ -34,7 +34,7 @@ vi.mock("@/stores/auth-store", () => ({
 }));
 
 import { useCartStore } from "@/stores/cart-store";
-import type { CatalogProduct, DesignFileSnapshot } from "@/types/api";
+import type { CartItem, CatalogProduct, DesignFileSnapshot } from "@/types/api";
 
 const productWithVariant = {
   id: "product-1",
@@ -70,6 +70,7 @@ describe("cart store", () => {
     catalogServiceMock.listCatalogProducts.mockReset();
     cartServiceMock.addCartItem.mockResolvedValue({ items: [] });
     cartServiceMock.updateCartItem.mockResolvedValue({ items: [] });
+    cartServiceMock.removeCartItem.mockResolvedValue({ items: [] });
     cartServiceMock.getCart.mockResolvedValue({ items: [] });
     catalogServiceMock.listCatalogProducts.mockResolvedValue({ data: [] });
     useCartStore.setState({ items: [] });
@@ -88,6 +89,41 @@ describe("cart store", () => {
         productRefId: "CUP-HRT-PET-500-CLR",
         cartItemId: "standard:CUP-HRT-PET-500-CLR",
       }),
+    );
+  });
+
+  it("caps repeated product additions by the available stock snapshot", () => {
+    useCartStore.getState().addProduct(productWithVariant, 6);
+    useCartStore.getState().addProduct(productWithVariant, 5);
+
+    expect(useCartStore.getState().items[0]).toEqual(
+      expect.objectContaining({
+        quantity: 8,
+        stockSnapshot: 8,
+      }),
+    );
+    expect(cartServiceMock.updateCartItem).toHaveBeenLastCalledWith(
+      "CUP-HRT-PET-500-CLR",
+      8,
+    );
+  });
+
+  it("caps cart quantity updates by the item stock snapshot", () => {
+    useCartStore.getState().addProduct(productWithVariant, 2);
+
+    useCartStore
+      .getState()
+      .updateQuantity("standard:CUP-HRT-PET-500-CLR", 99);
+
+    expect(useCartStore.getState().items[0]).toEqual(
+      expect.objectContaining({
+        quantity: 8,
+        stockSnapshot: 8,
+      }),
+    );
+    expect(cartServiceMock.updateCartItem).toHaveBeenLastCalledWith(
+      "CUP-HRT-PET-500-CLR",
+      8,
     );
   });
 
@@ -192,8 +228,11 @@ describe("cart store", () => {
       sku: "CUP-RND-PP-700-WHT",
       quantity: 1,
       designId: "design-wait-1",
-      designFile: JSON.stringify(designFile),
+      designFile: expect.any(String),
     });
+    const backendDesignFile = JSON.parse(cartServiceMock.addCartItem.mock.calls[0][0].designFile);
+    expect(backendDesignFile.previewDataUrl).toBeUndefined();
+    expect(backendDesignFile.artwork).toEqual(designFile.artwork);
     expect(useCartStore.getState().items[0]).toEqual(
       expect.objectContaining({
         attributes: {
@@ -205,6 +244,88 @@ describe("cart store", () => {
         selectedSize: "700ml",
         selectedMaterial: "Nhựa PP",
         selectedStyle: "Trụ tròn",
+      }),
+    );
+  });
+
+  it("merges restored checkout items back into the existing cart after payment cancel", async () => {
+    const retainedBlankItem = {
+      cartItemId: "standard:CUP-HRT-PET-500-CLR",
+      productId: "product-1",
+      productRefId: "CUP-HRT-PET-500-CLR",
+      slug: "ly-500ml",
+      name: "Ly 500ml",
+      price: 25_000,
+      quantity: 2,
+      unit: "cái",
+      imageUrl: "/image.png",
+      fulfillmentType: "STANDARD",
+      selected: false,
+    } satisfies CartItem;
+
+    const restoredDesignFile: DesignFileSnapshot = {
+      snapshotVersion: 1,
+      designId: "design-cancel-1",
+      name: "Ly custom cancel",
+      previewDataUrl: "data:image/png;base64,cancel-preview",
+      artwork: {
+        artboard: {
+          width: 740,
+          height: 490,
+          printHeightPercent: 70,
+        },
+        cup: {
+          size: "700ml",
+          style: "straight",
+          materialType: "clear",
+          cupColor: "#ffffff",
+        },
+        layers: [],
+      },
+      exportedAt: "2026-07-28T00:00:00.000Z",
+    };
+
+    useCartStore.setState({
+      items: [retainedBlankItem],
+    });
+
+    await useCartStore.getState().restoreItems([
+      {
+        cartItemId: "custom:CUP-RND-PP-700-WHT:design-cancel-1:1",
+        productId: "product-custom-1",
+        productRefId: "CUP-RND-PP-700-WHT",
+        slug: "CUP-RND-PP-700-WHT",
+        name: "Ly custom cancel",
+        price: 2_000,
+        quantity: 1,
+        unit: "cái",
+        imageUrl: restoredDesignFile.previewDataUrl,
+        fulfillmentType: "CUSTOM_PRINT",
+        designId: "design-cancel-1",
+        designFile: restoredDesignFile,
+      },
+    ]);
+
+    expect(useCartStore.getState().items).toHaveLength(1);
+    expect(useCartStore.getState().items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          productRefId: "CUP-HRT-PET-500-CLR",
+          quantity: 2,
+          selected: false,
+        }),
+      ]),
+    );
+    expect(cartServiceMock.clearBackendCart).toHaveBeenCalled();
+    expect(cartServiceMock.addCartItem).toHaveBeenCalledWith({
+      sku: "CUP-HRT-PET-500-CLR",
+      quantity: 2,
+      designId: undefined,
+      designFile: undefined,
+    });
+    expect(cartServiceMock.addCartItem).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        sku: "CUP-RND-PP-700-WHT",
       }),
     );
   });
@@ -361,22 +482,7 @@ describe("cart store", () => {
 
     await useCartStore.getState().fetchAndSyncCart();
 
-    expect(useCartStore.getState().items[0]).toEqual(
-      expect.objectContaining({
-        designId: "design-db-1",
-        designFile,
-        name: "Ly custom test",
-        imageUrl: designFile.previewDataUrl,
-        selectedSize: "700ml",
-        selectedMaterial: "Nhựa PP",
-        selectedStyle: "Trụ tròn",
-        attributes: {
-          capacity: "700ml",
-          material: "Nhựa PP",
-          style: "Trụ tròn",
-        },
-      }),
-    );
+    expect(useCartStore.getState().items).toEqual([]);
   });
 
   it("keeps local design data when backend merges the same SKU into a non-print cart item", async () => {
@@ -459,15 +565,326 @@ describe("cart store", () => {
     expect(useCartStore.getState().items[0]).toEqual(
       expect.objectContaining({
         quantity: 2,
-        fulfillmentType: "CUSTOM_PRINT",
-        designId: "design-merged-sku-1",
-        designFile,
-        name: "Ly custom merged SKU",
-        imageUrl: designFile.previewDataUrl,
-        selectedSize: "700ml",
-        selectedMaterial: "Nhựa PP",
-        selectedStyle: "Trụ tròn",
+        fulfillmentType: "STANDARD",
+        designId: undefined,
+        designFile: undefined,
       }),
     );
+  });
+
+  it("keeps custom print and standard lines split when backend returns one merged SKU line", async () => {
+    const designFile: DesignFileSnapshot = {
+      snapshotVersion: 1,
+      designId: "design-split-1",
+      name: "Ly custom split",
+      previewDataUrl: "data:image/png;base64,split-design",
+      artwork: {
+        artboard: {
+          width: 740,
+          height: 490,
+          printHeightPercent: 70,
+        },
+        cup: {
+          size: "700ml",
+          style: "straight",
+          materialType: "clear",
+          cupColor: "#ffffff",
+        },
+        layers: [],
+      },
+      exportedAt: "2026-07-28T00:00:00.000Z",
+    };
+
+    useCartStore.setState({
+      items: [
+        {
+          cartItemId: "custom:CUP-RND-PP-700-WHT:design-split-1:1",
+          productId: "product-1",
+          productRefId: "CUP-RND-PP-700-WHT",
+          slug: "CUP-RND-PP-700-WHT",
+          name: "Ly custom split",
+          price: 2_000,
+          quantity: 1,
+          unit: "cái",
+          imageUrl: designFile.previewDataUrl,
+          fulfillmentType: "CUSTOM_PRINT",
+          designId: "design-split-1",
+          designFile,
+        },
+        {
+          cartItemId: "standard:CUP-RND-PP-700-WHT",
+          productId: "product-1",
+          productRefId: "CUP-RND-PP-700-WHT",
+          slug: "CUP-RND-PP-700-WHT",
+          name: "Phôi ly 700ml",
+          price: 2_000,
+          quantity: 1,
+          unit: "cái",
+          imageUrl: "/blank.png",
+          fulfillmentType: "STANDARD",
+        },
+      ],
+    });
+    cartServiceMock.getCart
+      .mockResolvedValueOnce({
+        items: [
+          {
+            sku: "CUP-RND-PP-700-WHT",
+            quantity: 2,
+            unitPrice: 2_000,
+            isPrintItem: false,
+            designId: null,
+            designFile: null,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            sku: "CUP-RND-PP-700-WHT",
+            quantity: 2,
+            unitPrice: 2_000,
+            isPrintItem: false,
+            designId: null,
+            designFile: null,
+          },
+        ],
+      });
+
+    await useCartStore.getState().fetchAndSyncCart();
+
+    expect(useCartStore.getState().items).toEqual([
+      expect.objectContaining({
+        cartItemId: "standard:CUP-RND-PP-700-WHT:0",
+        quantity: 2,
+        fulfillmentType: "STANDARD",
+      }),
+    ]);
+    expect(useCartStore.getState().items[0].designId).toBeUndefined();
+  });
+
+  it("deduplicates repeated local cart item ids during backend sync", async () => {
+    useCartStore.setState({
+      items: [
+        {
+          cartItemId: "standard:CUP-RND-PP-700-WHT:700ml",
+          productId: "product-1",
+          productRefId: "CUP-RND-PP-700-WHT",
+          slug: "CUP-RND-PP-700-WHT",
+          name: "Phôi ly 700ml",
+          price: 2_000,
+          quantity: 1,
+          unit: "cái",
+          imageUrl: "/blank.png",
+          fulfillmentType: "STANDARD",
+        },
+        {
+          cartItemId: "standard:CUP-RND-PP-700-WHT:700ml",
+          productId: "product-1",
+          productRefId: "CUP-RND-PP-700-WHT",
+          slug: "CUP-RND-PP-700-WHT",
+          name: "Phôi ly 700ml",
+          price: 2_000,
+          quantity: 1,
+          unit: "cái",
+          imageUrl: "/blank.png",
+          fulfillmentType: "STANDARD",
+        },
+      ],
+    });
+    cartServiceMock.getCart
+      .mockResolvedValueOnce({
+        items: [
+          { sku: "CUP-RND-PP-700-WHT", quantity: 2, unitPrice: 2_000 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { sku: "CUP-RND-PP-700-WHT", quantity: 2, unitPrice: 2_000 },
+        ],
+      });
+
+    await useCartStore.getState().fetchAndSyncCart();
+
+    const items = useCartStore.getState().items;
+    const ids = items.map((item) => item.cartItemId);
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(
+      expect.objectContaining({
+        productRefId: "CUP-RND-PP-700-WHT",
+        quantity: 2,
+        fulfillmentType: "STANDARD",
+      }),
+    );
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("coalesces duplicate backend custom lines for the same SKU and design", async () => {
+    const designFile: DesignFileSnapshot = {
+      snapshotVersion: 1,
+      designId: "design-same-1",
+      name: "Ly custom same design",
+      previewDataUrl: "data:image/png;base64,same-design",
+      artwork: {
+        artboard: {
+          width: 740,
+          height: 490,
+          printHeightPercent: 70,
+        },
+        cup: {
+          size: "700ml",
+          style: "straight",
+          materialType: "clear",
+          cupColor: "#ffffff",
+        },
+        layers: [],
+      },
+      exportedAt: "2026-07-28T00:00:00.000Z",
+    };
+
+    cartServiceMock.getCart
+      .mockResolvedValueOnce({
+        items: [
+          {
+            sku: "CUP-RND-PP-700-WHT",
+            quantity: 1,
+            unitPrice: 2_000,
+            isPrintItem: true,
+            designId: "design-same-1",
+            designFile: JSON.stringify(designFile),
+          },
+          {
+            sku: "CUP-RND-PP-700-WHT",
+            quantity: 2,
+            unitPrice: 2_000,
+            isPrintItem: true,
+            designId: "design-same-1",
+            designFile: JSON.stringify(designFile),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            sku: "CUP-RND-PP-700-WHT",
+            quantity: 1,
+            unitPrice: 2_000,
+            isPrintItem: true,
+            designId: "design-same-1",
+            designFile: JSON.stringify(designFile),
+          },
+          {
+            sku: "CUP-RND-PP-700-WHT",
+            quantity: 2,
+            unitPrice: 2_000,
+            isPrintItem: true,
+            designId: "design-same-1",
+            designFile: JSON.stringify(designFile),
+          },
+        ],
+      });
+
+    await useCartStore.getState().fetchAndSyncCart();
+
+    const ids = useCartStore.getState().items.map((item) => item.cartItemId);
+    expect(ids).toHaveLength(0);
+  });
+
+  it("preserves unselected cart lines after backend cart sync", async () => {
+    useCartStore.setState({
+      items: [
+        {
+          cartItemId: "standard:CUP-HRT-PET-500-CLR:0",
+          productId: "product-1",
+          productRefId: "CUP-HRT-PET-500-CLR",
+          slug: "CUP-HRT-PET-500-CLR",
+          name: "Ly 500ml",
+          price: 25_000,
+          quantity: 2,
+          unit: "cai",
+          imageUrl: "/image.png",
+          fulfillmentType: "STANDARD",
+          selected: false,
+        },
+        {
+          cartItemId: "standard:CUP-RND-PP-700-WHT:1",
+          productId: "product-2",
+          productRefId: "CUP-RND-PP-700-WHT",
+          slug: "CUP-RND-PP-700-WHT",
+          name: "Ly 700ml",
+          price: 30_000,
+          quantity: 1,
+          unit: "cai",
+          imageUrl: "/image-2.png",
+          fulfillmentType: "STANDARD",
+        },
+      ],
+    });
+    cartServiceMock.getCart
+      .mockResolvedValueOnce({
+        items: [
+          { sku: "CUP-HRT-PET-500-CLR", quantity: 2, unitPrice: 25_000 },
+          { sku: "CUP-RND-PP-700-WHT", quantity: 1, unitPrice: 30_000 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { sku: "CUP-HRT-PET-500-CLR", quantity: 2, unitPrice: 25_000 },
+          { sku: "CUP-RND-PP-700-WHT", quantity: 1, unitPrice: 30_000 },
+        ],
+      });
+
+    await useCartStore.getState().fetchAndSyncCart();
+
+    expect(useCartStore.getState().items).toEqual([
+      expect.objectContaining({
+        productRefId: "CUP-HRT-PET-500-CLR",
+        selected: false,
+      }),
+      expect.objectContaining({
+        productRefId: "CUP-RND-PP-700-WHT",
+        selected: undefined,
+      }),
+    ]);
+  });
+
+  it("removes progressed order skus from local and backend cart", async () => {
+    useCartStore.setState({
+      items: [
+        {
+          cartItemId: "standard:CUP-HRT-PET-500-CLR",
+          productId: "product-1",
+          productRefId: "CUP-HRT-PET-500-CLR",
+          slug: "CUP-HRT-PET-500-CLR",
+          name: "Ly 500ml",
+          price: 25_000,
+          quantity: 2,
+          unit: "cai",
+          imageUrl: "/image.png",
+          fulfillmentType: "STANDARD",
+        },
+        {
+          cartItemId: "standard:CUP-RND-PP-700-WHT",
+          productId: "product-2",
+          productRefId: "CUP-RND-PP-700-WHT",
+          slug: "CUP-RND-PP-700-WHT",
+          name: "Ly 700ml",
+          price: 30_000,
+          quantity: 1,
+          unit: "cai",
+          imageUrl: "/image-2.png",
+          fulfillmentType: "STANDARD",
+        },
+      ],
+    });
+
+    await useCartStore.getState().removeItemsBySkus(["CUP-HRT-PET-500-CLR"]);
+
+    expect(useCartStore.getState().items).toEqual([
+      expect.objectContaining({
+        productRefId: "CUP-RND-PP-700-WHT",
+      }),
+    ]);
+    expect(cartServiceMock.removeCartItem).toHaveBeenCalledWith("CUP-HRT-PET-500-CLR");
   });
 });

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   Wallet,
@@ -18,8 +17,6 @@ import {
   Building2,
   PieChart as PieChartIcon,
   BarChart3,
-  Boxes,
-  LogOut,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -47,12 +44,9 @@ import { formatCurrency } from "@/utils/format-currency";
 import {
   getAnalyticsOverview,
   getRevenueTimeline,
-  getTopSelling,
   type AnalyticsOverview,
   type DailyRevenueItem,
-  type TopSellingItem,
 } from "@/features/analytics/services/analytics.service";
-import { logout } from "@/features/auth/services/auth.service";
 
 type PeriodPreset = "day" | "week" | "month" | "year" | "custom";
 
@@ -92,10 +86,8 @@ const PERIOD_TABS: { id: PeriodPreset; label: string }[] = [
 ];
 
 export default function AdminFinancePage() {
-  const router = useRouter();
   const [overview, setOverview] = useState<AnalyticsOverview | null>(null);
   const [timeline, setTimeline] = useState<DailyRevenueItem[]>([]);
-  const [topSelling, setTopSelling] = useState<TopSellingItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Period preset
@@ -110,23 +102,16 @@ export default function AdminFinancePage() {
       ? { from: customFrom, to: customTo }
       : getPeriodRange(period);
 
-  const handleLogout = async () => {
-    await logout();
-    router.push("/login");
-  };
-
   const fetchData = async (from = fromDate, to = toDate) => {
     setLoading(true);
     try {
-      const [ovData, tlData, topData] = await Promise.all([
+      const [ovData, tlData] = await Promise.all([
         getAnalyticsOverview(),
         getRevenueTimeline(from || undefined, to || undefined),
-        getTopSelling(5),
       ]);
 
       setOverview(ovData);
       setTimeline(tlData || []);
-      setTopSelling(topData || []);
     } catch (err) {
       console.error(err);
       toast.error("Không thể tải báo cáo quản lý dòng tiền từ Backend.");
@@ -165,87 +150,81 @@ export default function AdminFinancePage() {
       {/* ONE SINGLE MASTER CARD CONTAINER FOR ALL SECTIONS */}
       <Card className="rounded-2xl border border-[#E9E3DD] bg-white shadow-sm overflow-hidden divide-y divide-[#E9E3DD]">
         {/* SECTION 1: Top Header */}
-        <div className="py-4 px-6 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="flex size-8 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-2xs">
-              <Wallet className="size-4" />
-            </div>
-            <div>
-              <h1 className="text-sm font-black text-slate-700 uppercase tracking-wider">
-                Quản lý Dòng Tiền &amp; Doanh Thu
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {/* ── Quick period tabs ── */}
-            <div className="flex items-center gap-0.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
-              {PERIOD_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  id={`period-tab-${tab.id}`}
-                  onClick={() => setPeriod(tab.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${period === tab.id
-                      ? "bg-white text-emerald-700 shadow-sm border border-emerald-200"
-                      : "text-slate-500 hover:text-slate-700"
-                    }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Custom range pickers (only visible when 'Tùy chỉnh' active) ── */}
-            {period === "custom" && (
-              <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
-                <Calendar className="size-3.5 text-slate-400 ml-2" />
-                <Input
-                  type="date"
-                  value={customFrom}
-                  onChange={(e) => setCustomFrom(e.target.value)}
-                  className="h-7 text-xs border-0 bg-transparent w-32 p-0 focus-visible:ring-0"
-                  placeholder="Từ ngày"
-                />
-                <span className="text-xs text-slate-300">—</span>
-                <Input
-                  type="date"
-                  value={customTo}
-                  onChange={(e) => setCustomTo(e.target.value)}
-                  className="h-7 text-xs border-0 bg-transparent w-32 p-0 focus-visible:ring-0"
-                  placeholder="Đến ngày"
-                />
+        <div className="bg-white px-6 py-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-2xs">
+                <Wallet className="size-5" />
               </div>
-            )}
+              <div className="min-w-0">
+                <h1 className="text-base font-black uppercase tracking-wider text-slate-800">
+                  Quản lý dòng tiền &amp; doanh thu
+                </h1>
+                <p className="mt-1 text-xs font-medium text-slate-500">
+                  Kỳ xem: {periodLabel} · {fromDate || "--"} đến {toDate || "--"}
+                </p>
+              </div>
+            </div>
 
-            {/* ── Refresh ── */}
-            <Button
-              onClick={() => fetchData(fromDate, toDate)}
-              variant="outline"
-              size="sm"
-              disabled={loading}
-              className="h-9 text-xs font-bold rounded-xl border-slate-200 gap-1.5 cursor-pointer"
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Làm mới
-            </Button>
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 bg-slate-100 p-1">
+                {PERIOD_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    id={`period-tab-${tab.id}`}
+                    onClick={() => setPeriod(tab.id)}
+                    className={`h-8 rounded-lg px-3 text-xs font-bold transition-all cursor-pointer ${period === tab.id
+                        ? "border border-emerald-200 bg-white text-emerald-700 shadow-sm"
+                        : "text-slate-500 hover:text-slate-700"
+                      }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
 
-            <Button
-              onClick={() => toast.success("Đã xuất báo cáo dòng tiền PDF thành công!")}
-              className="h-9 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 cursor-pointer border-0 shadow-md shadow-emerald-500/10"
-            >
-              <Download className="size-3.5" />
-              Xuất báo cáo
-            </Button>
+              {period === "custom" && (
+                <div className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 p-1">
+                  <Calendar className="ml-2 size-3.5 text-slate-400" />
+                  <Input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="h-7 w-32 border-0 bg-transparent p-0 text-xs focus-visible:ring-0"
+                    placeholder="Từ ngày"
+                  />
+                  <span className="text-xs text-slate-300">-</span>
+                  <Input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="h-7 w-32 border-0 bg-transparent p-0 text-xs focus-visible:ring-0"
+                    placeholder="Đến ngày"
+                  />
+                </div>
+              )}
 
-            <Button
-              onClick={handleLogout}
-              variant="outline"
-              size="sm"
-              className="h-9 text-xs font-bold rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 gap-1.5 cursor-pointer"
-            >
-              <LogOut className="size-3.5" />
-              Đăng xuất
-            </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => fetchData(fromDate, toDate)}
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                  className="h-9 rounded-xl border-slate-200 text-xs font-bold gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+                  Làm mới
+                </Button>
+
+                <Button
+                  onClick={() => toast.success("Đã xuất báo cáo dòng tiền PDF thành công!")}
+                  className="h-9 rounded-xl bg-emerald-600 text-xs font-bold text-white gap-1.5 cursor-pointer border-0 shadow-md shadow-emerald-500/10 hover:bg-emerald-700"
+                >
+                  <Download className="size-3.5" />
+                  Xuất báo cáo
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -265,9 +244,6 @@ export default function AdminFinancePage() {
               <div className="text-2xl font-black text-slate-800 font-mono">
                 {formatCurrency(totalRevenue)}
               </div>
-              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-slate-500">
-                <span>Tích lũy toàn bộ đơn đã thanh toán</span>
-              </div>
             </div>
           </div>
 
@@ -275,7 +251,7 @@ export default function AdminFinancePage() {
           <div className="p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Dòng Tiền Đang Chờ Thu (COD)
+                Tiền Đang Chờ Thu (COD)
               </span>
               <div className="size-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                 <Clock className="size-4" />
@@ -284,9 +260,6 @@ export default function AdminFinancePage() {
             <div>
               <div className="text-2xl font-black text-amber-700 font-mono">
                 {formatCurrency(pendingCashflowEstimate)}
-              </div>
-              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-slate-500">
-                <span>{unpaidOrdersCount} đơn chờ đối soát vận đơn</span>
               </div>
             </div>
           </div>
@@ -305,10 +278,6 @@ export default function AdminFinancePage() {
               <div className="text-2xl font-black text-slate-800">
                 {paidOrdersCount} / {totalOrders} <span className="text-xs font-normal text-slate-400">đơn</span>
               </div>
-              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-blue-600">
-                <CheckCircle2 className="size-3.5" />
-                <span>Tỷ lệ hoàn tất thanh toán {paidRate}%</span>
-              </div>
             </div>
           </div>
 
@@ -316,7 +285,7 @@ export default function AdminFinancePage() {
           <div className="p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                Giá Trị Trung Bình / Đơn (AOV)
+                Giá Trị Trung Bình / Đơn
               </span>
               <div className="size-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
                 <TrendingUp className="size-4" />
@@ -325,9 +294,6 @@ export default function AdminFinancePage() {
             <div>
               <div className="text-2xl font-black text-slate-800 font-mono">
                 {formatCurrency(averageOrderValue)}
-              </div>
-              <div className="flex items-center gap-1 mt-1 text-[11px] font-bold text-slate-500">
-                <span>{timelineOrders > 0 ? `${timelineOrders} đơn trong kỳ ${periodLabel}` : "Chưa có đơn trong kỳ"}</span>
               </div>
             </div>
           </div>
@@ -382,117 +348,81 @@ export default function AdminFinancePage() {
             </div>
           </div>
 
-          {/* Breakdown (4 cols) */}
-          <div className="lg:col-span-4 p-5 space-y-4 bg-slate-50/30 flex flex-col justify-between">
-            <div>
-              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                <PieChartIcon className="size-4 text-emerald-600" />
-                Kênh Dòng Tiền &amp; Đối Soát
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Phân bổ phương thức thanh toán phát sinh
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {/* PayOS / Online — đơn đã PAID */}
-              <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-emerald-900 flex items-center gap-1.5">
-                    <CreditCard className="size-4 text-emerald-600" /> Đơn Đã Thanh Toán (PAID)
-                  </span>
-                  <Badge className="bg-emerald-600 text-white font-bold text-[10px]">Đã thu tiền</Badge>
-                </div>
-                <div className="text-lg font-black text-emerald-800 font-mono">
-                  {formatCurrency(totalRevenue)}
-                </div>
-                <div className="text-[10px] text-emerald-700 font-semibold">
-                  {paidOrdersCount} đơn · {paidRate}% tổng đơn hàng
-                </div>
+          {/* Reconciliation Summary */}
+          <div className="lg:col-span-4 bg-slate-50/40 p-5">
+            <div className="space-y-4">
+              <div>
+                <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wider text-slate-700">
+                  <PieChartIcon className="size-4 text-emerald-600" />
+                  Kênh dòng tiền &amp; đối soát
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Tổng hợp trạng thái thu tiền để đối soát nhanh trong kỳ
+                </p>
               </div>
 
-              {/* COD — đơn chưa PAID */}
-              <div className="bg-amber-50/60 border border-amber-200 rounded-xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-amber-900 flex items-center gap-1.5">
-                    <Building2 className="size-4 text-amber-600" /> Đơn Chưa Thanh Toán (UNPAID)
-                  </span>
-                  <Badge variant="outline" className="border-amber-300 text-amber-700 text-[10px] font-bold">
-                    Chờ thu tiền
-                  </Badge>
+              <div className="grid gap-3">
+                <div className="rounded-xl border border-emerald-200 bg-white p-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                        <CreditCard className="size-4" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-black text-slate-700">Đã thu</div>
+                        <div className="text-[10px] font-bold text-slate-400">{paidOrdersCount} đơn đã thanh toán</div>
+                      </div>
+                    </div>
+                    <Badge className="bg-emerald-600 text-[10px] font-bold text-white">PAID</Badge>
+                  </div>
+                  <div className="mt-3 font-mono text-xl font-black text-emerald-700">
+                    {formatCurrency(totalRevenue)}
+                  </div>
                 </div>
-                <div className="text-lg font-black text-amber-800 font-mono">
-                  {formatCurrency(pendingCashflowEstimate)}
+
+                <div className="rounded-xl border border-amber-200 bg-white p-3.5 shadow-2xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex size-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                        <Building2 className="size-4" />
+                      </span>
+                      <div>
+                        <div className="text-xs font-black text-slate-700">Chờ thu</div>
+                        <div className="text-[10px] font-bold text-slate-400">{unpaidOrdersCount} đơn chưa hoàn tất thanh toán</div>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="border-amber-300 text-[10px] font-bold text-amber-700">
+                      UNPAID
+                    </Badge>
+                  </div>
+                  <div className="mt-3 font-mono text-xl font-black text-amber-700">
+                    {formatCurrency(pendingCashflowEstimate)}
+                  </div>
                 </div>
-                <div className="text-[10px] text-amber-700 font-semibold">
-                  {unpaidOrdersCount} đơn · ước tính {totalOrders > 0 ? Math.round((unpaidOrdersCount / totalOrders) * 100) : 0}% tổng đơn hàng
+
+                <div className="rounded-xl border border-slate-200 bg-white p-3.5">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                    <span>Tỷ lệ đã thu</span>
+                    <span className="font-mono text-slate-700">{paidRate}%</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-emerald-500"
+                      style={{ width: `${Math.min(100, Math.max(0, paidRate))}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 text-[10px] font-bold text-slate-400">
+                    {paidOrdersCount}/{totalOrders} đơn đã ghi nhận thanh toán
+                  </div>
                 </div>
               </div>
-            </div>
-
-            {/* Reconciliation Note */}
-            <div className="rounded-xl border border-slate-200 bg-white p-3 text-[11px] text-slate-500 leading-relaxed">
-              💡 <b>Lưu ý Manager:</b> Dòng tiền PayOS được tự động đối soát với WMS Order theo Webhook trong 5 giây. Đơn COD được tổng hợp và chốt kỳ vào 17:00 thứ 6 hàng tuần.
             </div>
           </div>
         </div>
 
-        {/* SECTION 4: Top SKUs & Daily Log Tables */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-[#E9E3DD] bg-white">
-          {/* Top SKUs (6 cols) */}
-          <div className="lg:col-span-6 p-5 space-y-3">
-            <div>
-              <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                <Boxes className="size-4 text-emerald-600" />
-                Top SKU Mang Lại Dòng Tiền Cao Nhất
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Các mã sản phẩm có đóng góp lớn nhất vào tổng doanh thu
-              </p>
-            </div>
-
-            <div className="border border-[#E9E3DD] rounded-xl overflow-hidden mt-2">
-              <Table>
-                <TableHeader className="bg-slate-50/60">
-                  <TableRow className="border-b border-[#E9E3DD]">
-                    <TableHead className="font-bold text-slate-500 text-xs">Mã SKU WMS</TableHead>
-                    <TableHead className="font-bold text-slate-500 text-xs">Sản phẩm</TableHead>
-                    <TableHead className="text-right font-bold text-slate-500 text-xs">Đã bán</TableHead>
-                    <TableHead className="text-right font-bold text-slate-500 text-xs pr-4">Doanh thu</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {topSelling.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center text-xs text-slate-400 py-6 italic">
-                        Chưa có dữ liệu giao dịch SKU.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    topSelling.map((item) => (
-                      <TableRow key={item.sku} className="border-b border-[#E9E3DD]/60 hover:bg-slate-50/50">
-                        <TableCell className="font-mono text-xs font-bold text-emerald-700">
-                          {item.sku}
-                        </TableCell>
-                        <TableCell className="text-xs font-semibold text-slate-800 max-w-[160px] truncate">
-                          {item.name}
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-bold text-slate-600">
-                          {item.totalQuantitySold.toLocaleString("vi-VN")}
-                        </TableCell>
-                        <TableCell className="text-right text-xs font-bold text-emerald-800 font-mono pr-4">
-                          {formatCurrency(item.totalRevenue)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-
-          {/* Daily Log (6 cols) */}
-          <div className="lg:col-span-6 p-5 space-y-3">
+        {/* SECTION 4: Daily Cashflow Log */}
+        <div className="bg-white">
+          <div className="p-5 space-y-3">
             <div>
               <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                 <Calendar className="size-4 text-emerald-600" />

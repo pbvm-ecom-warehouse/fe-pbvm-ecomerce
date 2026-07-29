@@ -57,7 +57,7 @@ describe("multi-stage payment flow", () => {
     ).toBe(false);
   });
 
-  it("allows the final online payment only when goods are ready to pick", () => {
+  it("allows the final online payment for print orders after stage 2 is paid", () => {
     expect(
       canPayNextOnlineStage({
         paymentStatus: "PROGRESS_PAID",
@@ -75,7 +75,7 @@ describe("multi-stage payment flow", () => {
         status: "CONFIRMED",
         fulfillmentStatus: "AWAITING_PRINT",
       }),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("does not show online final-payment buttons for COD final collection stages", () => {

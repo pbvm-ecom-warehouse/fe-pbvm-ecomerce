@@ -36,7 +36,7 @@ import {
 import { useCartStore } from "@/stores/cart-store";
 import { CupConfigDetails } from "@/features/cart/components/cup-config-details";
 import { useAuthStore } from "@/stores/auth-store";
-import { calculateCartTotals } from "@/features/cart/utils/cart";
+import { calculateCartTotals, findPrintAndBlankSelectionConflict } from "@/features/cart/utils/cart";
 import {
   cartRequiresOnlinePayment,
   getPaymentOptionsForCart,
@@ -65,8 +65,10 @@ import { cleanProductName } from "@/features/catalog/services/catalog.service";
 import { getOrder, cancelOrder } from "@/features/order/services/order.service";
 import { apiClient } from "@/lib/api-client";
 import { unwrapApiData } from "@/lib/api-contract";
+import type { CartItem } from "@/types/api";
 
 const addressLabelOptions = ["Nhà riêng", "Văn phòng", "Cửa hàng", "Kho hàng", "Địa chỉ khác"];
+const DIRECT_PRINT_CHECKOUT_KEY = "directPrintCheckoutItem";
 
 export function CheckoutForm() {
   const [mounted, setMounted] = useState(false);
@@ -75,19 +77,32 @@ export function CheckoutForm() {
   }, []);
 
   const rawItems = useCartStore((state) => state.items);
-  const items = rawItems.filter((item) => item.selected !== false);
+  const [directPrintItem, setDirectPrintItem] = useState<CartItem | null>(null);
+  const items = directPrintItem ? [directPrintItem] : rawItems.filter((item) => item.selected !== false);
+  const isDirectPrintCheckout = Boolean(directPrintItem);
   const clearSelectedItems = useCartStore((state) => state.clearSelectedItems);
-  const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
   const user = useAuthStore((state) => state.user);
   const totals = calculateCartTotals(items);
   const availablePaymentOptions = getPaymentOptionsForCart(items);
   const requiresOnlinePayment = cartRequiresOnlinePayment(items);
   const hasCustomPrint = items.some((item) => item.fulfillmentType === "CUSTOM_PRINT");
+  const printBlankConflictSku = findPrintAndBlankSelectionConflict(items);
 
   useEffect(() => {
-    if (!mounted || !user) return;
-    fetchAndSyncCart();
-  }, [fetchAndSyncCart, mounted, user]);
+    if (typeof window === "undefined") return;
+    const raw = sessionStorage.getItem(DIRECT_PRINT_CHECKOUT_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.cartItemId && parsed?.productId && parsed?.quantity) {
+        setDirectPrintItem(parsed);
+      } else {
+        sessionStorage.removeItem(DIRECT_PRINT_CHECKOUT_KEY);
+      }
+    } catch {
+      sessionStorage.removeItem(DIRECT_PRINT_CHECKOUT_KEY);
+    }
+  }, []);
 
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedOrder, setSubmittedOrder] = useState<{
@@ -255,8 +270,20 @@ export function CheckoutForm() {
       // Hủy đơn hàng cũ trên hệ thống
       await cancelOrder(pendingOrderId, "Khách hàng hủy thanh toán và quay lại chỉnh sửa giỏ hàng");
 
+      if (pendingOrder.hasPrintItems || pendingOrder.items?.some((item: any) => item.isPrintItem || item.designId || item.designFile)) {
+        sessionStorage.removeItem("lastCreatedOrderId");
+        sessionStorage.removeItem("pendingDirectPrintCheckout");
+        sessionStorage.removeItem("directPrintCheckoutItem");
+        setPendingOrderId(null);
+        setPendingOrder(null);
+        toast.dismiss();
+        toast.success("Đã hủy đơn ly in. Vui lòng vào thiết kế để chọn lại mẫu khi muốn đặt lại.");
+        router.push("/design-cup");
+        return;
+      }
+
       // Khôi phục các item vào store giỏ hàng
-      const cartItems = pendingOrder.items.map((item: any) => {
+      const cartItems = pendingOrder.items.filter((item: any) => !item.isPrintItem && !item.designId && !item.designFile).map((item: any) => {
         const isCustom = item.isPrintItem;
         let designFileSnapshot: any = undefined;
         if (item.designFile) {
@@ -468,7 +495,7 @@ export function CheckoutForm() {
       toast.error(result.message || "Mã giảm giá không hợp lệ hoặc đã hết hạn.");
     } catch (err: any) {
       if (err?.response?.status === 404) {
-        toast.error("BE chưa có API /promotions/validate để kiểm tra mã giảm giá.");
+        toast.error("");
       } else {
         toast.error(err?.message || err?.response?.data?.message || "Không thể kiểm tra mã giảm giá.");
       }
@@ -506,7 +533,11 @@ export function CheckoutForm() {
   }
 
   const handleOrderFinish = () => {
-    clearSelectedItems();
+    if (isDirectPrintCheckout) {
+      sessionStorage.removeItem(DIRECT_PRINT_CHECKOUT_KEY);
+    } else {
+      clearSelectedItems();
+    }
     window.location.href = "/";
   };
 
@@ -707,6 +738,12 @@ export function CheckoutForm() {
           toast.error("Đơn ly in cần thanh toán online trước khi sản xuất.");
           return;
         }
+        if (printBlankConflictSku) {
+          toast.error(
+            `Không thể thanh toán nhiều dòng cùng mã phôi ${printBlankConflictSku} cùng lúc. Vui lòng chỉ chọn một dòng trước.`,
+          );
+          return;
+        }
 
         try {
           if (!selectedAddressId || selectedAddressId === "new") {
@@ -718,13 +755,22 @@ export function CheckoutForm() {
             ...values,
             addressId: selectedAddressId,
             customerType: values.customerType as "B2B" | "B2C",
-            items: items.map((item) => ({
+            items: isDirectPrintCheckout ? [] : items.map((item) => ({
               productId: item.productId,
+              productRefId: item.productRefId,
               quantity: item.quantity,
               fulfillmentType: item.fulfillmentType,
               designId: item.designId,
               designFile: item.designFile,
             })),
+            directItem: isDirectPrintCheckout && directPrintItem
+              ? {
+                  sku: directPrintItem.productRefId || directPrintItem.productId,
+                  quantity: directPrintItem.quantity,
+                  designId: directPrintItem.designId,
+                  designFile: directPrintItem.designFile,
+                }
+              : undefined,
           } as any);
           if (order.paymentUrl) {
             toast.success("Đang chuyển hướng sang cổng thanh toán...");
@@ -734,7 +780,11 @@ export function CheckoutForm() {
                 sessionStorage.setItem("lastCreatedOrderCode", order.code || order.orderId);
               }
               sessionStorage.setItem("lastPaymentStartedStatus", "UNPAID");
-              sessionStorage.setItem("pendingCartBackup", JSON.stringify(items));
+              if (isDirectPrintCheckout) {
+                sessionStorage.setItem("pendingDirectPrintCheckout", JSON.stringify(directPrintItem));
+              } else {
+                sessionStorage.setItem("pendingCartBackup", JSON.stringify(items));
+              }
             }
             window.location.href = order.paymentUrl;
             return;
@@ -745,7 +795,11 @@ export function CheckoutForm() {
             paymentProvider: values.paymentProvider,
           });
           setIsSubmitted(true);
-          await clearSelectedItems();
+          if (isDirectPrintCheckout) {
+            sessionStorage.removeItem(DIRECT_PRINT_CHECKOUT_KEY);
+          } else {
+            await clearSelectedItems();
+          }
           toast.success(
             order.offline
               ? "Đã lưu đơn tạm trong chế độ fallback"
@@ -1166,10 +1220,10 @@ export function CheckoutForm() {
                 Đơn hàng ({items.length})
               </span>
               <Link
-                href="/cart"
+                href={isDirectPrintCheckout ? "/design-cup" : "/cart"}
                 className="normal-case tracking-normal hover:underline"
               >
-                Sửa giỏ hàng
+                {isDirectPrintCheckout ? "Sửa thiết kế" : "Sửa giỏ hàng"}
               </Link>
             </div>
 

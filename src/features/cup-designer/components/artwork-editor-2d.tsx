@@ -50,7 +50,10 @@ import type {
   DesignTextLayer,
 } from "@/types/api";
 
-import { generateBananaLogoArtworkAsync } from "../services/artwork-generator.service";
+import {
+  generateBananaLogoArtworkAsync,
+  parsePromptToBananaLogoOptions,
+} from "../services/artwork-generator.service";
 import { getArtboardDimensions } from "../utils/artwork";
 
 type ToolMode = "select" | "brush";
@@ -296,7 +299,8 @@ export function ArtworkEditor2D({
   async function handleGenerateArtwork() {
     if (imageLayerCount >= MAX_IMAGE_LAYERS) return;
     try {
-      const src = await generateBananaLogoArtworkAsync({ brandName: aiPrompt }, aiPrompt);
+      const options = parsePromptToBananaLogoOptions(aiPrompt);
+      const src = await generateBananaLogoArtworkAsync(options, aiPrompt);
       addImageLayer(src, "ai", aiPrompt);
     } catch (e) {
       console.error("AI Artwork Generation Error:", e);

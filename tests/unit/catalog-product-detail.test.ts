@@ -20,7 +20,7 @@ describe("catalog product detail", () => {
   it("uses fresh variant price and stock from the product variants endpoint", async () => {
     publicApiFetchMock
       .mockResolvedValueOnce({
-        id: "product-1",
+        id: "6a66df2e2ebc2c57c2817e66",
         name: "Sản phẩm kho - CUP_BLANK",
         slug: "san-pham-kho-cup_blank",
         categoryId: "category-1",
@@ -49,7 +49,7 @@ describe("catalog product detail", () => {
 
     expect(publicApiFetchMock).toHaveBeenNthCalledWith(
       2,
-      "/catalog/products/product-1/variants",
+      "/catalog/products/6a66df2e2ebc2c57c2817e66/variants",
     );
     expect(product?.price).toBe(25000);
     expect(product?.variants?.[0]?.price).toBe(25000);
@@ -59,7 +59,7 @@ describe("catalog product detail", () => {
   it("maps coded cup variant attributes from the public product variants endpoint", async () => {
     publicApiFetchMock
       .mockResolvedValueOnce({
-        id: "product-1",
+        id: "6a66df2e2ebc2c57c2817e66",
         name: "Sản phẩm kho - CUP_BLANK",
         slug: "san-pham-kho-cup_blank",
         categoryId: "category-1",
@@ -70,7 +70,7 @@ describe("catalog product detail", () => {
         {
           id: "variant-1",
           sku: "CUP-HRT-PET-500-CLR",
-          productId: "product-1",
+          productId: "6a66df2e2ebc2c57c2817e66",
           price: 10000,
           availableQty: 4,
           attributes: {
@@ -102,7 +102,7 @@ describe("catalog product detail", () => {
   it("maps coded material variant attributes from the public product variants endpoint", async () => {
     publicApiFetchMock
       .mockResolvedValueOnce({
-        id: "product-material",
+        id: "6a66df2e2ebc2c57c2817e77",
         name: "Sản phẩm kho - MATERIAL",
         slug: "san-pham-kho-material",
         categoryId: "category-material",
@@ -113,7 +113,7 @@ describe("catalog product detail", () => {
         {
           id: "variant-material-1",
           sku: "MAT-TEA-BLK-ORG-500G",
-          productId: "product-material",
+          productId: "6a66df2e2ebc2c57c2817e77",
           price: 0,
           availableQty: 0,
           attributes: {
@@ -144,34 +144,18 @@ describe("catalog product detail", () => {
     );
   });
 
-  it("falls back to the product slug variants endpoint and unwraps response data", async () => {
+  it("does not fall back to the product slug variants endpoint", async () => {
     publicApiFetchMock
       .mockResolvedValueOnce({
         id: "6a66df2e2ebc2c57c2817e66",
-        name: "Phôi ly",
+        name: "Phoi ly",
         slug: "san-pham-kho-cup-blank",
         categoryId: "category-1",
         price: 0,
         variants: [],
       })
       .mockRejectedValueOnce(new Error("product id variants endpoint not found"))
-      .mockResolvedValueOnce({
-        data: [
-          {
-            id: "variant-1",
-            sku: "CUP-RND-PP-700-WHT",
-            productId: "6a66df2e2ebc2c57c2817e66",
-            price: 100000,
-            availableQty: 6,
-            attributes: {
-              capacity: "700ml",
-              style: "Trụ tròn",
-              material: "Nhựa PP",
-              color: "Trắng sữa",
-            },
-          },
-        ],
-      });
+      .mockResolvedValueOnce([]);
 
     const product = await getCatalogProductBySlug("san-pham-kho-cup-blank");
 
@@ -179,20 +163,10 @@ describe("catalog product detail", () => {
       2,
       "/catalog/products/6a66df2e2ebc2c57c2817e66/variants",
     );
-    expect(publicApiFetchMock).toHaveBeenNthCalledWith(
-      3,
+    expect(publicApiFetchMock).not.toHaveBeenCalledWith(
       "/catalog/products/san-pham-kho-cup-blank/variants",
     );
-    expect(product?.price).toBe(100000);
-    expect(product?.stockSnapshot).toBe(6);
-    expect(product?.variants?.[0]?.attributes).toEqual(
-      expect.objectContaining({
-        capacity: "700ml",
-        style: "Trụ tròn",
-        material: "Nhựa PP",
-        color: "Trắng sữa",
-      }),
-    );
+    expect(product?.variants).toEqual([]);
   });
 
   it("reads variants from the shop product detail payload when they are nested in data", async () => {

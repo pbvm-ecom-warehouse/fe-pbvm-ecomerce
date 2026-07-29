@@ -1,6 +1,7 @@
 import {
   parsePromptToBananaLogoOptions,
   generateBananaLogoArtworkAsync,
+  promptRequestsText,
 } from "./artwork-generator.service";
 import { uploadImageToCloudinary } from "./cloudinary-upload.service";
 
@@ -19,9 +20,53 @@ export interface CupContext {
   layersCount: number;
   currentLayers?: Array<{
     type: string;
+    src?: string;
     prompt?: string;
     text?: string;
   }>;
+}
+
+function normalizeVietnameseText(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+}
+
+function summarizeCanvasLayers(cupContext: CupContext) {
+  return (cupContext.currentLayers ?? [])
+    .map((layer) =>
+      layer.type === "image"
+        ? `Existing logo/image: ${layer.prompt || "logo artwork"}${layer.src ? `; reference image: ${layer.src}` : ""}`
+        : `Existing text: ${layer.text || ""}`,
+    )
+    .filter((line) => line.trim().length > 0)
+    .join("; ");
+}
+
+function buildDeterministicLogoPrompt(input: {
+  userText: string;
+  cupContext: CupContext;
+  isLogoModification: boolean;
+}) {
+  const canvasSummary = summarizeCanvasLayers(input.cupContext);
+  const textInstruction = promptRequestsText(input.userText)
+    ? "Include only the exact text requested by the user; do not add extra words."
+    : "Do not include any text, letters, numbers, words, slogans, or typography in the image.";
+  const editInstruction =
+    input.isLogoModification && canvasSummary
+      ? `Edit the existing logo while preserving its core composition, brand identity, layout, and readable text. Current logo context: ${canvasSummary}.`
+      : "Create a new logo from the user request.";
+
+  return [
+    editInstruction,
+    `User request: ${input.userText}.`,
+    textInstruction,
+    "Apply only the requested changes; do not invent unrelated mascots, words, symbols, or colors.",
+    "Use clean professional vector logo style, sharp contours, centered emblem, print-ready high contrast, isolated simple background for alpha extraction.",
+  ].join(" ");
 }
 
 /**
@@ -35,6 +80,14 @@ async function translateAndExpandPromptWithLLM(
   cupContext: CupContext,
   apiKey: string,
 ): Promise<string> {
+  const directedPrompt = buildDeterministicLogoPrompt({
+    userText,
+    cupContext,
+    isLogoModification: true,
+  });
+
+  if (!apiKey) return directedPrompt;
+
   try {
     const recentHistoryStr = history
       .slice(-6)
@@ -42,7 +95,11 @@ async function translateAndExpandPromptWithLLM(
       .join("\n");
 
     const currentCanvasSummary = (cupContext.currentLayers ?? [])
-      .map((l) => (l.type === "image" ? `Existing Logo/Image Layer: "${l.prompt || "Logo thiết kế"}"` : `Text Layer: "${l.text}"`))
+      .map((l) =>
+        l.type === "image"
+          ? `Existing Logo/Image Layer: "${l.prompt || "Logo thiết kế"}"${l.src ? `, reference image: ${l.src}` : ""}`
+          : `Text Layer: "${l.text}"`,
+      )
       .join("\n");
 
     const promptForLLM = `You are an expert AI Art Director for high-end corporate graphic logo design.
@@ -62,7 +119,10 @@ Directives:
 1. Focus on creating a clean, professional vector graphic logo motif/symbol with sharp contours and vibrant colors (e.g. red, gold, metallic, yellow, emerald green, dark navy).
 2. Specify isolated background (e.g. clean white background or solid dark background) for crisp alpha transparency extraction.
 3. IMPORTANT: If the user asks to edit/modify the current logo (e.g. "đổi sang màu đỏ", "bỏ nền", "đổi thành hình tròn", "sửa chữ thành Arknote", "thay chú gấu thành con rồng"), APPLY THAT MODIFICATION DIRECTLY ONTO THE EXISTING LOGO CONTEXT ("${currentCanvasSummary || ""}")!
-4. Output ONLY the final 1-sentence English prompt. No explanation, no markdown quotes.`;
+4. ${promptRequestsText(userText)
+      ? "Include only the exact text requested by the user; do not add extra words."
+      : "Do not include any text, letters, numbers, words, slogans, or typography in the generated image."}
+5. Output ONLY the final 1-sentence English prompt. No explanation, no markdown quotes.`;
 
 
     const response = await fetch(
@@ -84,10 +144,10 @@ Directives:
       }
     }
   } catch (err) {
-    console.warn("LLM prompt translation failed, falling back to raw prompt:", err);
+    console.warn("LLM prompt translation failed, using direct AI prompt:", err);
   }
 
-  return userText;
+  return directedPrompt;
 }
 
 export async function sendChatMessageToAi(
@@ -103,10 +163,15 @@ export async function sendChatMessageToAi(
 
 
   const lower = userText.toLowerCase();
+  const normalizedLower = normalizeVietnameseText(userText);
 
   // Nhận diện bất kỳ yêu cầu liên quan đến logo, chỉnh sửa màu sắc, hình khối, nền, chữ...
   const isDirectLogoCreation =
     lower.includes("logo") ||
+    normalizedLower.includes("logo") ||
+    normalizedLower.includes("tao") ||
+    normalizedLower.includes("ve") ||
+    normalizedLower.includes("thiet ke") ||
     lower.includes("tạo") ||
     lower.includes("vẽ") ||
     lower.includes("in") ||
@@ -124,6 +189,22 @@ export async function sendChatMessageToAi(
     lower.includes("quán");
 
   const isLogoModification =
+    normalizedLower.includes("sua logo") ||
+    normalizedLower.includes("chinh logo") ||
+    normalizedLower.includes("chinh lai") ||
+    normalizedLower.includes("doi mau") ||
+    normalizedLower.includes("thay mau") ||
+    normalizedLower.includes("bo nen") ||
+    normalizedLower.includes("tach nen") ||
+    normalizedLower.includes("xoa nen") ||
+    normalizedLower.includes("doi chu") ||
+    normalizedLower.includes("sua chu") ||
+    normalizedLower.includes("giu nguyen") ||
+    normalizedLower.includes("thay logo") ||
+    normalizedLower.includes("doi sang") ||
+    normalizedLower.includes("chuyen sang") ||
+    normalizedLower.includes("sua thanh") ||
+    normalizedLower.includes("doi thanh") ||
     lower.includes("bỏ nền") ||
     lower.includes("tách nền") ||
     lower.includes("xóa nền") ||
@@ -166,7 +247,7 @@ export async function sendChatMessageToAi(
 
 
     const logoOptions = parsePromptToBananaLogoOptions(userText);
-    logoPromptInfo = logoOptions.brandName;
+    logoPromptInfo = promptRequestsText(userText) ? logoOptions.brandName : undefined;
 
     // Tạo ảnh logo (trả về base64 dataUrl)
     const rawDataUrl = await generateBananaLogoArtworkAsync(logoOptions, structuredEnglishPrompt);
@@ -175,8 +256,8 @@ export async function sendChatMessageToAi(
     try {
       imageUrl = await uploadImageToCloudinary(rawDataUrl);
     } catch (uploadErr) {
-      console.warn("Cloudinary upload thất bại, dùng base64 tạm thời:", uploadErr);
-      imageUrl = rawDataUrl; // fallback: vẫn dùng base64 nếu Cloudinary chưa cấu hình
+      console.error("Cloudinary upload failed for AI image:", uploadErr);
+      throw new Error("Không thể upload ảnh AI lên máy chủ lưu trữ.");
     }
 
 

@@ -25,6 +25,7 @@ import {
   adminActivateVariant,
   adminCreateCategory,
   adminUpdateProduct,
+  adminUpdateVariant,
   adminListProducts,
   adminListInactiveProducts,
   adminListInactiveVariants,
@@ -492,6 +493,62 @@ describe("admin catalog variant activation API", () => {
       {
         categoryId: "category-1",
         status: "ACTIVE",
+      },
+    );
+  });
+
+  it("does not send a non-ObjectId productId when updating a variant", async () => {
+    apiClientMock.patch.mockResolvedValueOnce({
+      data: {
+        data: {
+          id: "variant-1",
+          sku: "CUP-700",
+          price: 12000,
+          attributes: { capacity: "700ml" },
+        },
+        meta: {},
+      },
+    });
+
+    await adminUpdateVariant("6a66df2e2ebc2c57c2817e66", {
+      sku: " CUP-700 ",
+      price: 12000,
+      attributes: { capacity: "700ml" },
+      productId: "phoi-ly",
+    });
+
+    expect(apiClientMock.patch).toHaveBeenCalledWith(
+      "/admin/catalog/variants/6a66df2e2ebc2c57c2817e66",
+      {
+        sku: "CUP-700",
+        price: 12000,
+        attributes: { capacity: "700ml" },
+      },
+    );
+  });
+
+  it("sends variant image when updating a variant", async () => {
+    apiClientMock.patch.mockResolvedValueOnce({
+      data: {
+        data: {
+          id: "variant-1",
+          sku: "CUP-700",
+          image: "https://cdn.example.com/variant.png",
+        },
+        meta: {},
+      },
+    });
+
+    await adminUpdateVariant("6a66df2e2ebc2c57c2817e66", {
+      sku: "CUP-700",
+      image: "https://cdn.example.com/variant.png",
+    });
+
+    expect(apiClientMock.patch).toHaveBeenCalledWith(
+      "/admin/catalog/variants/6a66df2e2ebc2c57c2817e66",
+      {
+        sku: "CUP-700",
+        image: "https://cdn.example.com/variant.png",
       },
     );
   });

@@ -21,6 +21,7 @@ import {
   onForegroundMessage,
 } from "@/lib/fcm";
 import { isFirebaseConfigured } from "@/lib/firebase";
+import { addNotificationToInbox } from "@/features/notification/services/notification.service";
 
 export function useFCM() {
   const user = useAuthStore((state) => state.user);
@@ -79,6 +80,14 @@ export function useFCM() {
             (payload.data as any)?.link ||
             (payload.data as any)?.url ||
             "/notifications";
+
+          addNotificationToInbox(user.type === "admin" ? "admin" : "customer", {
+            type: (payload.data as any)?.type || "SYSTEM",
+            title,
+            description: body,
+            link,
+            metadata: payload.data || {},
+          });
 
           toast(title, {
             description: body,

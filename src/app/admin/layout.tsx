@@ -31,6 +31,7 @@ import {
   listAdminNotifications,
   markAdminNotificationRead,
   markAllAdminNotificationsRead,
+  NOTIFICATIONS_CHANGED_EVENT,
 } from "@/features/notification/services/notification.service";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -100,7 +101,11 @@ function AdminNotificationBell() {
     load();
     // Poll every 60 seconds to refresh
     const interval = setInterval(load, 60_000);
-    return () => clearInterval(interval);
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, load);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, load);
+    };
   }, [load]);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -357,13 +362,24 @@ export default function AdminLayout({
           </nav>
         </div>
 
-        <div className="space-y-2 border-t border-[#E9E3DD] pt-4">
+        <div className="space-y-3 border-t border-[#E9E3DD] pt-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-black text-emerald-700">
+                {user.name?.charAt(0).toUpperCase() ?? "A"}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-xs font-black text-slate-700">{user.name}</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Quản trị viên</div>
+              </div>
+            </div>
+          </div>
           <Button
             onClick={handleLogout}
             variant="ghost"
-            className="w-full justify-start gap-3 h-10 px-3 rounded-lg text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700 border-0 cursor-pointer"
+            className="h-10 w-full justify-start gap-3 rounded-xl px-3 text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700 border-0 cursor-pointer"
           >
-            <LogOut className="size-4 text-red-400" />
+            <LogOut className="size-4 text-red-500" />
             Đăng xuất
           </Button>
         </div>

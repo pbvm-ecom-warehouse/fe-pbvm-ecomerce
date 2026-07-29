@@ -155,9 +155,14 @@ export async function adminGetProductVariants(
 ): Promise<ProductVariant[]> {
   if (!productId) return [];
 
-  const response = await apiClient.get<any>(`/admin/catalog/products/${productId}/variants`);
-  const variants = unwrapApiData(response.data);
-  return Array.isArray(variants) ? variants : [];
+  try {
+    const response = await apiClient.get<any>(`/admin/catalog/products/${productId}/variants`);
+    const variants = unwrapApiData(response.data);
+    return Array.isArray(variants) ? variants : [];
+  } catch (error) {
+    console.warn("adminGetProductVariants backend error:", error);
+    return [];
+  }
 }
 
 export async function adminPublishProduct(id: string) {
@@ -169,6 +174,10 @@ export async function adminPublishProduct(id: string) {
 
 function getVariantId(variant: any): string {
   return String(variant?.id || variant?._id || "");
+}
+
+function looksLikeObjectId(value: string) {
+  return /^[a-f\d]{24}$/i.test(value);
 }
 
 export async function adminActivateProductVariants(id: string): Promise<ProductVariant[]> {
@@ -211,6 +220,7 @@ export async function adminCreateVariant(data: {
   price: number;
   attributes?: Record<string, string>;
   fulfillmentType: FulfillmentType;
+  image?: string | null;
 }): Promise<ProductVariant> {
   const cleanPayload = {
     sku: data.sku ? data.sku.trim() : "SKU",
@@ -218,6 +228,7 @@ export async function adminCreateVariant(data: {
     price: Number(data.price),
     attributes: data.attributes || {},
     fulfillmentType: data.fulfillmentType || "STANDARD",
+    ...(data.image ? { image: data.image } : {}),
   };
   const response = await apiClient.post<any>("/admin/catalog/variants", cleanPayload);
   const created = unwrapApiData(response.data) as ProductVariant;
@@ -233,16 +244,20 @@ export async function adminUpdateVariant(
     price?: number;
     fulfillmentType?: FulfillmentType;
     isActive?: boolean;
+    image?: string | null;
     productSlug?: string;
   },
 ): Promise<ProductVariant> {
   const patchPayload: Record<string, any> = {};
   if (data.sku !== undefined) patchPayload.sku = data.sku.trim();
-  if (data.productId !== undefined) patchPayload.productId = data.productId;
+  if (data.productId !== undefined && looksLikeObjectId(data.productId)) {
+    patchPayload.productId = data.productId;
+  }
   if (data.attributes !== undefined) patchPayload.attributes = data.attributes;
   if (data.price !== undefined) patchPayload.price = Number(data.price);
   if (data.fulfillmentType !== undefined) patchPayload.fulfillmentType = data.fulfillmentType;
   if (data.isActive !== undefined) patchPayload.isActive = data.isActive;
+  if (data.image !== undefined) patchPayload.image = data.image;
 
   const response = await apiClient.patch<any>(`/admin/catalog/variants/${id}`, patchPayload);
   const updated = unwrapApiData(response.data) as ProductVariant;
