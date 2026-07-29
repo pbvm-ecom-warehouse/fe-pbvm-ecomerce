@@ -71,6 +71,8 @@ export type DesignFileSnapshot = {
   designId: string;
   name: string;
   previewDataUrl: string;
+  fileUrl?: string;
+  thumbnailUrl?: string;
   artwork: DesignArtwork;
   exportedAt: string;
 };
@@ -110,6 +112,7 @@ export type CatalogCategory = {
 
 export type ProductVariant = {
   id: string;
+  name?: string;
   sku: string;
   productId: string;
   attributes: Record<string, string>;
@@ -117,6 +120,7 @@ export type ProductVariant = {
   availableQty: number;
   fulfillmentType: FulfillmentType;
   isActive: boolean;
+  image?: string | null;
 };
 
 export type CartItem = {
@@ -127,6 +131,7 @@ export type CartItem = {
   slug: string;
   price: number;
   quantity: number;
+  stockSnapshot?: number;
   unit: string;
   imageUrl: string;
   fulfillmentType: FulfillmentType;

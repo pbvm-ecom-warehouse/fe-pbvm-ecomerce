@@ -48,6 +48,7 @@ import {
   listNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  NOTIFICATIONS_CHANGED_EVENT,
 } from "@/features/notification/services/notification.service";
 
 const AUTH_PATHS = ["/login", "/register"];
@@ -167,8 +168,12 @@ export function StoreHeader() {
 
     if (user && user.type === "customer") {
       load();
+      window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, load);
     }
-    return () => { isMounted = false; };
+    return () => {
+      isMounted = false;
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, load);
+    };
   }, [user]);
 
   const filteredProducts = useMemo(() => {

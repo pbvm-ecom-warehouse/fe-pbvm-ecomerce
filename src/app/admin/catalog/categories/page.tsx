@@ -177,6 +177,7 @@ export default function AdminCategoriesPage() {
       availableQty: number;
       attributes: Record<string, string>;
       fulfillmentType: FulfillmentType;
+      image?: string | null;
     }>
   >([]);
   const [submittingProd, setSubmittingProd] = useState(false);
@@ -714,6 +715,7 @@ export default function AdminCategoriesPage() {
               attributes: updatedAttributes,
               fulfillmentType: v.fulfillmentType || prodFulfillment,
               productId: prodId,
+              image: v.image || null,
               productSlug: updatedSlug,
             });
           } catch (e) {
@@ -726,6 +728,7 @@ export default function AdminCategoriesPage() {
           sku: v.sku.trim(),
           price: Number(v.price),
           attributes: updatedAttributes,
+          image: savedVar.image ?? v.image ?? null,
         });
       }
 

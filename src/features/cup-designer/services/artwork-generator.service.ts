@@ -1,6 +1,31 @@
 export interface BananaLogoOptions {
   brandName: string;
+  includeText?: boolean;
   transparentBg?: boolean;
+}
+
+export function promptRequestsText(promptText: string): boolean {
+  const normalized = promptText
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+
+  return [
+    "chu",
+    "text",
+    "ten",
+    "brand name",
+    "typography",
+    "wordmark",
+    "slogan",
+    "ghi",
+    "viet",
+    "them slogan",
+    "doi chu",
+    "sua chu",
+  ].some((keyword) => normalized.includes(keyword));
 }
 
 export function parsePromptToBananaLogoOptions(promptText: string): BananaLogoOptions {
@@ -9,8 +34,10 @@ export function parsePromptToBananaLogoOptions(promptText: string): BananaLogoOp
   if (matchQuotes && matchQuotes[1]) {
     cleanBrand = matchQuotes[1].trim();
   }
+  const includeText = promptRequestsText(promptText);
   return {
-    brandName: cleanBrand || "LOGO",
+    brandName: includeText ? cleanBrand : "",
+    includeText,
     transparentBg: true,
   };
 }
@@ -119,7 +146,11 @@ export async function generateBananaLogoArtworkAsync(
   const res = await fetch("/api/ai/generate-logo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt: promptInput, brandName: options.brandName }),
+    body: JSON.stringify({
+      prompt: promptInput,
+      brandName: options.brandName,
+      includeText: options.includeText === true,
+    }),
   });
 
   if (!res.ok) {

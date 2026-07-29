@@ -10,6 +10,7 @@ export async function POST(req: Request) {
     }
 
     const prompt = body.prompt || body.brandName || "vector logo design";
+    const includeText = body.includeText === true;
     const seed = Math.floor(Math.random() * 1000000);
     const rawLower = String(prompt).toLowerCase();
 
@@ -47,7 +48,10 @@ export async function POST(req: Request) {
       .replace(/\s+/g, " ")
       .trim();
 
-    const fullPrompt = `${cleanPrompt}, flat vector graphic logo design, minimal clean icon motif, sharp contours, 8k resolution, centered emblem, masterpiece`;
+    const textDirective = includeText
+      ? "include only the exact requested readable text, no extra words"
+      : "no text, no letters, no words, no typography, no watermark";
+    const fullPrompt = `${cleanPrompt}, ${textDirective}, flat vector graphic logo design, minimal clean icon motif, sharp contours, 8k resolution, centered emblem, masterpiece`;
     const encodedPrompt = encodeURIComponent(fullPrompt);
 
     const aiEndpoints = [
@@ -79,36 +83,12 @@ export async function POST(req: Request) {
       });
     }
 
-    // High-quality SVG Vector fallback if external AI servers are busy
-    const displayTitle = cleanPrompt.replace(/[^a-zA-Z0-9\sàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/g, "").trim();
-    const shortTitle = (displayTitle || "LOGO DESIGN").toUpperCase().slice(0, 18);
-
-    const svgContent = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-      <defs>
-        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#10B981;stop-opacity:1" />
-          <stop offset="100%" style="stop-color:#059669;stop-opacity:1" />
-        </linearGradient>
-        <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-          <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#059669" flood-opacity="0.25"/>
-        </filter>
-      </defs>
-      <rect width="1024" height="1024" fill="none"/>
-      <g filter="url(#shadow)">
-        <circle cx="512" cy="460" r="320" fill="none" stroke="url(#grad1)" stroke-width="28" />
-        <polygon points="512,220 580,360 740,360 610,460 660,610 512,510 364,610 414,460 284,360 444,360" fill="url(#grad1)" opacity="0.85"/>
-      </g>
-      <text x="512" y="860" font-family="'Be Vietnam Pro', system-ui, sans-serif" font-size="64" font-weight="900" fill="#047857" text-anchor="middle" letter-spacing="3">
-        ${shortTitle}
-      </text>
-    </svg>`;
-
-    const base64Svg = Buffer.from(svgContent).toString("base64");
-    return NextResponse.json({
-      dataUrl: `data:image/svg+xml;base64,${base64Svg}`,
-      wantsTransparent,
-    });
+    return NextResponse.json(
+      {
+        error: "AI image generation failed. Please try again with a clearer prompt.",
+      },
+      { status: 503 },
+    );
   } catch (error: any) {
     console.error("AI Logo Route Exception:", error);
     return NextResponse.json({ error: error?.message || "Internal Error" }, { status: 500 });

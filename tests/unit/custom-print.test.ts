@@ -43,6 +43,7 @@ const designFile: DesignFileSnapshot = {
 const customPrintItem: CartItem = {
   cartItemId: "custom:cup:design_test",
   productId: "custom-cup-m",
+  productRefId: "CUP-CUSTOM-500",
   name: "Ly in theo thiet ke size M",
   slug: "ly-in-theo-thiet-ke",
   price: 1_500,
@@ -79,16 +80,34 @@ describe("custom print checkout contract", () => {
     ]);
   });
 
-  it("keeps designId and designFile in checkout item payload", () => {
-    expect(mapCartItemsToCheckoutItems([customPrintItem])).toEqual([
+  it("serializes designId and designFile in checkout item payload", () => {
+    const [checkoutItem] = mapCartItemsToCheckoutItems([customPrintItem]);
+    const serializedDesignFile = JSON.parse(String(checkoutItem?.designFile));
+
+    expect(checkoutItem).toEqual(
       {
         productId: "custom-cup-m",
+        productRefId: "CUP-CUSTOM-500",
         quantity: 100,
         fulfillmentType: "CUSTOM_PRINT",
         designId: "design_test",
-        designFile,
+        designFile: expect.any(String),
       },
-    ]);
+    );
+    expect(serializedDesignFile.previewDataUrl).toBeUndefined();
+    expect(serializedDesignFile.artwork).toEqual(designFile.artwork);
+  });
+
+  it("rejects custom print checkout items without a saved design snapshot", () => {
+    expect(() =>
+      mapCartItemsToCheckoutItems([
+        {
+          ...customPrintItem,
+          designId: undefined,
+          designFile: undefined,
+        },
+      ]),
+    ).toThrow("Custom print items require a saved design before checkout.");
   });
 
   it("restricts design studio access strictly to unprinted cups", () => {

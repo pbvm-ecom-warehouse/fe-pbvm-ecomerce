@@ -72,4 +72,24 @@ describe("shop catalog active products", () => {
       }),
     );
   });
+
+  it("does not fetch product variants with a slug identifier", async () => {
+    publicApiFetchMock
+      .mockResolvedValueOnce([
+        {
+          id: "san-pham-kho-packaging",
+          name: "Bao bi san pham",
+          slug: "san-pham-kho-packaging",
+          status: "ACTIVE",
+          variants: [],
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    await listCatalogProducts();
+
+    expect(publicApiFetchMock).not.toHaveBeenCalledWith(
+      "/catalog/products/san-pham-kho-packaging/variants",
+    );
+  });
 });

@@ -20,13 +20,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   calculateCartTotals,
+  findPrintAndBlankSelectionConflict,
   hasCustomPrintItems,
+  wouldSelectPrintAndBlankConflict,
 } from "@/features/cart/utils/cart";
 import { CupConfigDetails } from "./cup-config-details";
 import { useCartStore } from "@/stores/cart-store";
 import { useAuthStore } from "@/stores/auth-store";
 import { formatCurrency } from "@/utils/format-currency";
-import { getOrder, cancelOrder } from "@/features/order/services/order.service";
+import { getOrder, cancelOrder, listOrders } from "@/features/order/services/order.service";
 import { cleanProductName } from "@/features/catalog/services/catalog.service";
 import {
   Dialog,
@@ -38,6 +40,50 @@ import {
 } from "@/components/ui/dialog";
 
 const freeShippingThreshold = 5_000_000;
+const progressedPaymentStatuses = new Set(["DEPOSIT_PAID", "PROGRESS_PAID", "PAID"]);
+
+function collectProgressedOrderSkus(orders: any[]) {
+  const skus = new Set<string>();
+
+  orders.forEach((order) => {
+    const orderStatus = order?.orderStatus || order?.status;
+    const paymentStatus = order?.paymentStatus;
+    if (["CANCELLED", "REFUNDED"].includes(orderStatus)) return;
+    if (!progressedPaymentStatuses.has(paymentStatus)) return;
+
+    order?.items?.forEach((item: any) => {
+      const sku = item?.sku || item?.productRefId || item?.productId;
+      if (sku) skus.add(sku);
+    });
+  });
+
+  return Array.from(skus);
+}
+
+function removeSkusFromPendingCartBackup(skus: string[]) {
+  if (typeof window === "undefined" || skus.length === 0) return;
+  const backupStr = sessionStorage.getItem("pendingCartBackup");
+  if (!backupStr) return;
+
+  try {
+    const skuSet = new Set(skus);
+    const parsed = JSON.parse(backupStr);
+    if (!Array.isArray(parsed)) return;
+
+    const nextBackup = parsed.filter((item: any) => {
+      const sku = item?.productRefId || item?.productId;
+      return !skuSet.has(sku);
+    });
+
+    if (nextBackup.length > 0) {
+      sessionStorage.setItem("pendingCartBackup", JSON.stringify(nextBackup));
+    } else {
+      sessionStorage.removeItem("pendingCartBackup");
+    }
+  } catch {
+    sessionStorage.removeItem("pendingCartBackup");
+  }
+}
 
 export function CartPageClient() {
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
@@ -49,6 +95,7 @@ export function CartPageClient() {
   const toggleSelectAll = useCartStore((state) => state.toggleSelectAll);
   const restoreItems = useCartStore((state) => state.restoreItems);
   const fetchAndSyncCart = useCartStore((state) => state.fetchAndSyncCart);
+  const removeItemsBySkus = useCartStore((state) => state.removeItemsBySkus);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -57,8 +104,25 @@ export function CartPageClient() {
       const hasPendingCheckoutBackup = Boolean(sessionStorage.getItem("pendingCartBackup"));
       if (isCanceledParam || hasPendingCheckoutBackup) return;
     }
-    fetchAndSyncCart();
-  }, [fetchAndSyncCart]);
+    const syncCartAndRemoveProgressedOrders = async () => {
+      await fetchAndSyncCart();
+      try {
+        const ordersResponse = await listOrders();
+        const orders = Array.isArray(ordersResponse)
+          ? ordersResponse
+          : (ordersResponse?.data ?? []);
+        const progressedSkus = collectProgressedOrderSkus(orders);
+        if (progressedSkus.length > 0) {
+          await removeItemsBySkus(progressedSkus);
+          removeSkusFromPendingCartBackup(progressedSkus);
+        }
+      } catch (error) {
+        console.warn("[Cart] Could not reconcile progressed order items", error);
+      }
+    };
+
+    syncCartAndRemoveProgressedOrders();
+  }, [fetchAndSyncCart, removeItemsBySkus]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -66,14 +130,21 @@ export function CartPageClient() {
     const params = new URLSearchParams(window.location.search);
     const isCanceledParam = params.get("cancel") === "true" || params.get("canceled") === "true";
     const savedOrderId = sessionStorage.getItem("lastCreatedOrderId");
+    const isDirectPrintCancel = Boolean(sessionStorage.getItem("pendingDirectPrintCheckout"));
     const restoreBackupItems = async () => {
+      if (isDirectPrintCancel) return false;
       const backupStr = sessionStorage.getItem("pendingCartBackup");
       if (!backupStr) return false;
       try {
         const parsed = JSON.parse(backupStr);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          await restoreItems(parsed);
-          return true;
+          const standardItems = parsed.filter(
+            (item) => item.fulfillmentType !== "CUSTOM_PRINT" && !item.designId && !item.designFile,
+          );
+          if (standardItems.length > 0) {
+            await restoreItems(standardItems);
+            return true;
+          }
         }
       } catch {
         // ignore invalid backup
@@ -100,12 +171,18 @@ export function CartPageClient() {
               order.orderStatus === "PLACED"
             ) {
               await cancelOrder(savedOrderId, "Khách hàng hủy thanh toán và quay về giỏ hàng");
+              if (isDirectPrintCancel || order.hasPrintItems) {
+                sessionStorage.removeItem("pendingDirectPrintCheckout");
+                sessionStorage.removeItem("directPrintCheckoutItem");
+                toast.success("Đã hủy thanh toán đơn ly in. Mẫu thiết kế không được đưa vào giỏ hàng.", { id: "restore-cart" });
+                return;
+              }
               const restoredFromBackup = await restoreBackupItems();
               if (restoredFromBackup) {
                 toast.success("Đã hủy thanh toán. Sản phẩm vẫn giữ nguyên trong giỏ hàng.", { id: "restore-cart" });
                 return;
               }
-              const cartItems = order.items.map((item: any) => {
+              const cartItems = order.items.filter((item: any) => !item.isPrintItem && !item.designId && !item.designFile).map((item: any) => {
                 const isCustom = item.isPrintItem;
                 let designFileSnapshot: any = undefined;
                 if (item.designFile) {
@@ -161,6 +238,8 @@ export function CartPageClient() {
             }
           } finally {
             sessionStorage.removeItem("lastCreatedOrderId");
+            sessionStorage.removeItem("pendingDirectPrintCheckout");
+            sessionStorage.removeItem("directPrintCheckoutItem");
           }
         }
       } else if (isCanceledParam) {
@@ -195,6 +274,32 @@ export function CartPageClient() {
     0,
   );
   const hasCustomPrint = hasCustomPrintItems(selectedItems);
+  const selectedPrintBlankConflictSku = findPrintAndBlankSelectionConflict(items);
+  const showPrintBlankConflictToast = (sku: string) => {
+    toast.warning(
+      `Không thể chọn nhiều dòng cùng mã phôi ${sku} để thanh toán cùng lúc. Vui lòng thanh toán một dòng trước rồi mua dòng còn lại sau.`,
+    );
+  };
+  const handleToggleSelectItem = (cartItemId: string) => {
+    const conflictSku = wouldSelectPrintAndBlankConflict(items, cartItemId);
+    if (conflictSku) {
+      showPrintBlankConflictToast(conflictSku);
+      return;
+    }
+    toggleSelectItem(cartItemId);
+  };
+  const handleToggleSelectAll = (selected: boolean) => {
+    if (selected) {
+      const conflictSku = findPrintAndBlankSelectionConflict(
+        items.map((item) => ({ ...item, selected: true })),
+      );
+      if (conflictSku) {
+        showPrintBlankConflictToast(conflictSku);
+        return;
+      }
+    }
+    toggleSelectAll(selected);
+  };
 
   return (
     <div className="w-full">
@@ -211,7 +316,7 @@ export function CartPageClient() {
                 <input
                   type="checkbox"
                   checked={items.every((item) => item.selected !== false)}
-                  onChange={(e) => toggleSelectAll(e.target.checked)}
+                  onChange={(e) => handleToggleSelectAll(e.target.checked)}
                   className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer transition-all accent-primary"
                 />
                 <span className="text-xs font-bold text-muted-foreground select-none">Chọn tất cả</span>
@@ -259,7 +364,7 @@ export function CartPageClient() {
                     <input
                       type="checkbox"
                       checked={item.selected !== false}
-                      onChange={() => toggleSelectItem(item.cartItemId)}
+                      onChange={() => handleToggleSelectItem(item.cartItemId)}
                       className="size-4 rounded border-border text-primary focus:ring-primary cursor-pointer transition-all accent-primary"
                     />
                   </div>
@@ -401,6 +506,11 @@ export function CartPageClient() {
                   ) : null}
                 </div>
 
+                  {selectedPrintBlankConflictSku ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 leading-5 text-amber-800">
+                      Không thể thanh toán nhiều dòng cùng mã phôi {selectedPrintBlankConflictSku} cùng lúc. Vui lòng chỉ chọn một dòng trước, thanh toán xong rồi mua dòng còn lại sau.
+                    </div>
+                  ) : null}
                 {/* Calculation breakdown and Checkout CTA */}
                 <div className="rounded-xl border border-border bg-muted/10 p-5 space-y-4 w-full">
                   <div className="text-xs font-black uppercase tracking-wider text-muted-foreground pb-2 border-b border-border">
@@ -439,9 +549,9 @@ export function CartPageClient() {
                   <Button
                     asChild
                     className="h-12 w-full rounded-xl bg-primary font-bold text-white hover:bg-[#2FA36E] text-xs flex items-center justify-center gap-1.5"
-                    disabled={selectedItems.length === 0}
+                    disabled={selectedItems.length === 0 || Boolean(selectedPrintBlankConflictSku)}
                   >
-                    {selectedItems.length > 0 ? (
+                    {selectedItems.length > 0 && !selectedPrintBlankConflictSku ? (
                       user ? (
                         <Link href="/checkout">
                           Tiến hành thanh toán ({selectedItems.length})

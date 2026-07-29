@@ -45,6 +45,7 @@ import { CupConfigDetails } from "@/features/cart/components/cup-config-details"
 import {
   canPayNextOnlineStage,
   getNextPaymentButtonLabel,
+  getPaymentStageBreakdown,
 } from "@/features/order/utils/payment-flow";
 import { formatCurrency } from "@/utils/format-currency";
 import { formatDateTime } from "@/utils/format-date";
@@ -87,6 +88,8 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
 
   const order = orderQuery.data as any;
   const canPayNextStage = canPayNextOnlineStage(order);
+  const paymentStages = getPaymentStageBreakdown(order);
+  const currentPaymentStageStatus = order?.paymentStatus || "UNPAID";
 
   const handleConfirmCancel = async () => {
     try {
@@ -693,6 +696,48 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
                   <p className="text-base font-black text-primary">{formatCurrency(order.totalAmount)}</p>
                 </div>
               </div>
+
+              {paymentStages.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 border-t border-slate-200/60 pt-4 sm:grid-cols-3">
+                  {paymentStages.map((stage, index) => {
+                    const isCurrent = stage.status === currentPaymentStageStatus;
+                    const statusOrder = ["UNPAID", "DEPOSIT_PAID", "PROGRESS_PAID", "PAID"];
+                    const isDone =
+                      statusOrder.indexOf(currentPaymentStageStatus) >
+                      statusOrder.indexOf(stage.status);
+
+                    return (
+                      <div
+                        key={`${stage.status}-${index}`}
+                        className={[
+                          "rounded-xl border px-4 py-3 text-xs",
+                          isCurrent
+                            ? "border-amber-200 bg-amber-50"
+                            : isDone
+                              ? "border-emerald-100 bg-emerald-50/70"
+                              : "border-slate-100 bg-white",
+                        ].join(" ")}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="font-black text-slate-600">{stage.label}</p>
+                          {isDone ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                              Đã xong
+                            </span>
+                          ) : isCurrent ? (
+                            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                              Đang cần thanh toán
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-base font-black text-primary">
+                          {formatCurrency(stage.amount)}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
           </div>
         </CardContent>

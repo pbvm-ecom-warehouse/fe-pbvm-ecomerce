@@ -6,10 +6,66 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ProductCard } from "@/features/catalog/components/product-card";
 import { subscribeProductSync } from "@/features/catalog/services/admin-catalog.service";
 import { cn } from "@/lib/utils";
-import type { CatalogCategory, CatalogProduct } from "@/types/api";
+import type { CatalogCategory, CatalogProduct, ProductVariant } from "@/types/api";
 
 function looksLikeObjectId(value: string) {
   return /^[a-f\d]{24}$/i.test(value);
+}
+
+function getVariantDisplayName(product: CatalogProduct, variant: ProductVariant) {
+  return String((variant as any).name || (variant as any).variantName || product.name || variant.sku || "").trim();
+}
+
+function normalizeGroupName(name: string) {
+  return name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+}
+
+function getVariantImage(product: CatalogProduct, variant?: ProductVariant) {
+  return variant?.image || product.imageUrl || product.images?.[0] || "";
+}
+
+function expandProductsByVariantName(products: CatalogProduct[]) {
+  return products.flatMap((product) => {
+    const variants = (product.variants || []).filter((variant) => variant.isActive !== false);
+    if (variants.length === 0) return [product];
+
+    const groups = new Map<string, { name: string; variants: ProductVariant[] }>();
+    variants.forEach((variant) => {
+      const name = getVariantDisplayName(product, variant);
+      const key = normalizeGroupName(name) || String(variant.sku || variant.id);
+      const current = groups.get(key);
+      if (current) {
+        current.variants.push(variant);
+      } else {
+        groups.set(key, { name, variants: [variant] });
+      }
+    });
+
+    if (groups.size <= 1 && groups.values().next().value?.name === product.name) return [product];
+
+    return Array.from(groups.entries()).map(([key, group]) => {
+      const prices = group.variants.map((variant) => Number(variant.price)).filter((price) => price > 0);
+      const firstVariant = group.variants[0];
+      const price = prices.length > 0 ? Math.min(...prices) : product.price;
+      const stockSnapshot = group.variants.reduce((sum, variant) => sum + (variant.availableQty ?? 0), 0);
+      const imageUrl = getVariantImage(product, firstVariant);
+
+      return {
+        ...product,
+        id: `${product.id}:${key}`,
+        name: group.name || product.name,
+        productRefId: firstVariant?.sku || product.productRefId,
+        price,
+        b2bPrice: price,
+        stockSnapshot,
+        imageUrl,
+        images: imageUrl ? [imageUrl, ...(product.images || []).filter((image) => image !== imageUrl)] : product.images,
+        fulfillmentType: firstVariant?.fulfillmentType || product.fulfillmentType,
+        variants: group.variants,
+        __displayVariantSkus: group.variants.map((variant) => variant.sku).filter(Boolean),
+      } as CatalogProduct;
+    });
+  });
 }
 
 export function CatalogGridContent({
@@ -102,6 +158,11 @@ export function CatalogGridContent({
     });
   }, [products, selectedCategory]);
 
+  const displayProducts = useMemo(
+    () => expandProductsByVariantName(filteredProducts),
+    [filteredProducts],
+  );
+
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 border-b border-gray-100 pb-3 dark:border-zinc-800/80 md:flex-row md:items-end md:justify-between">
@@ -134,9 +195,9 @@ export function CatalogGridContent({
         </div>
       </div>
 
-      {filteredProducts.length > 0 ? (
+      {displayProducts.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {filteredProducts.map((product, index) => (
+          {displayProducts.map((product, index) => (
             <ProductCard
               key={product.id}
               product={product}

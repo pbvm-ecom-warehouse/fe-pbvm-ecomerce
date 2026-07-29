@@ -42,6 +42,7 @@ type CartState = {
   clearCart: () => void;
   fetchAndSyncCart: () => Promise<void>;
   restoreItems: (items: CartItem[]) => Promise<void>;
+  removeItemsBySkus: (skus: string[]) => Promise<void>;
   toggleSelectItem: (cartItemId: string) => void;
   toggleSelectAll: (selected: boolean) => void;
   clearSelectedItems: () => Promise<void>;
@@ -64,6 +65,112 @@ function canSyncCartItemToBackend(item: CartItem) {
 
 function canSyncProductAddToBackend(product: CatalogProduct) {
   return product.fulfillmentType !== "CUSTOM_PRINT";
+}
+
+function isPrintCartItem(item: CartItem) {
+  return item.fulfillmentType === "CUSTOM_PRINT" || Boolean(item.designId || item.designFile);
+}
+
+function removePrintCartItems(items: CartItem[]) {
+  return items.filter((item) => !isPrintCartItem(item));
+}
+
+function serializeBackendDesignFile(designFile: DesignFileSnapshot) {
+  return JSON.stringify({
+    snapshotVersion: designFile.snapshotVersion,
+    designId: designFile.designId,
+    name: designFile.name,
+    fileUrl: designFile.fileUrl,
+    thumbnailUrl: designFile.thumbnailUrl || (designFile.previewDataUrl?.startsWith("data:") ? undefined : designFile.previewDataUrl),
+    artwork: designFile.artwork,
+    exportedAt: designFile.exportedAt,
+  });
+}
+
+function resolveCartLineKey(item: CartItem) {
+  const sku = item.productRefId || item.productId;
+  const designKey = item.designId || item.designFile?.designId;
+  const isCustomPrint =
+    item.fulfillmentType === "CUSTOM_PRINT" || Boolean(designKey || item.designFile);
+
+  if (isCustomPrint) {
+    return `custom:${sku}:${designKey || "no-design"}`;
+  }
+
+  return `standard:${sku}`;
+}
+
+function coalesceCartItems(items: CartItem[]) {
+  const mergedByKey = new Map<string, CartItem>();
+
+  items.forEach((item) => {
+    const key = resolveCartLineKey(item);
+    const existing = mergedByKey.get(key);
+
+    if (!existing) {
+      mergedByKey.set(key, item);
+      return;
+    }
+
+    mergedByKey.set(key, {
+      ...existing,
+      ...item,
+      cartItemId: existing.cartItemId,
+      quantity: existing.quantity + item.quantity,
+      selected: existing.selected === false && item.selected === false ? false : (item.selected ?? existing.selected),
+    });
+  });
+
+  return Array.from(mergedByKey.values());
+}
+
+function mergeRestoredCartItems(currentItems: CartItem[], restoredItems: CartItem[]) {
+  const mergedByKey = new Map<string, CartItem>();
+
+  coalesceCartItems(removePrintCartItems(currentItems)).forEach((item) => {
+    mergedByKey.set(resolveCartLineKey(item), item);
+  });
+
+  coalesceCartItems(removePrintCartItems(restoredItems)).forEach((item) => {
+    const key = resolveCartLineKey(item);
+    const existing = mergedByKey.get(key);
+    mergedByKey.set(key, {
+      ...existing,
+      ...item,
+      selected: item.selected ?? existing?.selected,
+    });
+  });
+
+  return ensureUniqueCartItemIds(Array.from(mergedByKey.values()));
+}
+
+function findSplitLocalCartLines(localItems: CartItem[], sku: string) {
+  const matches = coalesceCartItems(removePrintCartItems(localItems)).filter((item) => {
+    const itemSku = item.productRefId || item.productId;
+    return itemSku === sku || item.slug === sku || item.cartItemId.includes(sku);
+  });
+
+  if (matches.length <= 1) return [];
+
+  const uniqueLineKeys = new Set(matches.map(resolveCartLineKey));
+  return uniqueLineKeys.size > 1 ? ensureUniqueCartItemIds(matches) : [];
+}
+
+function ensureUniqueCartItemIds(items: CartItem[]) {
+  const seen = new Map<string, number>();
+
+  return items.map((item) => {
+    const baseId = item.cartItemId || resolveCartLineKey(item);
+    const count = seen.get(baseId) ?? 0;
+    seen.set(baseId, count + 1);
+
+    if (count === 0) return item;
+
+    return {
+      ...item,
+      cartItemId: `${baseId}:line-${count}`,
+    };
+  });
 }
 
 function resolveCartVariant(product: CatalogProduct, options?: AddProductOptions) {
@@ -95,6 +202,18 @@ function resolveCartSku(product: CatalogProduct, options?: AddProductOptions) {
   return resolveCartVariant(product, options)?.sku || product.productRefId || product.id;
 }
 
+function resolveCartStockSnapshot(product: CatalogProduct, options?: AddProductOptions) {
+  const variant = resolveCartVariant(product, options);
+  return Math.max(0, Number(variant?.availableQty ?? product.stockSnapshot ?? 0));
+}
+
+function clampCartQuantity(quantity: number, stockSnapshot?: number) {
+  const requested = Math.max(quantity, 1);
+  if (stockSnapshot === undefined) return requested;
+  const stock = Math.max(0, Number(stockSnapshot) || 0);
+  return Math.min(requested, stock);
+}
+
 function resolveCatalogVariant(product: CatalogProduct | undefined, sku: string) {
   if (!product || !Array.isArray(product.variants)) return null;
   return product.variants.find((variant) => variant.sku === sku) || null;
@@ -124,7 +243,8 @@ export const useCartStore = create<CartState>()(
 
       addProduct: (product, quantity = 1, options) =>
         set((state) => {
-          if (quantity <= 0 || product.stockSnapshot <= 0) return;
+          const stockSnapshot = resolveCartStockSnapshot(product, options);
+          if (quantity <= 0 || stockSnapshot <= 0) return;
 
           const cartSku = resolveCartSku(product, options);
           const sizeKey = options?.selectedSize || options?.attributes?.size || "default";
@@ -136,7 +256,8 @@ export const useCartStore = create<CartState>()(
           );
 
           if (existing) {
-            existing.quantity += quantity;
+            existing.stockSnapshot = stockSnapshot;
+            existing.quantity = clampCartQuantity(existing.quantity + quantity, stockSnapshot);
             if (options?.selectedSize) existing.selectedSize = options.selectedSize;
             if (options?.selectedMaterial) existing.selectedMaterial = options.selectedMaterial;
             if (options?.selectedStyle) existing.selectedStyle = options.selectedStyle;
@@ -148,6 +269,8 @@ export const useCartStore = create<CartState>()(
             return;
           }
 
+          const safeQuantity = clampCartQuantity(quantity, stockSnapshot);
+
           state.items.push({
             cartItemId,
             productId: product.id,
@@ -155,7 +278,8 @@ export const useCartStore = create<CartState>()(
             name: cleanProductName(product.name, product.productRefId || product.id),
             slug: product.slug,
             price: product.price,
-            quantity,
+            quantity: safeQuantity,
+            stockSnapshot,
             unit: product.unit,
             imageUrl: product.imageUrl,
             fulfillmentType: product.fulfillmentType ?? "STANDARD",
@@ -166,7 +290,7 @@ export const useCartStore = create<CartState>()(
           });
 
           if (isLoggedIn() && canSyncProductAddToBackend(product)) {
-            addCartItem({ sku: cartSku, quantity }).catch((err) => safeWarn("addCartItem", err));
+            addCartItem({ sku: cartSku, quantity: safeQuantity }).catch((err) => safeWarn("addCartItem", err));
           }
         }),
 
@@ -209,10 +333,11 @@ export const useCartStore = create<CartState>()(
               sku,
               quantity,
               designId,
-              designFile: JSON.stringify(designFile),
+              designFile: serializeBackendDesignFile(designFile),
             });
           } catch (err) {
             safeWarn("addCustomPrintItem", err);
+            throw err;
           }
         }
       },
@@ -221,7 +346,7 @@ export const useCartStore = create<CartState>()(
         set((state) => {
           const item = state.items.find((i) => i.cartItemId === cartItemId);
           if (!item) return;
-          item.quantity = Math.max(quantity, 1);
+          item.quantity = clampCartQuantity(quantity, item.stockSnapshot);
 
           if (isLoggedIn()) {
             const sku = item.productRefId || item.productId;
@@ -249,25 +374,46 @@ export const useCartStore = create<CartState>()(
         }),
 
       restoreItems: async (newItems) => {
+        const restoredItems = mergeRestoredCartItems(get().items, removePrintCartItems(newItems));
         set((state) => {
-          state.items = newItems;
+          state.items = ensureUniqueCartItemIds(coalesceCartItems(removePrintCartItems(restoredItems)));
         });
         if (isLoggedIn()) {
           try {
             await clearBackendCart();
-            for (const item of newItems) {
+            for (const item of restoredItems) {
               if (!canSyncCartItemToBackend(item)) continue;
               const sku = item.productRefId || item.productId;
               await addCartItem({
                 sku,
                 quantity: item.quantity,
                 designId: item.designId,
-                designFile: item.designFile ? JSON.stringify(item.designFile) : undefined,
+                designFile: item.designFile ? serializeBackendDesignFile(item.designFile) : undefined,
               });
             }
           } catch (err) {
             safeWarn("restoreItems", err);
           }
+        }
+      },
+
+      removeItemsBySkus: async (skus) => {
+        const skuSet = new Set(skus.filter(Boolean));
+        if (skuSet.size === 0) return;
+
+        set((state) => {
+          state.items = state.items.filter((item) => {
+            const sku = item.productRefId || item.productId;
+            return !skuSet.has(sku);
+          });
+        });
+
+        if (isLoggedIn()) {
+          await Promise.all(
+            Array.from(skuSet).map((sku) =>
+              removeCartItem(sku).catch((err) => safeWarn("removePaidOrderCartItem", err)),
+            ),
+          );
         }
       },
 
@@ -306,7 +452,7 @@ export const useCartStore = create<CartState>()(
       fetchAndSyncCart: async () => {
         if (!isLoggedIn()) return;
         try {
-          const localItems = useCartStore.getState().items;
+          const localItems = removePrintCartItems(useCartStore.getState().items);
           const backendCart = await getCart();
           const invalidCartItemIds = new Set<string>();
 
@@ -322,17 +468,17 @@ export const useCartStore = create<CartState>()(
                     sku,
                     quantity: item.quantity,
                     designId: item.designId,
-                    designFile: item.designFile ? JSON.stringify(item.designFile) : undefined,
+                    designFile: item.designFile ? serializeBackendDesignFile(item.designFile) : undefined,
                   });
                 } catch (err: any) {
                   let syncSuccess = false;
                   // Fallback: If 400 Bad Request because designId wasn't found in DB, try without designId
                   if (err?.response?.status === 400 && item.designId && item.designFile) {
                     try {
-                      await addCartItem({
+                    await addCartItem({
                         sku,
                         quantity: item.quantity,
-                        designFile: JSON.stringify(item.designFile),
+                        designFile: serializeBackendDesignFile(item.designFile),
                       });
                       syncSuccess = true;
                     } catch (fallbackErr: any) {
@@ -373,10 +519,18 @@ export const useCartStore = create<CartState>()(
               catalogList = [];
             }
 
-            const currentLocalItems = useCartStore.getState().items;
+            const currentLocalItems = removePrintCartItems(useCartStore.getState().items);
 
             set((state) => {
-              state.items = updatedCart.items.map((item) => {
+              state.items = updatedCart.items.flatMap((item, backendIndex) => {
+                if (item.isPrintItem || item.designId || item.designFile) {
+                  return [];
+                }
+                const splitLocalLines = findSplitLocalCartLines(currentLocalItems, item.sku);
+                if (splitLocalLines.length > 0) {
+                  return splitLocalLines;
+                }
+
                 const isCustom = item.isPrintItem;
                 let designFileSnapshot: DesignFileSnapshot | undefined = undefined;
                 if (item.designFile) {
@@ -457,8 +611,8 @@ export const useCartStore = create<CartState>()(
 
                 return {
                   cartItemId: (isCustom || shouldPreserveLocalDesign)
-                    ? `custom:${item.sku}:${item.designId || localDesignMatch?.designId || ""}:${Date.now()}`
-                    : `standard:${item.sku}`,
+                    ? `custom:${item.sku}:${item.designId || localDesignMatch?.designId || ""}:${backendIndex}`
+                    : `standard:${item.sku}:${backendIndex}`,
                   productId: catalogMatch?.id || localMatch?.productId || item.sku,
                   productRefId: item.sku,
                   name: cleanProductName(resolvedName, item.sku),
@@ -474,8 +628,10 @@ export const useCartStore = create<CartState>()(
                   selectedMaterial: localMatch?.selectedMaterial || resolvedAttributes?.material || designFileSnapshot?.artwork?.cup?.materialType,
                   selectedStyle: localMatch?.selectedStyle || resolvedAttributes?.style || designFileSnapshot?.artwork?.cup?.style,
                   attributes: resolvedAttributes,
+                  selected: localMatch?.selected,
                 } satisfies CartItem;
               });
+              state.items = ensureUniqueCartItemIds(coalesceCartItems(removePrintCartItems(state.items)));
             });
           }
         } catch (error) {
@@ -487,6 +643,7 @@ export const useCartStore = create<CartState>()(
       name: "pbvm-shop-cart",
       onRehydrateStorage: () => (state) => {
         if (state?.items && Array.isArray(state.items)) {
+          state.items = ensureUniqueCartItemIds(coalesceCartItems(removePrintCartItems(state.items)));
           state.items.forEach((item) => {
             item.name = cleanProductName(item.name, item.productRefId || item.productId);
           });

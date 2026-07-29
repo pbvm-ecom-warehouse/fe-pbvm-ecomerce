@@ -152,6 +152,7 @@ export function ProductDetailView({
   }, [images]);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState(sizes[0]);
+  const [selectedVariantId, setSelectedVariantId] = useState<string>("");
   const [selectedVariantAttrs, setSelectedVariantAttrs] = useState<
     Partial<Record<"capacity" | "style" | "material" | "color", string>>
   >({});
@@ -189,7 +190,11 @@ export function ProductDetailView({
 
   useEffect(() => {
     setSelectedVariantAttrs({});
-  }, [product?.id, product?.slug]);
+    const firstVariant = product?.variants?.[0];
+    setSelectedVariantId(
+      firstVariant ? String(firstVariant.id || firstVariant.sku || "") : "",
+    );
+  }, [product?.id, product?.slug, product?.variants]);
 
   const selectedVariantEntries = useMemo(
     () => Object.entries(selectedVariantAttrs).filter(([, value]) => Boolean(value)),
@@ -202,7 +207,13 @@ export function ProductDetailView({
 
   const selectedVariant = useMemo(() => {
     if (!product || !hasVariants || !product.variants || product.variants.length === 0) return null;
-    if (!isVariantComboComplete) return null;
+    if (selectedVariantId) {
+      const byId = product.variants.find(
+        (variant) => String(variant.id || variant.sku || "") === selectedVariantId,
+      );
+      if (byId) return byId;
+    }
+    if (!isVariantComboComplete) return product.variants[0] ?? null;
 
     return (
       product.variants.find((variant) => {
@@ -212,7 +223,7 @@ export function ProductDetailView({
         );
       }) ?? null
     );
-  }, [product, hasVariants, isVariantComboComplete, selectedVariantEntries]);
+  }, [product, hasVariants, selectedVariantId, isVariantComboComplete, selectedVariantEntries]);
 
   const isVariantComboUnavailable = isVariantComboComplete && !selectedVariant;
 
@@ -244,6 +255,7 @@ export function ProductDetailView({
       sku: variant.sku || `#${index + 1}`,
       price: variant.price,
       availableQty: variant.availableQty,
+      image: variant.image || product.imageUrl || product.images?.[0] || "/images/product-placeholder.svg",
       rows: getVariantDisplayRows(variant),
     }));
   }, [product]);
@@ -363,9 +375,8 @@ export function ProductDetailView({
       <div className="mx-auto w-full max-w-7xl px-4 py-8 lg:px-8">
         {/* PRODUCT GRID */}
         <div className="grid gap-8 lg:grid-cols-12">
-          {/* LEFT: Image Gallery (5 columns on desktop) */}
+          {/* LEFT: Image Gallery */}
           <div className="lg:col-span-5 space-y-4">
-            {/* Big Main Image Container */}
             <div className="relative aspect-square w-full rounded-2xl border border-[#E2EDE8] bg-white flex items-center justify-center p-6 shadow-sm overflow-hidden group">
               {activeImage ? (
                 <div className="relative h-full w-full">
@@ -380,14 +391,13 @@ export function ProductDetailView({
                 </div>
               ) : null}
 
-              {/* Absolute search zoom icon */}
               <button suppressHydrationWarning className="absolute right-4 top-4 size-8 flex items-center justify-center rounded-full bg-white border border-[#E2EDE8] text-gray-400 hover:text-[#3BB77E] shadow-sm active:scale-95 transition-all">
                 <Search className="size-4" />
               </button>
             </div>
           </div>
 
-          {/* RIGHT: Product Info Details (7 columns on desktop) */}
+          {/* RIGHT: Product Info Details */}
           <div className="lg:col-span-7 flex flex-col justify-start">
             {/* Title */}
             <h1 className="text-2xl md:text-3xl font-extrabold text-[#253D4E] dark:text-zinc-100 leading-tight tracking-tight">
@@ -424,38 +434,91 @@ export function ProductDetailView({
               </p>
             ) : null}
 
-            {/* Sizing / Variant Row */}
+            {/* Variant product rows */}
             <div className="mt-6 space-y-4">
-              {hasVariants && product.variants && variantOptionGroups.length > 0 ? (
-                <>
-                  {variantOptionGroups.map((group) => (
-                    <div key={group.key} className="space-y-2">
-                      <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                        {group.label}
-                      </div>
-                      <div className="flex items-center gap-2.5 flex-wrap">
-                        {group.values.map((value) => {
-                          const isActive = selectedVariantAttrs[group.key] === value;
-                          return (
-                            <button
-                              suppressHydrationWarning
-                              key={`${group.key}-${value}`}
-                              onClick={() => selectVariantByAttribute(group.key, value)}
-                              className={cn(
-                                "text-xs font-bold px-4 py-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-center",
-                                isActive
-                                  ? "bg-[#3BB77E] border-[#3BB77E] text-white shadow-xs"
-                                  : "bg-[#F2F3F4] dark:bg-zinc-800 border-[#F2F3F4] dark:border-zinc-800 text-[#253D4E] dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+              {hasVariants && product.variants ? (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                    Chọn biến thể sản phẩm
+                  </div>
+                  <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
+                    {product.variants.map((variant, index) => {
+                      const variantKey = String(variant.id || variant.sku || `variant-${index}`);
+                      const variantName = String(variant.name || product.name || variant.sku || "").trim();
+                      const rows = getVariantDisplayRows(variant);
+                      const attrs = normalizeVariantAttributes(collectVariantAttributes(variant), variant.sku || "");
+                      const variantImage = variant.image || product.imageUrl || product.images?.[0] || "/images/product-placeholder.svg";
+                      const isActive = selectedVariant
+                        ? String(selectedVariant.id || selectedVariant.sku || "") === variantKey
+                        : selectedVariantId === variantKey;
+                      const stock = variant.availableQty ?? 0;
+
+                      return (
+                        <button
+                          suppressHydrationWarning
+                          type="button"
+                          key={variantKey}
+                          onClick={() => {
+                            setSelectedVariantId(variantKey);
+                            setSelectedVariantAttrs({
+                              capacity: attrs.capacity,
+                              style: attrs.style,
+                              material: attrs.material,
+                              color: attrs.color,
+                            });
+                            setQuantity(1);
+                            setActiveImage(variantImage);
+                          }}
+                          className={cn(
+                            "grid w-full gap-3 rounded-xl border p-3 text-left transition-all sm:grid-cols-[56px_minmax(0,1fr)_120px] sm:items-center",
+                            isActive
+                              ? "border-[#3BB77E] bg-[#F0FBF6] shadow-sm"
+                              : "border-[#E2EDE8] bg-white hover:border-[#3BB77E]/60 hover:bg-[#F8FBFA]",
+                          )}
+                        >
+                          <span className="block size-14 overflow-hidden rounded-xl border border-[#E2EDE8] bg-white">
+                            <img
+                              src={variantImage}
+                              alt={variantName}
+                              className="h-full w-full object-contain p-1.5"
+                            />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="inline-flex items-center gap-2 align-middle">
+                              <span className="truncate text-sm font-black text-[#253D4E]">
+                                {variantName}
+                              </span>
+                              {stock > 0 ? (
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-[#3BB77E]">
+                                  Còn {stock.toLocaleString("vi-VN")} {product.unit}
+                                </span>
+                              ) : (
+                                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">
+                                  Hết hàng
+                                </span>
                               )}
-                            >
-                              <span>{value}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </>
+                            </span>
+                            {rows.length > 0 ? (
+                              <span className="ml-2 inline-flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5 align-middle [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                                {rows.map((row) => (
+                                  <span
+                                    key={`${variantKey}-${row.label}-${row.value}`}
+                                    className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-600"
+                                  >
+                                    {row.label}: {row.value}
+                                  </span>
+                                ))}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="text-sm font-black text-[#3BB77E] sm:text-right">
+                            {formatCurrency(variant.price || 0)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               ) : sizes.length > 0 ? (
                 <div className="space-y-2">
                   <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -568,7 +631,7 @@ export function ProductDetailView({
             )}
 
             {/* Meta tags detail list */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 mt-6 text-xs text-muted-foreground border-t border-gray-100 pt-4">
+            <div className="hidden">
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-gray-500">Phân loại:</span>
                 <span className="text-[#3BB77E] font-bold hover:underline cursor-pointer">
@@ -598,7 +661,7 @@ export function ProductDetailView({
         </div>
 
         {/* TABBED DETAIL CONTENT SECTION */}
-        <div className="mt-12 border border-[#E2EDE8] dark:border-zinc-800 rounded-[20px] p-6 md:p-8 shadow-sm">
+        <div className="hidden">
           {/* Tab buttons menu */}
           <div className="flex items-center gap-3 border-b border-gray-100 dark:border-zinc-800 pb-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <button
@@ -686,8 +749,16 @@ export function ProductDetailView({
                       {allVariantAttributeGroups.map((variant) => (
                         <div
                           key={variant.id}
-                          className="rounded-xl border border-[#E2EDE8] bg-[#F8FBFA] p-3"
+                          className="grid gap-3 rounded-xl border border-[#E2EDE8] bg-[#F8FBFA] p-3 sm:grid-cols-[88px_1fr]"
                         >
+                          <div className="size-20 overflow-hidden rounded-xl border border-[#E2EDE8] bg-white">
+                            <img
+                              src={variant.image}
+                              alt={variant.sku}
+                              className="h-full w-full object-contain p-2"
+                            />
+                          </div>
+                          <div className="min-w-0">
                           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E2EDE8] pb-2">
                             <span className="text-xs font-black text-[#253D4E]">
                               {variant.sku}
@@ -712,6 +783,7 @@ export function ProductDetailView({
                               ))}
                             </div>
                           ) : null}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -734,7 +806,6 @@ export function ProductDetailView({
 
           </div>
         </div>
-
       </div>
     </main>
   );

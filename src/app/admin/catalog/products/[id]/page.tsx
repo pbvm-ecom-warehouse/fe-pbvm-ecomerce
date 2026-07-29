@@ -63,6 +63,7 @@ type AdminProductVariantState = {
   availableQty: number;
   attributes: Record<string, string>;
   fulfillmentType: FulfillmentType;
+  image?: string | null;
 };
 
 type AdminProductPageCacheEntry = {
@@ -196,6 +197,7 @@ export default function ProductVariantManagementPage() {
   const [prodImage, setProdImage] = useState(() => cachedPage?.prodImage || "");
   const [prodCategoryId, setProdCategoryId] = useState(() => cachedPage?.prodCategoryId || "");
   const [isUploadingProdImage, setIsUploadingProdImage] = useState(false);
+  const [uploadingVariantImageIdx, setUploadingVariantImageIdx] = useState<number | null>(null);
 
   // Variants State
   const [prodVariants, setProdVariants] = useState<
@@ -322,6 +324,7 @@ export default function ProductVariantManagementPage() {
           availableQty: v.availableQty ?? v.stockSnapshot ?? 0,
           attributes: { ...rawAttrs, ...normalizedAttrs },
           fulfillmentType: v.fulfillmentType || "STANDARD",
+          image: v.image ?? v.imageUrl ?? null,
         };
       });
       setProdVariants(mappedVariants);
@@ -375,6 +378,42 @@ export default function ProductVariantManagementPage() {
       next[index] = { ...next[index], sku: val };
       return next;
     });
+  };
+
+  const handleVariantImageChange = (index: number, val: string) => {
+    setProdVariants((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], image: val.trim() || null };
+      return next;
+    });
+  };
+
+  const handleVariantImageFileUpload = async (index: number, file: File) => {
+    setUploadingVariantImageIdx(index);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const imageUrl = await adminUploadProductImage(reader.result as string);
+          handleVariantImageChange(index, imageUrl);
+          toast.success("Đã tải ảnh variant lên.");
+        } catch (error) {
+          console.error("Upload variant image error:", error);
+          toast.error("Không tải được ảnh variant.");
+        } finally {
+          setUploadingVariantImageIdx(null);
+        }
+      };
+      reader.onerror = () => {
+        setUploadingVariantImageIdx(null);
+        toast.error("Không đọc được file ảnh.");
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error("Variant FileReader error:", error);
+      setUploadingVariantImageIdx(null);
+      toast.error("Không đọc được file ảnh.");
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -443,6 +482,7 @@ export default function ProductVariantManagementPage() {
               attributes: v.attributes,
               fulfillmentType: v.fulfillmentType,
               productId: pId,
+              image: v.image || null,
               productSlug: updatedSlug,
             });
           } catch (err) {
@@ -454,6 +494,7 @@ export default function ProductVariantManagementPage() {
           ...savedVar,
           sku: v.sku.trim(),
           price: Number(v.price),
+          image: savedVar.image ?? v.image ?? null,
         });
       }
 
@@ -747,6 +788,7 @@ export default function ProductVariantManagementPage() {
                     const pType = getProductType(product, varItem.sku);
                     const info = getVariantInfoLabels(pType, attrs);
                     const isEditing = editingVariantIdx === idx;
+                    const variantImage = varItem.image || prodImage || "/images/product-placeholder.svg";
 
                     return (
                       <div
@@ -759,6 +801,14 @@ export default function ProductVariantManagementPage() {
                           <Badge className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md shrink-0">
                             #{idx + 1}
                           </Badge>
+
+                          <div className="size-12 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                            <img
+                              src={variantImage}
+                              alt={varItem.sku}
+                              className="h-full w-full object-contain p-1"
+                            />
+                          </div>
 
                           <span className="font-mono text-xs font-bold text-slate-700 shrink-0 w-36 truncate">
                             {varItem.sku}
@@ -822,6 +872,57 @@ export default function ProductVariantManagementPage() {
                               <div>
                                 <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider block mb-0.5">Tồn kho</span>
                                 <span className="font-black text-emerald-700">{varItem.availableQty ?? 0} sp</span>
+                              </div>
+                            </div>
+
+                            {/* Variant image edit */}
+                            <div className="grid gap-3 rounded-xl border border-slate-100 bg-white p-3 sm:grid-cols-[96px_1fr]">
+                              <div className="size-24 overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                                <img
+                                  src={variantImage}
+                                  alt={varItem.sku}
+                                  className="h-full w-full object-contain p-2"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-[10.5px] font-bold text-slate-600 uppercase tracking-wide">
+                                  Ảnh variant
+                                </Label>
+                                <Input
+                                  value={varItem.image || ""}
+                                  onChange={(e) => handleVariantImageChange(idx, e.target.value)}
+                                  className="h-9 text-xs text-slate-800 rounded-lg bg-white border-slate-200"
+                                  placeholder="https://..."
+                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Input
+                                    type="file"
+                                    accept="image/*"
+                                    disabled={uploadingVariantImageIdx === idx}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) void handleVariantImageFileUpload(idx, file);
+                                      e.currentTarget.value = "";
+                                    }}
+                                    className="h-9 max-w-xs text-xs rounded-lg bg-white border-slate-200 file:mr-3 file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-xs file:font-bold"
+                                  />
+                                  {uploadingVariantImageIdx === idx ? (
+                                    <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700">
+                                      <Loader2 className="size-3 animate-spin" />
+                                      Đang tải...
+                                    </span>
+                                  ) : null}
+                                  {varItem.image ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() => handleVariantImageChange(idx, "")}
+                                      className="h-9 px-3 text-xs font-bold rounded-lg"
+                                    >
+                                      Xóa ảnh
+                                    </Button>
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
 

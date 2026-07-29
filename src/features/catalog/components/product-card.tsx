@@ -272,6 +272,11 @@ export function ProductCard({
     setImgLoaded(false);
   }, [initialProduct]);
 
+  const displayVariantSkus = useMemo(
+    () => new Set(((product as any).__displayVariantSkus || []).map((sku: unknown) => String(sku))),
+    [product],
+  );
+
   const imageSrc = product.imageUrl;
   const isCustomPrint =
     product.fulfillmentType === "CUSTOM_PRINT" &&
@@ -330,7 +335,23 @@ export function ProductCard({
     setOptionProduct(product);
     try {
       const freshProduct = await getCatalogProductBySlug(product.slug);
-      if (freshProduct) setOptionProduct(freshProduct);
+      if (freshProduct) {
+        if (displayVariantSkus.size > 0) {
+          setOptionProduct({
+            ...freshProduct,
+            name: product.name,
+            price: product.price,
+            b2bPrice: product.b2bPrice,
+            stockSnapshot: product.stockSnapshot,
+            imageUrl: product.imageUrl,
+            variants: (freshProduct.variants || []).filter((variant) =>
+              displayVariantSkus.has(String(variant.sku)),
+            ),
+          });
+        } else {
+          setOptionProduct(freshProduct);
+        }
+      }
     } finally {
       setLoadingOptions(false);
     }

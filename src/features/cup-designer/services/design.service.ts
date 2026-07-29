@@ -17,6 +17,13 @@ export type DesignUploadResponse = {
   thumbnail: string;
 };
 
+function normalizeDesign(design: any): DesignResponse {
+  return {
+    ...design,
+    id: design?.id ?? design?._id,
+  } as DesignResponse;
+}
+
 /**
  * Upload artwork/image lên Cloudinary thông qua BE endpoint `POST /designs/upload`.
  * Nhận base64 dataUrl, chuyển thành File object, trả về { file, thumbnail } là Cloudinary URLs.
@@ -63,12 +70,16 @@ export async function createDesign(input: {
     file: input.file,
     thumbnail: input.thumbnail ?? input.file,
   });
-  return unwrapApiData(response.data);
+  const payload = unwrapApiData(response.data) as any;
+  const design = payload?.data ?? payload;
+  return normalizeDesign(design);
 }
 
 export async function listMyDesigns(): Promise<DesignResponse[]> {
   const response = await apiClient.get<any>("/designs");
-  return unwrapApiData(response.data);
+  const payload = unwrapApiData(response.data) as any;
+  const designs = Array.isArray(payload?.data) ? payload.data : payload;
+  return Array.isArray(designs) ? designs.map(normalizeDesign) : [];
 }
 
 export async function updateDesign(
@@ -76,7 +87,9 @@ export async function updateDesign(
   input: Partial<Pick<DesignResponse, "name" | "file" | "thumbnail">>,
 ) {
   const response = await apiClient.patch<any>(`/designs/${id}`, input);
-  return unwrapApiData(response.data);
+  const payload = unwrapApiData(response.data) as any;
+  const design = payload?.data ?? payload;
+  return normalizeDesign(design);
 }
 
 export async function deleteDesign(id: string) {

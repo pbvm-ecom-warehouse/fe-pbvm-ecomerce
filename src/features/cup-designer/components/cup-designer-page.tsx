@@ -37,12 +37,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/ui/logo";
 import { cn } from "@/lib/utils";
-import { useCartStore } from "@/stores/cart-store";
 import { useAuthStore } from "@/stores/auth-store";
 import {
   createDesign,
   listMyDesigns,
   deleteDesign,
+  updateDesign,
   uploadDesignImage,
 } from "../services/design.service";
 import { sendChatMessageToAi } from "../services/ai-chat.service";
@@ -113,10 +113,9 @@ interface InStockVariant {
 
 /** Số mẫu thiết kế tối đa mỗi khách hàng */
 const MAX_DESIGNS = 15;
+const DIRECT_PRINT_CHECKOUT_KEY = "directPrintCheckoutItem";
 
 const DESIGN_DRAFT_KEY = "cup_designer_draft_v1";
-const SAVED_DESIGNS_KEY = "cup_designer_saved_designs_v1";
-
 /** Tăng/Giảm độ đậm nhạt của màu Hex (-50% đến +50%) */
 function adjustColorBrightness(hex: string, percent: number): string {
   if (!hex || !hex.startsWith("#")) return hex;
@@ -170,34 +169,15 @@ function loadDraft(): DesignDraft | null {
   }
 }
 
-function loadSavedDesigns(): any[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(SAVED_DESIGNS_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as any[];
-  } catch {
-    return [];
-  }
+function normalizeApiDesigns(remote: any[]): any[] {
+  return remote
+    .filter((d) => d?.id)
+    .map((d) => ({ ...d, __source: "api" }));
 }
 
-function persistSavedDesigns(designs: any[]) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(SAVED_DESIGNS_KEY, JSON.stringify(designs));
-  } catch {
-    // localStorage full
-  }
-}
 
-/** Merge local designs với API designs theo id & name, ưu tiên API data, loại bỏ trùng lặp */
-function mergeDesigns(local: any[], remote: any[]): any[] {
-  const remoteIds = new Set(remote.map((d) => String(d.id)));
-  const remoteNames = new Set(remote.map((d) => String(d.name).trim()));
-  const localOnly = local.filter(
-    (d) => !remoteIds.has(String(d.id)) && !remoteNames.has(String(d.name).trim()),
-  );
-  return [...remote, ...localOnly];
+function looksLikeObjectId(value?: string | null) {
+  return Boolean(value && /^[a-f\d]{24}$/i.test(value));
 }
 
 interface InStockVariant {
@@ -213,6 +193,17 @@ interface InStockVariant {
   productName?: string;
   color?: string;
   attributes?: Record<string, string>;
+}
+
+function getInitialAiMessages() {
+  return [
+    {
+      id: "msg_welcome",
+      sender: "ai" as const,
+      text: "Xin chĂ o! TĂ´i lĂ  Trá»£ lĂ½ AI. HĂ£y gá»­i tin nháº¯n mĂ´ táº£ logo hoáº·c há»a tiáº¿t báº¡n muá»‘n váº½ lĂªn ly nhĂ©!",
+      timestamp: "Vá»«a xong",
+    },
+  ];
 }
 
 export function CupDesignerPage() {
@@ -274,18 +265,12 @@ export function CupDesignerPage() {
       imageUrl?: string;
       timestamp: string;
     }[]
-  >([
-    {
-      id: "msg_welcome",
-      sender: "ai",
-      text: "Xin chào! Tôi là Trợ lý AI. Hãy gửi tin nhắn mô tả logo hoặc họa tiết bạn muốn vẽ lên ly nhé!",
-      timestamp: "Vừa xong",
-    },
-  ]);
+  >(getInitialAiMessages);
 
   const [aiHistoryLogos, setAiHistoryLogos] = useState<
     Array<{ id: string; src: string; prompt: string; timestamp: string }>
   >([]);
+  const user = useAuthStore((s) => s.user);
 
   const imageLayerCount = useMemo(() => {
     return layers.filter((l) => l.type === "image").length;
@@ -317,6 +302,7 @@ export function CupDesignerPage() {
           if (l.type === "image") {
             return {
               type: "image",
+              src: (l as DesignImageLayer).src,
               prompt: (l as DesignImageLayer).prompt || "Logo/Họa tiết trên ly",
             };
           }
@@ -426,8 +412,7 @@ export function CupDesignerPage() {
             },
           });
 
-          const autoDesignItem = {
-            id: `auto_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+          const autoDesignPayload = {
             name: designName,
             thumbnail: src,
             file: JSON.stringify({
@@ -437,29 +422,26 @@ export function CupDesignerPage() {
               artwork: autoSnapshot.artwork,
               exportedAt: autoSnapshot.exportedAt,
             }),
-            createdAt: new Date().toISOString(),
           };
 
-          setSavedDesigns((prev) => [
-            autoDesignItem,
-            ...prev.filter((d) => d.name !== designName && String(d.id) !== String(autoDesignItem.id)),
-          ]);
-          setShowSavedPanel(true);
-
           if (user) {
-            createDesign({
-              name: designName,
-              file: autoDesignItem.file,
-              thumbnail: src,
-            })
-              .then((remoteItem) => {
-                if (remoteItem && remoteItem.id) {
-                  setSavedDesigns((prev) =>
-                    prev.map((d) => (d.id === autoDesignItem.id ? remoteItem : d)),
-                  );
-                }
-              })
-              .catch((e) => console.warn("Auto save design API error:", e));
+            try {
+              const remoteItem = await createDesign(autoDesignPayload);
+              if (remoteItem && remoteItem.id) {
+                const apiItem = { ...remoteItem, __source: "api" };
+                setEditingDesignId(String(remoteItem.id));
+                setEditingDesignSource("api");
+                setHasLoadedSavedDesign(false);
+                setSavedDesigns((prev) => [
+                  apiItem,
+                  ...prev.filter((d) => String(d.id) !== String(apiItem.id)),
+                ]);
+                setShowSavedPanel(true);
+              }
+            } catch (e) {
+              console.warn("Auto save design API error:", e);
+              toast.error("Không thể tự lưu mẫu AI lên máy chủ. Vui lòng thử lưu lại sau.");
+            }
           }
         }
 
@@ -478,7 +460,7 @@ export function CupDesignerPage() {
         setIsAiProcessing(false);
       }
     },
-    [aiPrompt, aiMessages, materialType, style, size, layers, printHeightPercent],
+    [aiPrompt, aiMessages, materialType, style, size, layers, printHeightPercent, cupColor, user],
   );
 
   const handleApplyHistoryLogo = useCallback(
@@ -523,23 +505,25 @@ export function CupDesignerPage() {
     [size, printHeightPercent],
   );
 
-  const handleReuseHistoryLogoForEdit = useCallback((promptText: string) => {
+  const handleReuseHistoryLogoForEdit = useCallback((promptText: string, src?: string) => {
+    if (src) {
+      handleApplyHistoryLogo(src, promptText);
+    }
     setAiPrompt(`Sửa logo ${promptText}: `);
     const inputEl = document.getElementById("ai-chat-input") as HTMLInputElement | null;
     if (inputEl) {
       inputEl.focus();
     }
-  }, []);
+  }, [handleApplyHistoryLogo]);
 
   // Saved designs panel — khởi tạo từ localStorage
-  const [savedDesigns, setSavedDesigns] = useState<any[]>(() => loadSavedDesigns());
+  const [savedDesigns, setSavedDesigns] = useState<any[]>([]);
+  const [editingDesignId, setEditingDesignId] = useState<string | null>(null);
+  const [editingDesignSource, setEditingDesignSource] = useState<"api" | "local" | null>(null);
+  const [hasLoadedSavedDesign, setHasLoadedSavedDesign] = useState(false);
   const [loadingDesigns, setLoadingDesigns] = useState(false);
   const [showSavedPanel, setShowSavedPanel] = useState(true);
   const [designToDelete, setDesignToDelete] = useState<any | null>(null);
-
-
-  const addCustomPrintItem = useCartStore((s) => s.addCustomPrintItem);
-  const user = useAuthStore((s) => s.user);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -561,11 +545,6 @@ export function CupDesignerPage() {
   }, [isMounted, materialType, style, size, cupColor, printHeightPercent, layers, quantity]);
 
   /* ── 0b. AUTO-SAVE SAVED DESIGNS VÀO LOCALSTORAGE ── */
-  useEffect(() => {
-    if (!isMounted) return;
-    persistSavedDesigns(savedDesigns);
-  }, [isMounted, savedDesigns]);
-
   /* ── 1. FETCH TẤT CẢ VARIANTS LY TỪ DB (kể cả hết hàng) ── */
   useEffect(() => {
     setIsMounted(true);
@@ -793,7 +772,12 @@ export function CupDesignerPage() {
 
   /** Chuyển sang Giai đoạn 2 sau khi chọn phôi ly -> Luôn tạo bảng vẽ mới (empty layers) */
   function handleProceedToStep2() {
+    setEditingDesignId(null);
+    setEditingDesignSource(null);
+    setHasLoadedSavedDesign(false);
     setLayers([]);
+    setAiPrompt("");
+    setAiMessages(getInitialAiMessages());
     setSelectedLayerId(null);
     setEditorKey((k) => k + 1);
     goToStep(2);
@@ -804,10 +788,9 @@ export function CupDesignerPage() {
     if (!user || user.type === "admin") return;
     listMyDesigns()
       .then((data) => {
-        const merged = mergeDesigns(loadSavedDesigns(), data || []);
-        setSavedDesigns(merged);
+        setSavedDesigns(normalizeApiDesigns(data || []));
       })
-      .catch(() => {}); // giữ local khi API lỗi
+      .catch(() => setSavedDesigns([]));
   }
 
   useEffect(() => {
@@ -815,16 +798,15 @@ export function CupDesignerPage() {
     setLoadingDesigns(true);
     listMyDesigns()
       .then((data) => {
-        const merged = mergeDesigns(loadSavedDesigns(), data || []);
-        setSavedDesigns(merged);
+        setSavedDesigns(normalizeApiDesigns(data || []));
       })
-      .catch(() => {}) // giữ local khi API lỗi
+      .catch(() => setSavedDesigns([]))
       .finally(() => setLoadingDesigns(false));
   }, [user]);
 
   function confirmDeleteDesign(design: any) {
     setSavedDesigns((prev) => prev.filter((d) => d.id !== design.id));
-    if (user && design.id && !String(design.id).startsWith("auto_")) {
+    if (user && design.id) {
       deleteDesign(design.id).catch((e) => console.warn("Delete design API:", e));
     }
     toast.success(`Đã xóa thiết kế "${design.name}"`);
@@ -855,6 +837,9 @@ export function CupDesignerPage() {
     }
     setPrintHeightPercent(artboard.printHeightPercent);
     setLayers(savedLayers ?? []);
+    setEditingDesignId(design.id ? String(design.id) : null);
+    setEditingDesignSource(design.__source === "api" ? "api" : "local");
+    setHasLoadedSavedDesign(true);
     setSelectedLayerId(null);
     setEditorKey((k) => k + 1);
     const shortName = design.name && design.name.length > 25 ? `${design.name.slice(0, 25)}...` : design.name;
@@ -875,9 +860,9 @@ export function CupDesignerPage() {
   }
 
 
-  async function addToCart() {
+  async function addToCart(mode: "save" | "checkout" = "checkout") {
     if (!user) {
-      toast.error("Vui lòng đăng nhập để lưu và thêm thiết kế vào giỏ.");
+      toast.error("Vui lòng đăng nhập để lưu thiết kế và thanh toán.");
       return;
     }
     if (layers.length === 0) {
@@ -885,7 +870,16 @@ export function CupDesignerPage() {
       goToStep(2);
       return;
     }
-    if (designsCount >= MAX_DESIGNS) {
+    const isUpdatingExistingDesign =
+      editingDesignSource === "api" && looksLikeObjectId(editingDesignId);
+
+    if (hasLoadedSavedDesign && !isUpdatingExistingDesign) {
+      toast.error("Mẫu đã lưu này chưa có ID hợp lệ từ máy chủ. Vui lòng làm mới danh sách mẫu rồi dùng lại mẫu đó.");
+      refreshSavedDesigns();
+      return;
+    }
+
+    if (!isUpdatingExistingDesign && designsCount >= MAX_DESIGNS) {
       toast.error(`Bạn đã đạt ${MAX_DESIGNS} mẫu thiết kế. Vui lòng xóa mẫu cũ tại trang "Thiết kế của tôi" trước khi tạo mới.`);
       return;
     }
@@ -920,20 +914,41 @@ export function CupDesignerPage() {
         }
       }
 
-      const savedDesign = await createDesign({
+      const designPayload = {
         name: designFile.name,
         file: artworkPayload,
         thumbnail: uploadedThumbnail,
-      });
+      };
+
+      const savedDesign = isUpdatingExistingDesign
+        ? await updateDesign(editingDesignId!, designPayload)
+        : await createDesign(designPayload);
 
       // Tăng số mẫu sau khi lưu thành công
-      setDesignsCount((c) => c + 1);
+      if (!isUpdatingExistingDesign) {
+        setDesignsCount((c) => c + 1);
+      }
+      if (savedDesign?.id) {
+        setEditingDesignId(String(savedDesign.id));
+        setEditingDesignSource("api");
+      }
+
+      if (mode === "save") {
+        toast.success("Đã lưu thiết kế thành công.");
+        refreshSavedDesigns();
+        return;
+      }
 
       if (isCurrentComboOutOfStock) {
         // Hết hàng: chỉ lưu design, không add vào giỏ
         toast.success(`Đã lưu thiết kế thành công! Combo này hiện hết hàng, bạn có thể đặt khi kho có lại.`);
       } else {
-        const cartDesignFile = { ...designFile, designId: savedDesign.id };
+        const cartDesignFile = {
+          ...designFile,
+          designId: savedDesign.id,
+          fileUrl: savedDesign.file,
+          thumbnailUrl: savedDesign.thumbnail || uploadedThumbnail,
+        };
         const variantAttributes = {
           ...(selectedVariantInfo.attributes ?? {}),
           capacity: getVariantDisplayAttr(selectedVariantInfo, "capacity"),
@@ -941,32 +956,30 @@ export function CupDesignerPage() {
           material: getVariantDisplayAttr(selectedVariantInfo, "material"),
           color: getVariantDisplayAttr(selectedVariantInfo, "color"),
         };
-        await addCustomPrintItem({
-          product: {
-            id: selectedVariantInfo.productId || selectedVariantInfo.variantId || selectedVariantInfo.sku || "",
+        sessionStorage.setItem(
+          DIRECT_PRINT_CHECKOUT_KEY,
+          JSON.stringify({
+            cartItemId: `direct-print:${selectedVariantInfo.sku || savedDesign.id}:${savedDesign.id}`,
+            productId: selectedVariantInfo.productId || selectedVariantInfo.variantId || selectedVariantInfo.sku || "",
             productRefId: selectedVariantInfo.sku || "",
             name: `Ly in theo thiết kế ${selectedVariantInfo.sku || ""}`,
             slug: selectedVariantInfo.sku || "",
-            category: "custom_print",
             price,
-            b2bPrice: price,
+            quantity,
             unit: "cái",
-            stockSnapshot: selectedVariantInfo.stockSnapshot,
-            imageUrl: "",
-            updatedAt: new Date().toISOString(),
+            imageUrl: cartDesignFile.previewDataUrl || cartDesignFile.thumbnailUrl || "",
             fulfillmentType: "CUSTOM_PRINT",
-          },
-          quantity,
-          designId: savedDesign.id,
-          designFile: cartDesignFile,
-          selectedSize: variantAttributes.capacity,
-          selectedMaterial: variantAttributes.material,
-          selectedStyle: variantAttributes.style,
-          attributes: variantAttributes,
-        });
+            designId: savedDesign.id,
+            designFile: cartDesignFile,
+            selectedSize: variantAttributes.capacity,
+            selectedMaterial: variantAttributes.material,
+            selectedStyle: variantAttributes.style,
+            attributes: variantAttributes,
+          }),
+        );
 
-        toast.success("Đã lưu thiết kế và thêm ly in vào giỏ hàng thành công!");
-        router.push("/cart");
+        toast.success("Đã lưu thiết kế. Đang chuyển sang thông tin đặt hàng và thanh toán...");
+        router.push("/checkout?mode=direct-print");
       }
 
       refreshSavedDesigns();
@@ -1431,8 +1444,8 @@ export function CupDesignerPage() {
                 </div>
 
                 {/* AI DESIGN CHAT ASSISTANT PANEL */}
-                <div className="pt-1.5 border-t border-slate-100 flex-1 flex flex-col min-h-0">
-                  <div className="flex-1 flex flex-col justify-between rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-white via-emerald-50/30 to-emerald-50/60 p-3 space-y-2 shadow-2xs">
+                <div className="pt-1.5 border-t border-slate-100 flex-1 flex flex-col min-h-0 overflow-hidden">
+                  <div className="flex-1 min-h-0 max-h-[430px] flex flex-col rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-white via-emerald-50/30 to-emerald-50/60 p-3 space-y-2 shadow-2xs overflow-hidden">
                     {/* Header */}
                     <div className="flex items-center justify-between border-b border-emerald-100 pb-2 shrink-0">
                       <div className="flex items-center gap-1.5">
@@ -1453,7 +1466,7 @@ export function CupDesignerPage() {
                     </div>
 
                     {/* Chat Messages Stream (Flex grow to fill available height) */}
-                    <div className="flex-1 min-h-[100px] overflow-y-auto space-y-2 pr-1 text-xs my-1">
+                    <div className="flex-1 min-h-[110px] max-h-[270px] overflow-y-auto overscroll-contain space-y-2 pr-1 text-xs my-1">
                       {aiMessages.map((msg) => (
                         <div
                           key={msg.id}
@@ -1470,13 +1483,13 @@ export function CupDesignerPage() {
 
                           <div
                             className={cn(
-                              "max-w-[85%] rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed shadow-2xs space-y-1",
+                              "max-w-[85%] min-w-0 rounded-xl px-2.5 py-1.5 text-[11px] leading-relaxed shadow-2xs space-y-1 break-words overflow-hidden",
                               msg.sender === "user"
                                 ? "bg-emerald-600 text-white font-medium rounded-tr-none"
                                 : "bg-white text-slate-700 border border-emerald-100 font-medium rounded-tl-none",
                             )}
                           >
-                            <p>{msg.text}</p>
+                            <p className="whitespace-pre-wrap break-words">{msg.text}</p>
 
                             <span
                               className={cn(
@@ -1689,12 +1702,12 @@ export function CupDesignerPage() {
                 </div>
               </div>
 
-              {/* FULL-WIDTH BOTTOM BAR: ĐẶT IN & LƯU ĐƠN HÀNG (EXTENDS FROM LEFT TO RIGHT EDGE) */}
+              {/* FULL-WIDTH BOTTOM BAR */}
               <div className="lg:col-span-3 pt-3 border-t border-slate-100 space-y-2.5">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-xs font-black uppercase tracking-wider text-[#253D4E] flex items-center gap-1.5">
                     <PackagePlus className="size-4 text-primary" />
-                    Đặt in &amp; Lưu đơn hàng
+                    Đặt in &amp; Thanh toán ngay
                   </h3>
                   <p className="text-[10px] font-medium text-slate-400 hidden sm:block">
                     File thiết kế logo 2D &amp; mô phỏng 3D sẽ tự động đính kèm theo đơn hàng.
@@ -1754,40 +1767,52 @@ export function CupDesignerPage() {
                     </div>
                   </div>
 
-                  {/* Nút Đặt hàng / Thêm vào giỏ */}
-                  <Button
-                    type="button"
-                    className={cn(
-                      "h-10 w-full gap-2 rounded-xl text-xs font-black text-white active:scale-[0.98] transition-all cursor-pointer shadow-sm select-none",
-                      isCurrentComboOutOfStock
-                        ? "bg-slate-500 hover:bg-slate-600"
-                        : "bg-primary hover:bg-[#2FA36E]",
-                      designsCount >= MAX_DESIGNS && "opacity-50 cursor-not-allowed",
+                  <div className={cn("grid gap-2", !isCurrentComboOutOfStock && "sm:grid-cols-[0.42fr_0.58fr]")}>
+                    {!isCurrentComboOutOfStock && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-10 w-full gap-2 rounded-xl border-emerald-200 bg-white text-xs font-black text-emerald-700 hover:bg-emerald-50 active:scale-[0.98] transition-all cursor-pointer shadow-sm select-none"
+                        onClick={() => addToCart("save")}
+                        disabled={isSavingDesign || designsCount >= MAX_DESIGNS}
+                      >
+                        {isSavingDesign ? <Loader2 className="size-4 animate-spin" /> : <PackagePlus className="size-4" />}
+                        Lưu mẫu
+                      </Button>
                     )}
-                    onClick={addToCart}
-                    disabled={isSavingDesign || designsCount >= MAX_DESIGNS}
-                  >
-                    {isSavingDesign ? (
-                      <>
-                        <Loader2 className="size-4 animate-spin" />
-                        Đang lưu thiết kế...
-                      </>
-                    ) : designsCount >= MAX_DESIGNS ? (
-                      <>
-                        🚫 Đã đạt {MAX_DESIGNS} mẫu
-                      </>
-                    ) : isCurrentComboOutOfStock ? (
-                      <>
-                        <PackagePlus className="size-4" />
-                        Lưu thiết kế (Hết hàng)
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingCart className="size-4" />
-                        Thêm vào giỏ hàng
-                      </>
-                    )}
-                  </Button>
+
+                    <Button
+                      type="button"
+                      className={cn(
+                        "h-10 w-full gap-2 rounded-xl text-xs font-black text-white active:scale-[0.98] transition-all cursor-pointer shadow-sm select-none",
+                        isCurrentComboOutOfStock
+                          ? "bg-slate-500 hover:bg-slate-600"
+                          : "bg-primary hover:bg-[#2FA36E]",
+                        designsCount >= MAX_DESIGNS && "opacity-50 cursor-not-allowed",
+                      )}
+                      onClick={() => addToCart(isCurrentComboOutOfStock ? "save" : "checkout")}
+                      disabled={isSavingDesign || designsCount >= MAX_DESIGNS}
+                    >
+                      {isSavingDesign ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Đang lưu...
+                        </>
+                      ) : designsCount >= MAX_DESIGNS ? (
+                        <>Đã đạt {MAX_DESIGNS} mẫu</>
+                      ) : isCurrentComboOutOfStock ? (
+                        <>
+                          <PackagePlus className="size-4" />
+                          Lưu thiết kế
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingCart className="size-4" />
+                          Thanh toán ngay
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
