@@ -509,7 +509,7 @@ export function WmsSyncToEcomModal({
               >
                 {wmsItems.map((item) => (
                   <option key={item.productId || item.sku} value={item.productId || item.sku}>
-                    Mã SKU: {item.sku} — {item.name}
+                    {item.name}
                   </option>
                 ))}
               </select>

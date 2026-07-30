@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -755,6 +755,9 @@ export function CheckoutForm() {
             ...values,
             addressId: selectedAddressId,
             customerType: values.customerType as "B2B" | "B2C",
+            promotionCode: appliedCoupon || undefined,
+            discountAmount,
+            bulkBoxDiscount: totals.bulkBoxDiscount,
             items: isDirectPrintCheckout ? [] : items.map((item) => ({
               productId: item.productId,
               productRefId: item.productRefId,

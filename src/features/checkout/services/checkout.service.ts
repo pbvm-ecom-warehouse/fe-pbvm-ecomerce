@@ -326,18 +326,16 @@ export async function createOrder(payload: CreateOrderPayload) {
     const paymentMethod =
       payload.paymentProvider === "COD" ? "COD" : "ONLINE";
 
+    const checkoutBody: Record<string, any> = {
+      addressId,
+      paymentMethod,
+      ...(directItem ? { directItem } : {}),
+      ...(payload.promotionCode ? { promotionCode: payload.promotionCode } : {}),
+    };
+
     const checkoutResponse = await apiClient.post<any>(
       "/orders/checkout",
-      directItem
-        ? {
-            addressId,
-            paymentMethod,
-            directItem,
-          }
-        : {
-            addressId,
-            paymentMethod,
-          },
+      checkoutBody,
     );
 
     const checkoutPayload = unwrapApiData(checkoutResponse.data) as any;
