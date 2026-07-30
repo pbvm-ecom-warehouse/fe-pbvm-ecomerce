@@ -421,10 +421,12 @@ export function WmsSyncToEcomModal({
           size: ecomSize,
           spec: ecomSize,
           style: ecomStyle,
+          cupStyle: ecomStyle,
           packaging: ecomStyle,
           material: ecomMaterial,
           origin: ecomMaterial,
           color: ecomColor,
+          loai: isMaterial ? (ecomStyle || ecomMaterial) : ecomMaterial,
         },
       };
 
@@ -513,12 +515,6 @@ export function WmsSyncToEcomModal({
               </select>
               {selectedItem && (
                 <div className="flex items-center gap-2 pt-1 text-[11px] font-semibold text-emerald-900">
-                  <span className="bg-emerald-200/90 text-emerald-950 px-2 py-0.5 rounded-md font-mono font-bold">
-                    SKU Kho: {selectedItem.sku}
-                  </span>
-                  <span className="text-slate-500 text-[10px] font-medium">
-                    (Cố định từ Kho WMS — Manager chỉ duyệt &amp; đẩy lên Shop Ecom)
-                  </span>
                 </div>
               )}
             </div>
@@ -702,7 +698,7 @@ export function WmsSyncToEcomModal({
                     <span>{ecomImage ? "Thay đổi ảnh" : "Tải ảnh lên"}</span>
                   </label>
                   <p className="text-[11px] text-slate-400 font-medium">
-                    Tải ảnh trực tiếp từ máy tính (Tự động upload lên Cloudinary & lưu URL)
+                    Tải ảnh trực tiếp từ máy tính
                   </p>
                 </div>
               </div>

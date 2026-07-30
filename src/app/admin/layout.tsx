@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
@@ -34,7 +34,7 @@ import {
   NOTIFICATIONS_CHANGED_EVENT,
 } from "@/features/notification/services/notification.service";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Helpers
 
 function formatRelativeTime(dateStr?: string) {
   if (!dateStr) return "Vừa xong";
@@ -68,7 +68,7 @@ function colorForType(type: string) {
   return "bg-slate-100 text-slate-600";
 }
 
-// ─── Admin Notification Bell ───────────────────────────────────────────────────
+// Admin Notification Bell
 
 function AdminNotificationBell() {
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -239,7 +239,7 @@ function AdminNotificationBell() {
   );
 }
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
+// Layout
 
 export default function AdminLayout({
   children,
@@ -374,14 +374,6 @@ export default function AdminLayout({
               </div>
             </div>
           </div>
-          <Button
-            onClick={handleLogout}
-            variant="ghost"
-            className="h-10 w-full justify-start gap-3 rounded-xl px-3 text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700 border-0 cursor-pointer"
-          >
-            <LogOut className="size-4 text-red-500" />
-            Đăng xuất
-          </Button>
         </div>
       </aside>
 
@@ -402,6 +394,14 @@ export default function AdminLayout({
                 {user.name}
               </span>
             </div>
+            <Button
+              onClick={handleLogout}
+              variant="outline"
+              className="h-9 gap-2 rounded-xl border-red-100 px-3 text-xs font-bold text-red-600 hover:bg-red-50 hover:text-red-700"
+            >
+              <LogOut className="size-4 text-red-500" />
+              Đăng xuất
+            </Button>
           </div>
         </header>
 

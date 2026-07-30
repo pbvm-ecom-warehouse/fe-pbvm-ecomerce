@@ -1455,7 +1455,7 @@ export default function AdminCategoriesPage() {
                           <span>{prodImage ? "Thay đổi ảnh" : "Tải ảnh lên"}</span>
                         </label>
                         <p className="text-[11px] text-slate-400 font-medium">
-                          Tải ảnh trực tiếp từ máy tính (Tự động upload lên Cloudinary & lưu URL)
+                          Tải ảnh trực tiếp từ máy tính
                         </p>
                       </div>
                     </div>

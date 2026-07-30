@@ -469,30 +469,7 @@ export function CartPageClient() {
 
           {items.length > 0 && (
             <div className="pt-6 space-y-6">
-              {/* Progress bar / Free shipping bar */}
-              <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
-                <div className="flex items-center justify-between gap-4 text-xs">
-                  <span className="inline-flex items-center gap-1.5 font-black uppercase tracking-[0.14em] text-primary">
-                    <Info className="size-4" />
-                    Ưu đãi giao hàng sỉ
-                  </span>
-                  <span className="font-bold text-foreground">
-                    {remainingForFreeShipping === 0
-                      ? "Đã đạt miễn phí"
-                      : `Cần thêm ${formatCurrency(remainingForFreeShipping)}`}
-                  </span>
-                </div>
-                <div className="h-2.5 overflow-hidden rounded-full border border-border bg-white">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all"
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-                <p className="text-[11px] leading-5 text-muted-foreground">
-                  Đơn từ {formatCurrency(freeShippingThreshold)} được miễn phí
-                  giao chành xe theo chính sách tạm tính hiện tại.
-                </p>
-              </div>
+
 
               {/* Summary detail layout */}
               <div className="space-y-4 pt-2">

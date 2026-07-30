@@ -5,6 +5,7 @@ const artworkGeneratorMock = vi.hoisted(() => ({
     brandName: prompt,
     transparentBg: true,
   })),
+  promptRequestsText: vi.fn((promptText: string) => /chu|text|ten|slogan/i.test(promptText)),
   generateBananaLogoArtworkAsync: vi.fn(),
 }));
 

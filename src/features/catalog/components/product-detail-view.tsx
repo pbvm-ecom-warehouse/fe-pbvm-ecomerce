@@ -85,6 +85,39 @@ function getProductSizes(product: CatalogProduct | null): string[] {
   return [];
 }
 
+function isRawSkuString(str: string): boolean {
+  if (!str) return false;
+  return /^[A-Z0-9]+[_-][A-Z0-9_-]+$/i.test(str.trim());
+}
+
+function getVariantCleanTitle(variant: ProductVariant, productName: string): string {
+  const rawName = String(variant.name || "").trim();
+  if (rawName && !isRawSkuString(rawName) && rawName !== productName) {
+    return rawName;
+  }
+  const attrs = collectVariantAttributes(variant);
+  const normalized = normalizeVariantAttributes(attrs, variant.sku || "");
+
+  const parts: string[] = [];
+  const type = attrs.type || (attrs.material && attrs.material !== productName ? attrs.material : "") || "";
+  const style = normalized.style || attrs.cupStyle || attrs.packaging || "";
+  const spec = normalized.capacity || attrs.weight || attrs.spec || attrs.size || "";
+
+  if (type && !productName.toLowerCase().includes(type.toLowerCase())) parts.push(type);
+  if (style && !productName.toLowerCase().includes(style.toLowerCase())) parts.push(style);
+
+  const isMaterial = (variant.sku || "").toUpperCase().includes("MAT-") || Boolean(attrs.type || attrs.category || attrs.weight);
+  if (!isMaterial && spec && !productName.toLowerCase().includes(spec.toLowerCase())) {
+    parts.push(spec);
+  }
+
+  if (parts.length > 0) {
+    return parts.join(" · ");
+  }
+
+  return type || rawName || productName || variant.sku || "Biến thể";
+}
+
 function getVariantLabel(v: ProductVariant): string {
   const attrs = normalizeVariantAttributes(collectVariantAttributes(v), v.sku || "");
   return attrs.capacity || attrs.style || attrs.material || attrs.color || v.sku;
@@ -96,41 +129,90 @@ function getVariantAttribute(v: ProductVariant, key: "capacity" | "style" | "mat
 
 function getVariantDisplayRows(variant: ProductVariant) {
   const attrs = collectVariantAttributes(variant);
+  const normalized = normalizeVariantAttributes(attrs, variant.sku || "");
   const sku = String(variant.sku || "").toUpperCase();
-  const prefix = sku.split("-")[0];
-  const rows =
-    prefix === "MAT"
-      ? [
-          ["Danh mục", attrs.category],
-          ["Loại", attrs.type || attrs.material],
-          ["Hương vị", attrs.flavor],
-          ["Quy cách", attrs.weight || attrs.spec || attrs.size],
-        ]
-      : prefix === "PKG"
-        ? [
-            ["Loại bao bì", attrs.packaging || attrs.style],
-            ["Kích thước", attrs.size || attrs.capacity],
-            ["Chất liệu", attrs.material],
-            ["Màu sắc", attrs.color],
-          ]
-        : [
-            ["Dung tích", attrs.capacity || attrs.size],
-            ["Kiểu dáng", attrs.style],
-            ["Chất liệu", attrs.material],
-            ["Màu sắc", attrs.color],
-          ];
 
-  return rows
-    .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
+  const isMaterial =
+    sku.includes("MAT-") ||
+    sku.includes("-NL-") ||
+    sku.startsWith("NL-") ||
+    Boolean(attrs.category || attrs.weight || attrs.type || attrs.flavor);
+
+  const isPackaging =
+    sku.includes("PKG-") ||
+    sku.includes("-PKG-") ||
+    Boolean(attrs.packaging);
+
+  const rawRows: [string, string | undefined][] = [];
+
+  if (isMaterial) {
+    if (attrs.category) rawRows.push(["Danh mục", attrs.category]);
+    if (attrs.type || (attrs.material && attrs.material !== "CUP")) {
+      rawRows.push(["Loại", attrs.type || attrs.material]);
+    }
+    if (attrs.flavor) rawRows.push(["Hương vị", attrs.flavor]);
+
+    Object.entries(attrs).forEach(([key, val]) => {
+      const clean = String(val || "").trim();
+      if (!clean || clean === "-") return;
+      const lower = clean.toLowerCase();
+      if (lower.includes("/thùng") || lower.includes("/bao") || lower.includes("/túi") || lower.includes("/lốc")) {
+        rawRows.push(["Đóng gói", clean]);
+      } else if (/\d+\s*(kg|g|gram)\b/i.test(clean)) {
+        rawRows.push(["Trọng lượng", clean]);
+      }
+    });
+
+    if (!rawRows.some(([label]) => label === "Trọng lượng")) {
+      const weightVal = attrs.weight || attrs.spec;
+      if (weightVal && weightVal !== "-") {
+        rawRows.push(["Trọng lượng", weightVal]);
+      }
+    }
+  } else if (isPackaging) {
+    rawRows.push(["Loại bao bì", attrs.packaging || normalized.style || attrs.style]);
+    rawRows.push(["Kích thước", normalized.capacity || attrs.size]);
+    rawRows.push(["Chất liệu", normalized.material || attrs.material]);
+    rawRows.push(["Màu sắc", normalized.color || attrs.color]);
+  } else {
+    // Cup
+    if (normalized.capacity && /\d+\s*(ml|l)/i.test(normalized.capacity)) {
+      rawRows.push(["Dung tích", normalized.capacity]);
+    }
+    if (normalized.style) {
+      rawRows.push(["Kiểu dáng", normalized.style]);
+    }
+    if (normalized.material) {
+      rawRows.push(["Chất liệu", normalized.material]);
+    }
+    if (normalized.color) {
+      rawRows.push(["Màu sắc", normalized.color]);
+    }
+  }
+
+  const seenLabels = new Set<string>();
+  return rawRows
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim() && String(value).trim() !== "-")
+    .filter(([label]) => {
+      if (seenLabels.has(label)) return false;
+      seenLabels.add(label);
+      return true;
+    })
     .map(([label, value]) => ({ label: String(label), value: String(value).trim() }));
+}
+
+function looksLikeObjectId(id?: string): boolean {
+  return typeof id === "string" && /^[0-9a-fA-F]{24}$/.test(id);
 }
 
 export function ProductDetailView({
   initialProduct,
   slug: targetSlug,
+  initialVariantSku,
 }: {
   initialProduct?: CatalogProduct | null;
   slug?: string;
+  initialVariantSku?: string;
 }) {
   const [product, setProduct] = useState<CatalogProduct | null>(initialProduct ?? null);
 
@@ -237,9 +319,17 @@ export function ProductDetailView({
     ? selectedVariant.fulfillmentType === "CUSTOM_PRINT"
     : product?.fulfillmentType === "CUSTOM_PRINT";
 
-  const activeStock = selectedVariant ? (selectedVariant.availableQty ?? 0) : 0;
-  const isSelectedVariantOutOfStock = Boolean(selectedVariant && activeStock <= 0);
+  const activeStock = selectedVariant ? (selectedVariant.availableQty ?? 0) : (product?.stockSnapshot ?? 0);
+  const isSelectedVariantOutOfStock = Boolean(activeStock <= 0);
   const isVariantSelectionBlocked = isVariantComboUnavailable || isSelectedVariantOutOfStock;
+
+  useEffect(() => {
+    if (activeStock > 0 && quantity > activeStock) {
+      setQuantity(activeStock);
+    } else if (activeStock <= 0) {
+      setQuantity(0);
+    }
+  }, [activeStock]);
 
   const activeLabel = selectedVariant
     ? getVariantLabel(selectedVariant)
@@ -333,6 +423,24 @@ export function ProductDetailView({
     return categoryCopy[product.category] || "Bao bì / Nguyên liệu";
   }, [product, isCupProduct]);
 
+  const categoryBreadcrumbLabel = useMemo(() => {
+    if (!product) return "";
+    const rawName =
+      product.categoryName ||
+      (typeof product.categoryObj === "object" ? product.categoryObj?.name : "") ||
+      categoryCopy[product.category] ||
+      (typeof product.category === "string" && product.category !== "all" && !looksLikeObjectId(product.category) ? product.category : "");
+    return (rawName || "").trim();
+  }, [product]);
+
+  const categoryBreadcrumbHref = useMemo(() => {
+    if (!product) return "/products";
+    const slug =
+      (typeof product.categoryObj === "object" ? product.categoryObj?.slug : "") ||
+      (typeof product.category === "string" ? product.category : "");
+    return slug ? `/products?category=${encodeURIComponent(slug)}` : "/products";
+  }, [product]);
+
   if (!product) {
     return (
       <div className="container min-h-[60vh] flex flex-col items-center justify-center text-center py-16">
@@ -362,9 +470,17 @@ export function ProductDetailView({
             Trang chủ
           </Link>
           <ChevronRight className="size-3 text-gray-400" />
-          <Link href="/products" className="hover:text-[#3BB77E] transition-colors">
-            {categoryCopy[product.category]}
+          <Link href="/products" className="hover:text-[#3BB77E] transition-colors font-semibold text-[#253D4E]/80">
+            Sản phẩm
           </Link>
+          {categoryBreadcrumbLabel ? (
+            <>
+              <ChevronRight className="size-3 text-gray-400" />
+              <Link href={categoryBreadcrumbHref} className="hover:text-[#3BB77E] transition-colors">
+                {categoryBreadcrumbLabel}
+              </Link>
+            </>
+          ) : null}
           <ChevronRight className="size-3 text-gray-400" />
           <span className="text-[#253D4E] font-bold truncate max-w-[200px] sm:max-w-[400px]">
             {product.name}
@@ -444,7 +560,7 @@ export function ProductDetailView({
                   <div className="max-h-[340px] space-y-2 overflow-y-auto pr-1">
                     {product.variants.map((variant, index) => {
                       const variantKey = String(variant.id || variant.sku || `variant-${index}`);
-                      const variantName = String(variant.name || product.name || variant.sku || "").trim();
+                      const cleanTitle = getVariantCleanTitle(variant, product.name);
                       const rows = getVariantDisplayRows(variant);
                       const attrs = normalizeVariantAttributes(collectVariantAttributes(variant), variant.sku || "");
                       const variantImage = variant.image || product.imageUrl || product.images?.[0] || "/images/product-placeholder.svg";
@@ -470,50 +586,64 @@ export function ProductDetailView({
                             setActiveImage(variantImage);
                           }}
                           className={cn(
-                            "grid w-full gap-3 rounded-xl border p-3 text-left transition-all sm:grid-cols-[56px_minmax(0,1fr)_120px] sm:items-center",
+                            "relative flex w-full flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 rounded-2xl border p-3.5 text-left transition-all duration-200 cursor-pointer",
                             isActive
-                              ? "border-[#3BB77E] bg-[#F0FBF6] shadow-sm"
+                              ? "border-[#3BB77E] bg-[#F0FBF6] shadow-xs ring-1 ring-[#3BB77E]/30"
                               : "border-[#E2EDE8] bg-white hover:border-[#3BB77E]/60 hover:bg-[#F8FBFA]",
                           )}
                         >
-                          <span className="block size-14 overflow-hidden rounded-xl border border-[#E2EDE8] bg-white">
-                            <img
-                              src={variantImage}
-                              alt={variantName}
-                              className="h-full w-full object-contain p-1.5"
-                            />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="inline-flex items-center gap-2 align-middle">
-                              <span className="truncate text-sm font-black text-[#253D4E]">
-                                {variantName}
-                              </span>
-                              {stock > 0 ? (
-                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-[#3BB77E]">
-                                  Còn {stock.toLocaleString("vi-VN")} {product.unit}
+                          <div className="flex items-center gap-3.5 min-w-0 flex-1 w-full sm:w-auto">
+                            <div className="relative size-14 shrink-0 overflow-hidden rounded-xl border border-[#E2EDE8] bg-white p-1 shadow-2xs">
+                              <img
+                                src={variantImage}
+                                alt={cleanTitle}
+                                className="h-full w-full object-contain"
+                              />
+                            </div>
+
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-extrabold text-sm text-[#253D4E] leading-snug">
+                                  {cleanTitle}
                                 </span>
-                              ) : (
-                                <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600">
-                                  Hết hàng
-                                </span>
-                              )}
-                            </span>
-                            {rows.length > 0 ? (
-                              <span className="ml-2 inline-flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5 align-middle [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                                {rows.map((row) => (
-                                  <span
-                                    key={`${variantKey}-${row.label}-${row.value}`}
-                                    className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-[10.5px] font-bold text-slate-600"
-                                  >
-                                    {row.label}: {row.value}
+                                {stock > 0 ? (
+                                  <span className="rounded-full bg-emerald-100/80 px-2.5 py-0.5 text-[11px] font-bold text-[#3BB77E]">
+                                    Còn {stock.toLocaleString("vi-VN")} {product.unit}
                                   </span>
-                                ))}
-                              </span>
-                            ) : null}
-                          </span>
-                          <span className="text-sm font-black text-[#3BB77E] sm:text-right">
-                            {formatCurrency(variant.price || 0)}
-                          </span>
+                                ) : (
+                                  <span className="rounded-full bg-rose-100/70 px-2.5 py-0.5 text-[11px] font-bold text-rose-600">
+                                    Hết hàng
+                                  </span>
+                                )}
+                              </div>
+
+                              {variant.sku ? (
+                                <div className="text-[11px] font-medium text-slate-400 font-mono tracking-tight">
+                                  Mã SKU: {variant.sku}
+                                </div>
+                              ) : null}
+
+                              {rows.length > 0 ? (
+                                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                  {rows.map((row) => (
+                                    <span
+                                      key={`${variantKey}-${row.label}-${row.value}`}
+                                      className="inline-flex items-center gap-1 rounded-lg bg-white/90 border border-[#E2EDE8] px-2 py-0.5 text-[11px] font-semibold text-slate-600 shadow-2xs"
+                                    >
+                                      <span className="text-slate-400 font-normal">{row.label}:</span>
+                                      <span className="font-bold text-slate-700">{row.value}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 text-right sm:self-center self-end pt-1 sm:pt-0">
+                            <div className="text-base font-black text-[#3BB77E]">
+                              {formatCurrency(variant.price || 0)}
+                            </div>
+                          </div>
                         </button>
                       );
                     })}

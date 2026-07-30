@@ -92,4 +92,30 @@ describe("shop catalog active products", () => {
       "/catalog/products/san-pham-kho-packaging/variants",
     );
   });
+
+  it("filters out products with status DRAFT or isActive false from the shop list", async () => {
+    publicApiFetchMock
+      .mockResolvedValueOnce([
+        {
+          id: "product-draft",
+          name: "San pham nhap",
+          slug: "san-pham-nhap",
+          status: "DRAFT",
+          variants: [],
+        },
+        {
+          id: "product-active",
+          name: "San pham da duyet",
+          slug: "san-pham-da-duyet",
+          status: "ACTIVE",
+          variants: [],
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const result = await listCatalogProducts();
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].id).toBe("product-active");
+  });
 });

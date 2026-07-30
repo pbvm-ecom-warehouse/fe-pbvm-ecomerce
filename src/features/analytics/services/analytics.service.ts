@@ -26,6 +26,19 @@ export type DailyRevenueItem = {
   orderCount: number;
 };
 
+export type MetricComparison = {
+  currentValue: number;
+  previousValue: number;
+  growthPercentage: number;
+};
+
+export type MonthlyComparison = {
+  revenue: MetricComparison;
+  orders: MetricComparison;
+  customers: MetricComparison;
+  aov: MetricComparison;
+};
+
 export async function getAnalyticsOverview(): Promise<AnalyticsOverview> {
   const response = await apiClient.get<
     ApiEnvelope<AnalyticsOverview> | AnalyticsOverview
@@ -51,5 +64,12 @@ export async function getRevenueTimeline(
   >("/admin/analytics/revenue", {
     params: { fromDate, toDate },
   });
+  return unwrapApiData(response.data);
+}
+
+export async function getMonthlyComparison(): Promise<MonthlyComparison> {
+  const response = await apiClient.get<
+    ApiEnvelope<MonthlyComparison> | MonthlyComparison
+  >("/admin/analytics/monthly-comparison");
   return unwrapApiData(response.data);
 }

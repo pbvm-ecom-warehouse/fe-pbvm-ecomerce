@@ -26,11 +26,11 @@ export function canPayNextOnlineStage(order: any) {
 
   if (hasPrintItems) {
     if (paymentStatus === "DEPOSIT_PAID") {
-      return paymentMethod === "ONLINE" && fulfillmentStatus === "AWAITING_PRINT";
+      return paymentMethod === "ONLINE" && fulfillmentStatus === "SAMPLE_PRINTED";
     }
 
     if (paymentStatus === "PROGRESS_PAID") {
-      return paymentMethod === "ONLINE";
+      return paymentMethod === "ONLINE" && fulfillmentStatus === "READY_TO_PICK";
     }
 
     return false;
@@ -48,8 +48,8 @@ export function getPaymentStageBreakdown(order: any) {
     const stage2 = Math.round(total * 0.3);
     return [
       { label: "Đợt 1 - cọc 30%", amount: stage1, status: "UNPAID" },
-      { label: "Đợt 2 - thanh toán thêm 30%", amount: stage2, status: "DEPOSIT_PAID" },
-      { label: "Đợt 3 - phần còn lại 40%", amount: total - stage1 - stage2, status: "PROGRESS_PAID" },
+      { label: "Đợt 2 - duyệt mẫu và thanh toán thêm 30%", amount: stage2, status: "DEPOSIT_PAID" },
+      { label: "Đợt 3 - duyệt bản in và thanh toán còn lại 40%", amount: total - stage1 - stage2, status: "PROGRESS_PAID" },
     ];
   }
 
@@ -86,12 +86,12 @@ export function getNextPaymentButtonLabel(order: any) {
 
   if (order.paymentStatus === "DEPOSIT_PAID") {
     return order.hasPrintItems
-      ? `Thanh toán đợt 2${amountText}`
+      ? `Duyệt mẫu và thanh toán đợt 2${amountText}`
       : `Thanh toán phần còn lại${amountText}`;
   }
 
   if (order.paymentStatus === "PROGRESS_PAID") {
-    return `Thanh toán đợt 3${amountText}`;
+    return `Duyệt bản in và thanh toán đợt 3${amountText}`;
   }
 
   return "Thanh toán";

@@ -71,7 +71,7 @@ describe("product card cart flow", () => {
       expect(getCatalogProductBySlug).toHaveBeenCalledWith("tra-den-assam");
     });
 
-    expect(await screen.findByText("Khối lượng")).toBeInTheDocument();
+    expect(await screen.findByText(/Khối lượng|Trọng lượng/i)).toBeInTheDocument();
     expect(screen.getByText("Hương vị")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "500g" }));

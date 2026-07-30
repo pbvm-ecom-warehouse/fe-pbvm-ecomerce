@@ -97,12 +97,18 @@ function getProductType(product: any, sku: string = ""): "CUP" | "MATERIAL" | "P
     catStr.includes("ingredient") ||
     catStr.includes("nguyen-lieu") ||
     catStr.includes("nguyen_lieu") ||
+    catStr.includes("nguyenlieu") ||
     nameStr.includes("nguyên liệu") ||
     nameStr.includes("trà") ||
     nameStr.includes("đường") ||
     nameStr.includes("bột") ||
     nameStr.includes("siro") ||
-    skuUpper.startsWith("MAT")
+    nameStr.includes("trân châu") ||
+    nameStr.includes("thạch") ||
+    skuUpper.startsWith("MAT") ||
+    skuUpper.includes("-NL-") ||
+    skuUpper.startsWith("NL-") ||
+    skuUpper.startsWith("ECOM-NL-")
   ) {
     return "MATERIAL";
   }
@@ -116,7 +122,9 @@ function getProductType(product: any, sku: string = ""): "CUP" | "MATERIAL" | "P
     nameStr.includes("ống hút") ||
     nameStr.includes("muỗng") ||
     nameStr.includes("nắp") ||
-    skuUpper.startsWith("PKG")
+    skuUpper.startsWith("PKG") ||
+    skuUpper.includes("-PKG-") ||
+    skuUpper.startsWith("ECOM-PKG-")
   ) {
     return "PACKAGING";
   }
@@ -124,49 +132,76 @@ function getProductType(product: any, sku: string = ""): "CUP" | "MATERIAL" | "P
   return "CUP";
 }
 
-function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Record<string, any> = {}) {
-  const normalizedAttrs = normalizeVariantAttributes(attrs, String(attrs.sku || ""));
-  const capacityVal = normalizedAttrs.capacity || attrs.weight || attrs.size || attrs.spec || "";
-  const styleVal = normalizedAttrs.style || attrs.specification || attrs.packaging || "";
-  const materialVal = normalizedAttrs.material || attrs.type || attrs.brand || attrs.origin || "";
-  const colorVal = normalizedAttrs.color || attrs.color || attrs.colour || attrs.mauSac || attrs.mau_sac || "";
+function getVariantInfoLabels(type: "CUP" | "MATERIAL" | "PACKAGING", attrs: Record<string, any> = {}, sku: string = "") {
+  const allAttrs = { ...collectVariantAttributes({ attributes: attrs, sku }), ...attrs };
+  const normalizedAttrs = normalizeVariantAttributes(allAttrs, sku || String(attrs.sku || ""));
+  
+  const items: { label: string; value: string }[] = [];
+  const addedLabels = new Set<string>();
 
-  if (type === "MATERIAL") {
-    return {
-      col1Label: "DANH MỤC",
-      col1Val: attrs.category || "-",
-      col2Label: "LOẠI",
-      col2Val: attrs.type || materialVal || "-",
-      col3Label: "HƯƠNG VỊ",
-      col3Val: attrs.flavor || "-",
-      col4Label: "QUY CÁCH",
-      col4Val: attrs.weight || attrs.spec || capacityVal || "-",
-    };
+  const addLabelVal = (label: string, val: any) => {
+    const clean = String(val || "").trim();
+    if (clean && clean !== "-" && !addedLabels.has(label)) {
+      items.push({ label, value: clean });
+      addedLabels.add(label);
+    }
+  };
+
+  const values = Object.entries(allAttrs);
+
+  if (allAttrs.category) addLabelVal("DANH MỤC", allAttrs.category);
+  if (allAttrs.type || allAttrs.loai) addLabelVal("LOẠI", allAttrs.type || allAttrs.loai);
+  if (allAttrs.flavor) addLabelVal("HƯƠNG VỊ", allAttrs.flavor);
+
+  values.forEach(([key, val]) => {
+    const clean = String(val || "").trim();
+    if (!clean || clean === "-") return;
+    const lowerVal = clean.toLowerCase();
+    const upperKey = key.toUpperCase();
+
+    if (lowerVal.includes("/thùng") || lowerVal.includes("/bao") || lowerVal.includes("/túi") || lowerVal.includes("/lốc") || lowerVal.includes("/hộp")) {
+      addLabelVal("ĐÓNG GÓI", clean);
+    } else if (/\d+\s*(kg|g|gram)\b/i.test(clean) && !lowerVal.includes("/thùng")) {
+      addLabelVal("TRỌNG LƯỢNG", clean);
+    } else if (/\d+\s*(ml|l)\b/i.test(clean)) {
+      addLabelVal("DUNG TÍCH", clean);
+    } else if (["TRÁI TIM", "HEART", "ĐÁY U", "U_SHAPE", "LY THẮNG", "STRAIGHT", "MUG"].some((s) => clean.toUpperCase().includes(s))) {
+      addLabelVal("KIỂU DÁNG", clean);
+    } else if (["COLOR", "COLOUR", "MAUSAC", "MAU_SAC", "MAU"].includes(upperKey)) {
+      addLabelVal("MÀU SẮC", clean);
+    } else if (["MATERIAL", "CHATLIEU", "CHAT_LIEU"].includes(upperKey)) {
+      addLabelVal("CHẤT LIỆU", clean);
+    }
+  });
+
+  const capacityVal = normalizedAttrs.capacity || allAttrs.capacity || allAttrs.size || "";
+  const styleVal = normalizedAttrs.style || allAttrs.style || allAttrs.cupStyle || allAttrs.packaging || "";
+  const materialVal = normalizedAttrs.material || allAttrs.material || "";
+  const colorVal = normalizedAttrs.color || allAttrs.color || "";
+
+  if (type === "CUP") {
+    if (capacityVal && /\d+\s*(ml|l)/i.test(capacityVal)) addLabelVal("DUNG TÍCH", capacityVal);
+    if (styleVal) addLabelVal("KIỂU DÁNG", styleVal);
+    if (materialVal) addLabelVal("CHẤT LIỆU", materialVal);
+    if (colorVal) addLabelVal("MÀU SẮC", colorVal);
+  } else if (type === "PACKAGING") {
+    if (styleVal) addLabelVal("LOẠI BAO BÌ", styleVal);
+    if (capacityVal) addLabelVal("KÍCH THƯỚC", capacityVal);
+    if (materialVal) addLabelVal("CHẤT LIỆU", materialVal);
+    if (colorVal) addLabelVal("MÀU SẮC", colorVal);
   }
 
-  if (type === "PACKAGING") {
-    return {
-      col1Label: "LOẠI BAO BÌ",
-      col1Val: attrs.packaging || styleVal || "-",
-      col2Label: "KÍCH THƯỚC",
-      col2Val: capacityVal || "-",
-      col3Label: "CHẤT LIỆU",
-      col3Val: materialVal || "-",
-      col4Label: "MÀU SẮC",
-      col4Val: colorVal || "-",
-    };
-  }
-
-  // Default for CUP
   return {
-    col1Label: "DUNG TÍCH",
-    col1Val: capacityVal || "-",
-    col2Label: "KIỂU DÁNG",
-    col2Val: styleVal || "-",
-    col3Label: "CHẤT LIỆU",
-    col3Val: materialVal || "-",
-    col4Label: "MÀU SẮC",
-    col4Val: colorVal || "-",
+    items,
+    summaryText: items.map((item) => item.value).join(" · "),
+    col1Label: items[0]?.label || "-",
+    col1Val: items[0]?.value || "-",
+    col2Label: items[1]?.label || "-",
+    col2Val: items[1]?.value || "-",
+    col3Label: items[2]?.label || "-",
+    col3Val: items[2]?.value || "-",
+    col4Label: items[3]?.label || "-",
+    col4Val: items[3]?.value || "-",
   };
 }
 

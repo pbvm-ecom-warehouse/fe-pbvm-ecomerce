@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   CreditCard,
+  LogOut,
   PackageCheck,
   PhoneCall,
   Search,
@@ -25,6 +26,7 @@ import { shopRoutes } from "@/constants/routes";
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { logout } from "@/features/auth/services/auth.service";
 import { formatCurrency } from "@/utils/format-currency";
 import {
   listCatalogProducts,
@@ -71,10 +73,21 @@ function formatRelativeTime(dateStr?: string) {
 
 export function StoreHeader() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  if (pathname?.startsWith("/design-cup")) {
-    return null;
-  }
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const items = useCartStore((state) => state.items);
   const itemCount = items.length;
   const user = useAuthStore((state) => state.user);
@@ -205,7 +218,13 @@ export function StoreHeader() {
     }
   };
 
-  if (!mounted || !pathname || AUTH_PATHS.includes(pathname) || pathname.startsWith("/admin")) {
+  if (
+    !mounted ||
+    !pathname ||
+    AUTH_PATHS.includes(pathname) ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/design-cup")
+  ) {
     return null;
   }
 
@@ -379,25 +398,57 @@ export function StoreHeader() {
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="h-11 gap-2 rounded-xl px-3 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-primary inline-flex cursor-pointer"
+                  className="h-11 gap-2 rounded-xl px-3 text-xs font-bold text-[#253D4E] hover:bg-emerald-50 hover:text-primary inline-flex cursor-pointer transition-colors"
                 >
                   {user.avatar ? (
-                    <img src={user.avatar} alt={user.name} className="size-5 rounded-full object-cover border border-primary/20 shrink-0" />
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="size-6 rounded-full object-cover border border-primary/20 shrink-0"
+                    />
                   ) : (
-                    <UserRound className="size-5 shrink-0" />
+                    <UserRound className="size-5 shrink-0 text-slate-500" />
                   )}
-                  <span className="truncate max-w-[90px]">{user.name}</span>
+                  <span className="truncate max-w-[110px]">{user.name}</span>
+                  <ChevronDown className="size-3.5 text-slate-400 shrink-0" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-48 bg-[#FAF8F6] border border-[#E9E3DD] rounded-xl shadow-md p-1.5 z-40">
-                <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
-                  <Link href="/account">Trang cá nhân</Link>
+              <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-200/80 rounded-2xl shadow-xl p-1.5 z-50 animate-in fade-in-80 zoom-in-95">
+                <div className="px-3 py-2 bg-slate-50/80 rounded-xl mb-1 border border-slate-100">
+                  <p className="text-xs font-extrabold text-[#253D4E] truncate">{user.name}</p>
+                  {user.email && (
+                    <p className="text-[11px] font-medium text-slate-400 truncate">{user.email}</p>
+                  )}
+                </div>
+
+                <DropdownMenuItem asChild className="rounded-xl text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-primary py-2.5 px-3 cursor-pointer transition-colors">
+                  <Link href="/account" className="flex items-center gap-2.5">
+                    <UserRound className="size-4 text-slate-400" />
+                    <span>Trang cá nhân</span>
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
-                  <Link href="/account/designs">Thiết kế của tôi</Link>
+                <DropdownMenuItem asChild className="rounded-xl text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-primary py-2.5 px-3 cursor-pointer transition-colors">
+                  <Link href="/account/designs" className="flex items-center gap-2.5">
+                    <Sparkles className="size-4 text-slate-400" />
+                    <span>Thiết kế của tôi</span>
+                  </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild className="rounded-lg text-xs font-bold text-slate-700 hover:bg-[#DEF9EC] hover:text-primary py-2.5 px-3 cursor-pointer">
-                  <Link href="/orders">Đơn hàng của tôi</Link>
+                <DropdownMenuItem asChild className="rounded-xl text-xs font-semibold text-slate-700 hover:bg-emerald-50 hover:text-primary py-2.5 px-3 cursor-pointer transition-colors">
+                  <Link href="/orders" className="flex items-center gap-2.5">
+                    <PackageCheck className="size-4 text-slate-400" />
+                    <span>Đơn hàng của tôi</span>
+                  </Link>
+                </DropdownMenuItem>
+
+                <div className="my-1 h-px bg-slate-100" />
+
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 hover:text-rose-700 py-2.5 px-3 cursor-pointer transition-colors flex items-center gap-2.5 focus:bg-rose-50 focus:text-rose-700"
+                >
+                  <LogOut className="size-4 text-rose-500" />
+                  <span>{isLoggingOut ? "Đang thoát..." : "Đăng xuất"}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -415,7 +466,7 @@ export function StoreHeader() {
           )}
           <Button
             asChild
-            className="h-11 rounded-xl bg-primary px-3 font-bold text-white hover:bg-[#2F9A68]"
+            className="h-11 rounded-xl bg-primary px-3.5 font-bold text-white hover:bg-[#2F9A68]"
           >
             <Link href="/cart">
               <ShoppingCart data-icon="inline-start" />

@@ -8,11 +8,20 @@ export const revalidate = 0;
 
 export default async function ProductDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ variantSku?: string }>;
 }) {
   const { slug } = await params;
+  const query = searchParams ? await searchParams : {};
   const product = await getCatalogProductBySlug(slug);
 
-  return <ProductDetailView initialProduct={product} slug={slug} />;
+  return (
+    <ProductDetailView
+      initialProduct={product}
+      slug={slug}
+      initialVariantSku={query.variantSku}
+    />
+  );
 }

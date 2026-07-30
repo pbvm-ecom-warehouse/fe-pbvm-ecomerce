@@ -4,6 +4,7 @@ import {
   collectVariantAttributes,
   normalizeVariantAttributes,
 } from "@/features/catalog/utils/variant-attributes";
+import { listWmsItems } from "@/features/catalog/services/wms-stock.service";
 
 const SHOP_ACTIVE_PRODUCTS_ENDPOINT = "/catalog/products/active";
 
@@ -381,6 +382,14 @@ const emptyCatalogResponse: ApiListResponse<CatalogProduct> = {
   meta: { pagination: { page: 1, pageSize: 0, total: 0, totalPages: 0 } },
 };
 
+export function isApprovedCatalogProduct(product: any): boolean {
+  if (!product) return false;
+  const status = String(product.status || "").toUpperCase();
+  if (status === "DRAFT" || status === "INACTIVE" || status === "HIDDEN") return false;
+  if (product.isActive === false) return false;
+  return true;
+}
+
 /**
  * Lấy danh sách sản phẩm từ BE. Vì list API không trả về variants/giá,
  * mình sẽ enrichment bằng cách gọi detail cho từng slug song song.
@@ -402,7 +411,7 @@ export async function listCatalogProducts() {
       return emptyCatalogResponse;
     }
 
-    const filtered = rawProducts;
+    const filtered = rawProducts.filter(isApprovedCatalogProduct);
     const categoriesById = await readCatalogCategoriesById();
 
     const enriched = await Promise.all(
@@ -418,13 +427,15 @@ export async function listCatalogProducts() {
       }),
     );
 
+    const activeEnriched = enriched.filter(isApprovedCatalogProduct);
+
     return {
-      data: enriched,
+      data: activeEnriched,
       meta: {
         pagination: {
           page: 1,
-          pageSize: enriched.length,
-          total: enriched.length,
+          pageSize: activeEnriched.length,
+          total: activeEnriched.length,
           totalPages: 1,
         },
       },
@@ -449,12 +460,13 @@ export async function getCatalogProductBySlug(slug: string) {
       `/catalog/products/${encodeURIComponent(targetSlug)}`,
     );
     const product = unwrapShopPayload(p);
-    if (product) {
+    if (product && isApprovedCatalogProduct(product)) {
       const productWithVariants = await withFreshProductVariants(product);
       const categoriesById = await readCatalogCategoriesById();
-      return mapProductDetail(
+      const mapped = mapProductDetail(
         attachCategory(productWithVariants, categoriesById),
       );
+      if (isApprovedCatalogProduct(mapped)) return mapped;
     }
   } catch {
     if (decodedSlug !== targetSlug) {
@@ -463,12 +475,13 @@ export async function getCatalogProductBySlug(slug: string) {
           `/catalog/products/${encodeURIComponent(decodedSlug)}`,
         );
         const product = unwrapShopPayload(p);
-        if (product) {
+        if (product && isApprovedCatalogProduct(product)) {
           const productWithVariants = await withFreshProductVariants(product);
           const categoriesById = await readCatalogCategoriesById();
-          return mapProductDetail(
+          const mapped = mapProductDetail(
             attachCategory(productWithVariants, categoriesById),
           );
+          if (isApprovedCatalogProduct(mapped)) return mapped;
         }
       } catch {}
     }
@@ -503,7 +516,7 @@ export async function fetchInStockCupVariantsFromApi() {
       rawList = [];
     }
 
-    const allRaw = rawList;
+    const allRaw = rawList.filter(isApprovedCatalogProduct);
     const cupRaw = allRaw.filter(
       (p: any) =>
         p.category === "plain_cup" ||
@@ -660,28 +673,34 @@ export async function fetchAllCupVariantsFromApi(): Promise<
 > {
   try {
     const { ids: blankCupCategoryIds, categoriesById } = await readBlankCupCategoryIds();
-    // ── Lấy sản phẩm đang bán từ public catalog và lọc phôi ly theo category API ──
-    let rawList: any[] = [];
+
+    // ── Lấy sản phẩm từ các nguồn catalog (active & all DB) ──
+    const productLists: any[] = await Promise.all([
+      publicApiFetch<any>(SHOP_ACTIVE_PRODUCTS_ENDPOINT).catch(() => []),
+      publicApiFetch<any>("/catalog/products").catch(() => []),
+    ]);
+
+    const rawList: any[] = [];
+    productLists.forEach((res: any) => {
+      if (Array.isArray(res)) {
+        rawList.push(...res);
+      } else if (res && typeof res === "object" && Array.isArray(res.data)) {
+        rawList.push(...res.data);
+      } else if (res && typeof res === "object" && Array.isArray(res.items)) {
+        rawList.push(...res.items);
+      }
+    });
+
+    // Lấy danh sách WMS item phôi ly chưa in nếu có
+    let wmsBlankCupItems: any[] = [];
     try {
-      const adminData = await publicApiFetch<any>(SHOP_ACTIVE_PRODUCTS_ENDPOINT);
-      // Xử lý cả dạng array lẫn paginated { data: [...] }
-      if (Array.isArray(adminData)) {
-        rawList = adminData;
-      } else if (adminData?.data && Array.isArray(adminData.data)) {
-        rawList = adminData.data;
-      } else if (adminData?.items && Array.isArray(adminData.items)) {
-        rawList = adminData.items;
-      }
+      const wmsRes = await listWmsItems({ type: "CUP_BLANK", limit: 100 });
+      wmsBlankCupItems = wmsRes.data || [];
     } catch {
-      try {
-        rawList = (await publicApiFetch<any[]>(SHOP_ACTIVE_PRODUCTS_ENDPOINT)) ?? [];
-      } catch {
-        rawList = [];
-      }
+      wmsBlankCupItems = [];
     }
 
-    const allRaw = rawList;
-    const cupRaw = allRaw.filter((p: any) => {
+    const cupRaw = rawList.filter((p: any) => {
       const rawCategoryId = String(
         p.categoryId ??
           p.categoryObj?.id ??
@@ -710,7 +729,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       const fulfillmentType = String(p.fulfillmentType ?? "").toLowerCase();
       const itemType = String(p.itemType ?? p.type ?? "").toUpperCase();
 
-      // RÀNG BUỘC: Bỏ qua tất cả ly đã in sẵn của NSX (printed_cup / CUP_PRINTED / isPrinted === true)
+      // Bỏ qua ly đã in sẵn của NSX
       if (
         category === "printed_cup" ||
         p.isPrinted === true ||
@@ -734,16 +753,10 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         name.includes("tu thiet ke") ||
         slug.includes("custom") ||
         slug.includes("phoi") ||
-        (name.includes("ly") && (name.includes("tron") || name.includes("in theo yeu cau")))
+        (name.includes("ly") && (name.includes("tron") || name.includes("in theo yeu cau") || name.includes("chua in")))
       );
     });
 
-    if (cupRaw.length === 0) {
-      console.warn("[Cup DB All] Không tìm thấy phôi ly hoặc sản phẩm custom print nào trong DB.");
-      return [];
-    }
-
-    // ── Fetch detail (có variants) cho từng sản phẩm ──
     const detailedProducts = await Promise.all(
       cupRaw.map(async (p: any) => {
         if (Array.isArray(p.variants) && p.variants.length > 0) return p;
@@ -759,7 +772,6 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       }),
     );
 
-    // ── Parse helpers chuẩn hóa từ thuộc tính DB và mã SKU Kho ──
     function normalizeCupText(text: string) {
       return text
         .normalize("NFD")
@@ -782,7 +794,7 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       const full = normalizeCupText(`${text} ${sku}`);
       if (full.includes("tru") || full.includes("tron") || full.includes("thang") || full.includes("straight") || full.includes("rnd")) return "straight";
       if (full.includes("-u") || full.includes("bau") || full.includes("u-shape") || full.includes("day u") || full.includes("u_shape")) return "u_shape";
-      if (full.includes("heart") || full.includes("tim")) return "heart";
+      if (full.includes("heart") || full.includes("tim") || full.includes("hrt")) return "heart";
       if (full.includes("mug") || full.includes("quai")) return "mug";
       return null;
     }
@@ -796,33 +808,26 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       return null;
     }
 
-    // ── Parse variants chính xác từ DB — KHÔNG lọc theo availableQty ──
-    const result: Array<{
-      materialType: "clear" | "frosted" | "paper" | "glass";
-      style: "straight" | "u_shape" | "heart" | "mug";
-      size: "350ml" | "500ml" | "700ml" | "1000ml";
-      availableQty: number;
-      inStock: boolean;
-      price?: number;
-      productId?: string;
-      variantId?: string;
-      sku?: string;
-      productName?: string;
-      color?: string;
-      attributes?: Record<string, string>;
-    }> = [];
+    const resultMap = new Map<string, any>();
+
+    const addVariantToResult = (vData: any) => {
+      const key = String(vData.variantId || vData.sku || `${vData.materialType}-${vData.style}-${vData.size}`);
+      const existing = resultMap.get(key);
+      if (!existing || (!existing.inStock && vData.inStock)) {
+        resultMap.set(key, vData);
+      }
+    };
 
     detailedProducts.forEach((p: any) => {
-      // Bỏ qua variant bị xoá hoàn toàn (isActive === false) nhưng giữ hết hàng (availableQty === 0)
       const rawVariants: any[] =
         Array.isArray(p.variants) && p.variants.length > 0 ? p.variants : [p];
 
       rawVariants.forEach((v: any) => {
-        // Chỉ bỏ qua variant bị vô hiệu hoá
         if (v.isActive === false) return;
 
         const availableQty = v.availableQty ?? v.stockSnapshot ?? p.stockSnapshot ?? 0;
         const inStock = availableQty > 0;
+        const sku = v.sku || p.sku || p.productRefId || "";
 
         let attrObj: Record<string, string> = {};
         const rawAttr = v.attributes ?? p.attributes ?? {};
@@ -843,23 +848,25 @@ export async function fetchAllCupVariantsFromApi(): Promise<
         const attrSize = (attrObj.size ?? attrObj.capacity ?? attrObj["dung tích"] ?? attrObj["dung tich"] ?? attrObj["dungtich"] ?? "").toLowerCase();
         const attrColor = String(attrObj.color ?? attrObj["màu sắc"] ?? attrObj["mau sac"] ?? "").trim();
 
-        const material = parseMaterial(attrMaterial);
-        const style = parseStyle(attrStyle);
-        const size = parseSize(attrSize);
+        const fullText = [
+          attrMaterial,
+          attrStyle,
+          attrSize,
+          p.name,
+          p.slug,
+          v.name,
+          v.sku,
+          ...Object.values(attrObj),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-        if (!material || !style || !size) {
-          console.warn("[Cup DB All] Skip variant without explicit cup attributes:", {
-            productName: p.name,
-            sku: v.sku,
-            attributes: rawAttr,
-          });
-          return;
-        }
+        const material = parseMaterial(attrMaterial, fullText) ?? parseMaterial(fullText, sku) ?? "clear";
+        const style = parseStyle(attrStyle, fullText) ?? parseStyle(fullText, sku) ?? "straight";
+        const size = parseSize(attrSize, fullText) ?? parseSize(fullText, sku) ?? "500ml";
 
-        const sku = v.sku || p.sku || p.productRefId;
-
-        // Dedupe: nếu combo đã có với inStock=true thì ưu tiên thông tin còn hàng
-        result.push({
+        addVariantToResult({
           materialType: material,
           style,
           size,
@@ -876,6 +883,32 @@ export async function fetchAllCupVariantsFromApi(): Promise<
       });
     });
 
+    wmsBlankCupItems.forEach((item: any) => {
+      const sku = item.sku || "";
+      const name = item.name || "";
+      const availableQty = item.availableQuantity ?? item.quantity ?? 0;
+      const fullText = `${name} ${sku} ${JSON.stringify(item.attributes || {})}`;
+
+      const material = parseMaterial("", fullText) ?? "clear";
+      const style = parseStyle("", fullText) ?? "straight";
+      const size = parseSize("", fullText) ?? "500ml";
+
+      addVariantToResult({
+        materialType: material,
+        style,
+        size,
+        availableQty,
+        inStock: availableQty > 0,
+        price: item.price,
+        productId: item.id || item._id,
+        variantId: item.id || item._id || sku,
+        sku,
+        productName: name || "Phôi ly WMS",
+        attributes: item.attributes || {},
+      });
+    });
+
+    const result = Array.from(resultMap.values());
     console.log("[Cup DB All] Tất cả variants phôi ly chưa in:", result);
     return result;
   } catch (error) {

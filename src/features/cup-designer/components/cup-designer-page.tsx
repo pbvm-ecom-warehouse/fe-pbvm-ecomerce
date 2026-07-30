@@ -200,8 +200,8 @@ function getInitialAiMessages() {
     {
       id: "msg_welcome",
       sender: "ai" as const,
-      text: "Xin chĂ o! TĂ´i lĂ  Trá»£ lĂ½ AI. HĂ£y gá»­i tin nháº¯n mĂ´ táº£ logo hoáº·c há»a tiáº¿t báº¡n muá»‘n váº½ lĂªn ly nhĂ©!",
-      timestamp: "Vá»«a xong",
+      text: "Xin chào! Tôi là Trợ lý AI. Hãy gửi tin nhắn mô tả logo hoặc họa tiết bạn muốn vẽ lên ly nhé!",
+      timestamp: "Vừa xong",
     },
   ];
 }
@@ -643,22 +643,40 @@ export function CupDesignerPage() {
     setPrintHeightPercent(DEFAULT_CUP_CONFIG.printHeightPercent);
   }
 
+  const MATERIAL_MAP: Record<string, string> = {
+    clear: "Nhựa PET",
+    frosted: "Nhựa PP",
+    paper: "Ly giấy",
+    glass: "Thủy tinh",
+  };
+
+  const STYLE_MAP: Record<string, string> = {
+    straight: "Ly thẳng",
+    u_shape: "Đáy U",
+    heart: "Trái tim",
+    mug: "Có quai",
+  };
+
   function getVariantDisplayAttr(
     variant: InStockVariant | undefined,
     key: "capacity" | "style" | "material" | "color",
-  ) {
-    if (!variant) return "-";
+  ): string {
+    if (!variant) return "";
     const attrs = variant.attributes ?? {};
     if (key === "capacity") {
-      return attrs.capacity || attrs.size || attrs["dung tích"] || attrs["dung tich"] || variant.size || "-";
+      const val = attrs.capacity || attrs.size || attrs["dung tích"] || attrs["dung tich"] || variant.size || "";
+      return val !== "-" ? val : "";
     }
     if (key === "style") {
-      return attrs.style || attrs["kiểu dáng"] || attrs["kieu dang"] || attrs["dáng"] || "-";
+      const val = attrs.style || attrs["kiểu dáng"] || attrs["kieu dang"] || attrs["dáng"] || (variant.style ? STYLE_MAP[variant.style] : "");
+      return val !== "-" ? val : "";
     }
     if (key === "material") {
-      return attrs.material || attrs["chất liệu"] || attrs["chat lieu"] || attrs.materialtype || "-";
+      const val = attrs.material || attrs["chất liệu"] || attrs["chat lieu"] || attrs.materialtype || (variant.materialType ? MATERIAL_MAP[variant.materialType] : "");
+      return val !== "-" ? val : "";
     }
-    return variant.color || attrs.color || attrs["màu sắc"] || attrs["mau sac"] || "-";
+    const val = variant.color || attrs.color || attrs["màu sắc"] || attrs["mau sac"] || "";
+    return val !== "-" ? val : "";
   }
 
   function getBlankVariantStatusLabel(variant: InStockVariant) {
@@ -666,14 +684,14 @@ export function CupDesignerPage() {
   }
 
   function getBlankVariantLabel(variant: InStockVariant) {
-    return [
-      variant.sku || "Không có SKU",
-      getVariantDisplayAttr(variant, "capacity"),
-      getVariantDisplayAttr(variant, "style"),
-      getVariantDisplayAttr(variant, "material"),
-      getVariantDisplayAttr(variant, "color"),
-      getBlankVariantStatusLabel(variant),
-    ].join(" - ");
+    const sku = variant.sku || variant.productName || "Phôi ly";
+    const capacity = getVariantDisplayAttr(variant, "capacity");
+    const style = getVariantDisplayAttr(variant, "style");
+    const material = getVariantDisplayAttr(variant, "material");
+    const color = getVariantDisplayAttr(variant, "color");
+
+    const parts = [capacity, style, material, color].filter(Boolean);
+    return parts.length > 0 ? `${sku} · ${parts.join(" · ")}` : sku;
   }
 
   const filteredBlankVariants = useMemo(() => {
@@ -1193,8 +1211,8 @@ export function CupDesignerPage() {
                                         : "text-[#253D4E] hover:bg-slate-50",
                                     )}
                                   >
-                                    <span className="min-w-0 truncate">
-                                      {variant.sku || "Không có SKU"} - {getVariantDisplayAttr(variant, "capacity")} - {getVariantDisplayAttr(variant, "style")} - {getVariantDisplayAttr(variant, "material")} - {getVariantDisplayAttr(variant, "color")}
+                                    <span className="min-w-0 truncate font-semibold">
+                                      {getBlankVariantLabel(variant)}
                                     </span>
                                     <span
                                       className={cn(

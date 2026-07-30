@@ -62,11 +62,11 @@ function labelFor(key: string, kind: ReturnType<typeof getItemKind>) {
     kieudang: "Kiểu dáng",
   };
   const ingredient: Record<string, string> = {
-    capacity: "Quy cách",
-    size: "Khối lượng",
-    spec: "Quy cách",
-    weight: "Khối lượng",
-    khoiluong: "Khối lượng",
+    capacity: "Trọng lượng",
+    size: "Trọng lượng",
+    spec: "Trọng lượng",
+    weight: "Trọng lượng",
+    khoiluong: "Trọng lượng",
     flavor: "Hương vị",
     huongvi: "Hương vị",
     material: "Thành phần",
