@@ -106,23 +106,44 @@ function displayValue(key: string, value: string, kind: ReturnType<typeof getIte
   return value;
 }
 
-function getCanonicalCupAttrs(attrs: Record<string, string>) {
-  const findValue = (keys: string[]) => {
-    const expected = new Set(keys.map((key) => normalizeText(key).replace(/[^a-z0-9]+/g, "")));
-    for (const [key, value] of Object.entries(attrs)) {
-      const normalizedKey = normalizeText(key).replace(/[^a-z0-9]+/g, "");
-      if (expected.has(normalizedKey) && value !== undefined && value !== null && String(value).trim()) {
-        return String(value).trim();
-      }
+function findAttrValue(attrs: Record<string, string>, keys: string[]) {
+  const expected = new Set(keys.map((k) => normalizeText(k).replace(/[^a-z0-9]+/g, "")));
+  for (const [key, value] of Object.entries(attrs)) {
+    const normKey = normalizeText(key).replace(/[^a-z0-9]+/g, "");
+    if (expected.has(normKey) && value !== undefined && value !== null && String(value).trim()) {
+      return String(value).trim();
     }
-    return "";
-  };
+  }
+  return "";
+}
 
+function getCanonicalCupAttrs(attrs: Record<string, string>) {
   return {
-    capacity: findValue(["capacity", "size", "spec", "dung_tich", "dung tích", "dung tich"]),
-    material: findValue(["material", "chat_lieu", "chất liệu", "chat lieu", "materialType"]),
-    style: findValue(["style", "cup_style", "kieu_dang", "kiểu dáng", "kieu dang", "dáng"]),
-    color: findValue(["color", "colour", "mau_sac", "màu sắc", "mau sac", "màu", "mau"]),
+    capacity: findAttrValue(attrs, ["capacity", "size", "spec", "dung_tich", "dung tích", "dung tich"]),
+    material: findAttrValue(attrs, ["material", "chat_lieu", "chất liệu", "chat lieu", "materialType"]),
+    style: findAttrValue(attrs, ["style", "cup_style", "kieu_dang", "kiểu dáng", "kieu dang", "dáng"]),
+    color: findAttrValue(attrs, ["color", "colour", "mau_sac", "màu sắc", "mau sac", "màu", "mau"]),
+  };
+}
+
+function getCanonicalIngredientAttrs(attrs: Record<string, string>) {
+  return {
+    weight: findAttrValue(attrs, ["weight", "trong_luong", "trọng lượng", "trong luong", "khoi_luong", "khối lượng", "capacity", "size", "spec"]),
+    material: findAttrValue(attrs, ["material", "chat_lieu", "chất liệu", "thanhphan", "thanh_phan", "thành phần"]),
+    flavor: findAttrValue(attrs, ["flavor", "huongvi", "hương vị", "huong_vi", "flavorProfile", "org"]),
+    color: findAttrValue(attrs, ["color", "colour", "mau_sac", "màu sắc", "mau sac", "màu", "mau"]),
+    origin: findAttrValue(attrs, ["origin", "xuat_xu", "xuất xứ", "nguon_goc", "nguồn gốc"]),
+    brand: findAttrValue(attrs, ["brand", "thuong_hieu", "thương hiệu"]),
+  };
+}
+
+function getCanonicalPackagingAttrs(attrs: Record<string, string>) {
+  return {
+    size: findAttrValue(attrs, ["size", "capacity", "spec", "kich_thuoc", "kích thước", "kich thuoc"]),
+    material: findAttrValue(attrs, ["material", "chat_lieu", "chất liệu", "chat lieu"]),
+    style: findAttrValue(attrs, ["style", "kieu_dang", "kiểu dáng", "packaging"]),
+    color: findAttrValue(attrs, ["color", "colour", "mau_sac", "màu sắc", "mau sac"]),
+    thickness: findAttrValue(attrs, ["thickness", "do_day", "độ dày"]),
   };
 }
 
@@ -146,15 +167,49 @@ export function CupConfigDetails({ item }: { item: any }) {
     ...(item.selectedStyle ? { style: item.selectedStyle } : {}),
     ...coerceVariantAttributes(item.attributes),
   };
+
   const kind = getItemKind(item);
-  const attrs = kind === "cup" ? getCanonicalCupAttrs(rawAttrs) : rawAttrs;
-  const rows = Object.entries(attrs)
-    .filter(([, value]) => value !== undefined && value !== null && String(value).trim())
-    .map(([key, value]) => ({
+  let attrs: Record<string, string>;
+
+  if (kind === "cup") {
+    attrs = getCanonicalCupAttrs(rawAttrs);
+  } else if (kind === "ingredient") {
+    attrs = getCanonicalIngredientAttrs(rawAttrs);
+  } else if (kind === "packaging") {
+    attrs = getCanonicalPackagingAttrs(rawAttrs);
+  } else {
+    attrs = rawAttrs;
+  }
+
+  // Deduplicate rows by normalized label and value
+  const seenLabels = new Set<string>();
+  const rows: { key: string; label: string; value: string }[] = [];
+
+  for (const [key, rawValue] of Object.entries(attrs)) {
+    if (rawValue === undefined || rawValue === null) continue;
+    const valueStr = String(rawValue).trim();
+    if (!valueStr) continue;
+
+    const normKey = normalizeText(key).replace(/[^a-z0-9]+/g, "");
+    const normVal = normalizeText(valueStr).replace(/[^a-z0-9]+/g, "");
+
+    // Ignore keys equal to values (e.g., "1kg: 1kg") or internal SKU codes (tea, blk, org)
+    if (normKey === normVal && normKey.length <= 4) continue;
+    if (["tea", "blk", "org", "hrt", "pet", "pp", "clr", "wht"].includes(normKey)) continue;
+
+    const label = labelFor(key, kind);
+    const normLabel = normalizeText(label).replace(/[^a-z0-9]+/g, "");
+
+    if (seenLabels.has(normLabel)) continue;
+    seenLabels.add(normLabel);
+
+    rows.push({
       key,
-      label: labelFor(key, kind),
-      value: displayValue(key, String(value).trim(), kind),
-    }));
+      label,
+      value: displayValue(key, valueStr, kind),
+    });
+  }
+
   if (rows.length === 0) return null;
 
   return (

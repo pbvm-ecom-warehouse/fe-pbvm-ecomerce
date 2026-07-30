@@ -35,7 +35,7 @@ describe("cart utilities", () => {
     });
   });
 
-  it("discounts 20,000 VND for each full box of 3 selected products", () => {
+  it("discounts 20,000 VND per box when total quantity is 3 or more products", () => {
     expect(
       calculateCartTotals([
         {
@@ -45,10 +45,10 @@ describe("cart utilities", () => {
       ]),
     ).toEqual({
       subtotal: 700_000,
-      bulkBoxDiscount: 40_000,
+      bulkBoxDiscount: 140_000,
       shippingFee: 0,
       tax: 0,
-      grandTotal: 660_000,
+      grandTotal: 560_000,
     });
   });
 });
