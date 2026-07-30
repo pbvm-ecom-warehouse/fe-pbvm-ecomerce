@@ -90,6 +90,13 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
   const canPayNextStage = canPayNextOnlineStage(order);
   const paymentStages = getPaymentStageBreakdown(order);
   const currentPaymentStageStatus = order?.paymentStatus || "UNPAID";
+  const printItems = Array.isArray(order?.items)
+    ? order.items.filter((item: any) => item?.isPrintItem)
+    : [];
+  const sampleProofImages: string[] = printItems
+    .map((item: any) => item?.sampleProofImage)
+    .filter((url: any): url is string => typeof url === "string" && url.trim().length > 0);
+  const showPrintApprovalFlow = Boolean(order?.hasPrintItems) && !["CANCELLED", "COMPLETED"].includes(order?.status);
 
   const handleConfirmCancel = async () => {
     try {
@@ -247,6 +254,14 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
     switch (status) {
       case "NONE":
         return <Badge className="bg-slate-100 text-slate-500 border-slate-200">Chờ xuất kho</Badge>;
+      case "AWAITING_PRINT":
+        return <Badge className="bg-cyan-100 text-cyan-800 border-cyan-200">Kho đang in</Badge>;
+      case "SAMPLE_PRINTED":
+        return <Badge className="bg-amber-100 text-amber-800 border-amber-200">Chờ duyệt mẫu</Badge>;
+      case "READY_TO_PICK":
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Chờ xuất kho</Badge>;
+      case "ISSUED":
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Đã xuất kho</Badge>;
       case "PRINTING":
         return <Badge className="bg-cyan-100 text-cyan-800 border-cyan-200">Đang in ly</Badge>;
       case "SHIPPED":
@@ -394,6 +409,101 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
 
   const timelineSteps = buildTimeline();
   const isCancelledOrder = order.orderStatus === "CANCELLED" || order.status === "CANCELLED";
+
+  const renderPrintApprovalPanel = () => {
+    if (!showPrintApprovalFlow) return null;
+
+    const paymentStatus = order.paymentStatus;
+    const fulfillmentStatus = order.fulfillmentStatus;
+
+    let title = "Luồng in ly theo thiết kế";
+    let description = "Đơn ly in sẽ đi theo 3 đợt thanh toán: cọc 30%, duyệt mẫu in thử và thanh toán 30%, duyệt bản in thật và thanh toán 40% còn lại.";
+    let tone = "border-slate-200 bg-slate-50/70 text-slate-700";
+    let icon = <Printer className="size-5 text-slate-500" />;
+
+    if (paymentStatus === "DEPOSIT_PAID" && fulfillmentStatus === "AWAITING_PRINT") {
+      title = "Kho đang in thử";
+      description = "Kho đã nhận lệnh in thử sau khi bạn thanh toán đợt 1. Khi kho gửi ảnh mẫu về, bạn sẽ kiểm tra mẫu rồi thanh toán đợt 2 để bắt đầu in thật.";
+      tone = "border-cyan-200 bg-cyan-50/70 text-cyan-900";
+      icon = <Clock className="size-5 text-cyan-600" />;
+    } else if (paymentStatus === "DEPOSIT_PAID" && fulfillmentStatus === "SAMPLE_PRINTED") {
+      title = "Mẫu in thử đã sẵn sàng";
+      description = "Vui lòng kiểm tra ảnh mẫu kho gửi về. Nếu mẫu đúng yêu cầu, bấm thanh toán đợt 2 để xác nhận duyệt mẫu và phát lệnh in thật cho kho.";
+      tone = "border-amber-200 bg-amber-50/80 text-amber-950";
+      icon = <CheckCircle2 className="size-5 text-amber-600" />;
+    } else if (paymentStatus === "PROGRESS_PAID" && fulfillmentStatus === "AWAITING_PRINT") {
+      title = "Kho đang in thật";
+      description = "Kho đã nhận lệnh in thật sau khi bạn thanh toán đợt 2. Khi in xong, trạng thái sẽ chuyển sang chờ duyệt bản in để bạn thanh toán đợt 3.";
+      tone = "border-cyan-200 bg-cyan-50/70 text-cyan-900";
+      icon = <Printer className="size-5 text-cyan-600" />;
+    } else if (paymentStatus === "PROGRESS_PAID" && fulfillmentStatus === "READY_TO_PICK") {
+      title = "Bản in thật đã hoàn tất";
+      description = "Kho đã hoàn tất in thật. Nếu bản in đã đúng, bấm thanh toán đợt 3 để kho nhận lệnh xuất kho và chuyển hàng đi.";
+      tone = "border-amber-200 bg-amber-50/80 text-amber-950";
+      icon = <PackageCheck className="size-5 text-amber-600" />;
+    } else if (paymentStatus === "PAID" && ["READY_TO_PICK", "ISSUED", "SHIPPED", "DELIVERED"].includes(fulfillmentStatus)) {
+      title = "Đã thanh toán đủ";
+      description = "Kho đã nhận đủ thanh toán và đang xử lý xuất kho hoặc vận chuyển đơn hàng.";
+      tone = "border-emerald-200 bg-emerald-50/80 text-emerald-950";
+      icon = <CheckCircle2 className="size-5 text-emerald-600" />;
+    }
+
+    return (
+      <div className={`rounded-2xl border p-5 ${tone}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex gap-3">
+            <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/80 shadow-2xs">
+              {icon}
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-black uppercase tracking-wider">{title}</p>
+              <p className="max-w-3xl text-xs font-semibold leading-relaxed opacity-90">{description}</p>
+            </div>
+          </div>
+
+          {canPayNextStage ? (
+            <Button
+              onClick={handleRepay}
+              disabled={isRepaying}
+              className="shrink-0 rounded-xl bg-amber-600 px-5 py-2.5 text-xs font-bold text-white shadow-md hover:bg-amber-700"
+            >
+              <QrCode className="mr-1.5 size-4" />
+              {isRepaying ? "Đang tạo mã QR..." : getNextPaymentButtonLabel(order)}
+            </Button>
+          ) : null}
+        </div>
+
+        {sampleProofImages.length > 0 ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {sampleProofImages.map((url, index) => (
+              <a
+                key={`${url}-${index}`}
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                className="group overflow-hidden rounded-xl border border-white/80 bg-white shadow-2xs"
+              >
+                <img
+                  src={url}
+                  alt={`Ảnh mẫu in thử ${index + 1}`}
+                  className="h-44 w-full object-contain bg-white transition-transform group-hover:scale-[1.02]"
+                />
+                <div className="flex items-center justify-between px-3 py-2 text-[11px] font-bold text-slate-600">
+                  <span>Ảnh mẫu in thử {index + 1}</span>
+                  <ExternalLink className="size-3.5" />
+                </div>
+              </a>
+            ))}
+          </div>
+        ) : fulfillmentStatus === "SAMPLE_PRINTED" ? (
+          <p className="mt-4 rounded-xl border border-amber-200 bg-white/70 p-3 text-xs font-semibold text-amber-800">
+            Kho đã báo in thử xong nhưng đơn hàng chưa có link ảnh mẫu. Vui lòng tải lại sau hoặc liên hệ quản lý/kho để cập nhật ảnh mẫu.
+          </p>
+        ) : null}
+      </div>
+    );
+  };
+  const printApprovalPanel = renderPrintApprovalPanel();
 
   // Helper: color classes per status
   const stepColors = {
@@ -581,6 +691,12 @@ export function OrderDetailClient({ orderId, onBack }: { orderId: string; onBack
               )}
             </div>
           </div>
+
+          {printApprovalPanel ? (
+            <div className="pt-5">
+              {printApprovalPanel}
+            </div>
+          ) : null}
 
           {/* SECTION 2: PRODUCT LIST */}
           <div className="pt-5 space-y-3">

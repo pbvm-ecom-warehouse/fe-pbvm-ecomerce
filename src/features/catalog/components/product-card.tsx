@@ -23,6 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useCartStore } from "@/stores/cart-store";
 import type { CatalogProduct, ProductVariant } from "@/types/api";
+import { getVariantDisplayProductName } from "@/features/catalog/utils/variant-display-name";
 import { formatCurrency } from "@/utils/format-currency";
 
 const categoryCopy: Record<string, string> = {
@@ -125,11 +126,11 @@ function getAttributeLabel(key: string, kind: ReturnType<typeof getProductKind>)
     kieudang: "Kiểu dáng",
   };
   const ingredient: Record<string, string> = {
-    capacity: "Quy cách",
-    size: "Khối lượng",
-    spec: "Quy cách",
-    weight: "Khối lượng",
-    khoiluong: "Khối lượng",
+    capacity: "Trọng lượng",
+    size: "Trọng lượng",
+    spec: "Trọng lượng",
+    weight: "Trọng lượng",
+    khoiluong: "Trọng lượng",
     flavor: "Hương vị",
     huongvi: "Hương vị",
     material: "Thành phần",
@@ -278,6 +279,9 @@ export function ProductCard({
   );
 
   const imageSrc = product.imageUrl;
+  const detailHref = `/products/${encodeURIComponent(product.slug)}${
+    product.productRefId ? `?variantSku=${encodeURIComponent(product.productRefId)}` : ""
+  }`;
   const isCustomPrint =
     product.fulfillmentType === "CUSTOM_PRINT" &&
     product.category !== "printed_cup" &&
@@ -379,6 +383,8 @@ export function ProductCard({
     setOptionsOpen(false);
   }
 
+  const cardTitle = product.name || getVariantDisplayProductName(product, product.variants?.[0]);
+
   return (
     <>
       <article className="group relative flex h-full flex-col rounded-[22px] bg-white/60 p-1.5 shadow-[0_2px_20px_rgba(0,0,0,0.06)] ring-1 ring-black/[0.06] transition-all duration-700 ease-[cubic-bezier(0.32,0.72,0,1)] hover:-translate-y-1.5 hover:shadow-[0_12px_40px_rgba(59,183,126,0.14),0_2px_8px_rgba(0,0,0,0.06)] hover:ring-[#BCE3C9]">
@@ -390,12 +396,12 @@ export function ProductCard({
             </div>
           )}
 
-          <Link href={`/products/${encodeURIComponent(product.slug)}`} className="block">
+          <Link href={detailHref} className="block">
             <div className="relative aspect-square w-full overflow-hidden rounded-[14px] bg-[#F7FAF8]">
               {imageSrc ? (
                 <Image
                   src={imageSrc}
-                  alt={product.name}
+                  alt={cardTitle}
                   fill
                   priority={priority}
                   sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
@@ -418,10 +424,10 @@ export function ProductCard({
 
             <h3 className="line-clamp-2 min-h-[36px] text-[13px] font-black leading-snug tracking-tight text-[#1A2E26]">
               <Link
-                href={`/products/${encodeURIComponent(product.slug)}`}
+                href={detailHref}
                 className="transition-colors duration-300 hover:text-[#3BB77E]"
               >
-                {product.name}
+                {cardTitle}
               </Link>
             </h3>
 

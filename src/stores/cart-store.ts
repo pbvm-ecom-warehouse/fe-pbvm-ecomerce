@@ -618,7 +618,10 @@ export const useCartStore = create<CartState>()(
                   name: cleanProductName(resolvedName, item.sku),
                   slug: resolvedSlug,
                   price: latestPrice,
-                  quantity: item.quantity,
+                  quantity: clampCartQuantity(
+                    item.quantity,
+                    catalogMatch?.stockSnapshot ?? localMatch?.stockSnapshot,
+                  ),
                   unit: resolvedUnit,
                   imageUrl: resolvedImage,
                   fulfillmentType: (isCustom || shouldPreserveLocalDesign) ? "CUSTOM_PRINT" : (catalogMatch?.fulfillmentType || localMatch?.fulfillmentType || "STANDARD"),
@@ -628,6 +631,7 @@ export const useCartStore = create<CartState>()(
                   selectedMaterial: localMatch?.selectedMaterial || resolvedAttributes?.material || designFileSnapshot?.artwork?.cup?.materialType,
                   selectedStyle: localMatch?.selectedStyle || resolvedAttributes?.style || designFileSnapshot?.artwork?.cup?.style,
                   attributes: resolvedAttributes,
+                  stockSnapshot: catalogMatch?.stockSnapshot ?? localMatch?.stockSnapshot,
                   selected: localMatch?.selected,
                 } satisfies CartItem;
               });

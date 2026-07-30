@@ -776,14 +776,24 @@ export function CheckoutForm() {
             toast.success("Đang chuyển hướng sang cổng thanh toán...");
             if (typeof window !== "undefined") {
               sessionStorage.setItem("lastCreatedOrderId", order.id || order.orderId);
-              if (order.code || order.orderId) {
-                sessionStorage.setItem("lastCreatedOrderCode", order.code || order.orderId);
+              const createdOrderCode = order.code || order.orderId;
+              if (createdOrderCode) {
+                sessionStorage.setItem("lastCreatedOrderCode", createdOrderCode);
               }
               sessionStorage.setItem("lastPaymentStartedStatus", "UNPAID");
               if (isDirectPrintCheckout) {
                 sessionStorage.setItem("pendingDirectPrintCheckout", JSON.stringify(directPrintItem));
+                sessionStorage.removeItem("pendingCheckoutSkus");
               } else {
                 sessionStorage.setItem("pendingCartBackup", JSON.stringify(items));
+                sessionStorage.setItem(
+                  "pendingCheckoutSkus",
+                  JSON.stringify(
+                    items
+                      .map((item) => item.productRefId || item.productId)
+                      .filter(Boolean),
+                  ),
+                );
               }
             }
             window.location.href = order.paymentUrl;

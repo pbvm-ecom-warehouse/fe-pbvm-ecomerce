@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { ProductCard } from "@/features/catalog/components/product-card";
 import { subscribeProductSync } from "@/features/catalog/services/admin-catalog.service";
+import { getVariantDisplayProductName } from "@/features/catalog/utils/variant-display-name";
 import { cn } from "@/lib/utils";
 import type { CatalogCategory, CatalogProduct, ProductVariant } from "@/types/api";
 
@@ -13,7 +14,7 @@ function looksLikeObjectId(value: string) {
 }
 
 function getVariantDisplayName(product: CatalogProduct, variant: ProductVariant) {
-  return String((variant as any).name || (variant as any).variantName || product.name || variant.sku || "").trim();
+  return getVariantDisplayProductName(product, variant);
 }
 
 function normalizeGroupName(name: string) {
@@ -27,7 +28,10 @@ function getVariantImage(product: CatalogProduct, variant?: ProductVariant) {
 function expandProductsByVariantName(products: CatalogProduct[]) {
   return products.flatMap((product) => {
     const variants = (product.variants || []).filter((variant) => variant.isActive !== false);
-    if (variants.length === 0) return [product];
+    if (variants.length === 0) {
+      const displayName = getVariantDisplayName(product, undefined as unknown as ProductVariant);
+      return [{ ...product, name: displayName || product.name }];
+    }
 
     const groups = new Map<string, { name: string; variants: ProductVariant[] }>();
     variants.forEach((variant) => {
@@ -41,7 +45,11 @@ function expandProductsByVariantName(products: CatalogProduct[]) {
       }
     });
 
-    if (groups.size <= 1 && groups.values().next().value?.name === product.name) return [product];
+    if (groups.size <= 1) {
+      const singleGroup = groups.values().next().value;
+      const groupName = singleGroup?.name;
+      return [{ ...product, name: groupName || product.name }];
+    }
 
     return Array.from(groups.entries()).map(([key, group]) => {
       const prices = group.variants.map((variant) => Number(variant.price)).filter((price) => price > 0);
@@ -158,10 +166,7 @@ export function CatalogGridContent({
     });
   }, [products, selectedCategory]);
 
-  const displayProducts = useMemo(
-    () => expandProductsByVariantName(filteredProducts),
-    [filteredProducts],
-  );
+  const displayProducts = filteredProducts;
 
   return (
     <section className="space-y-6">

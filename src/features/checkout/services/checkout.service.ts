@@ -364,8 +364,8 @@ export async function createOrder(payload: CreateOrderPayload) {
 
     return {
       id: orderId,
-      code: orderData.code,
-      orderId: orderData.code || orderId,
+      code: orderData.code || orderData.orderCode,
+      orderId: orderData.code || orderData.orderCode || orderId,
       paymentUrl,
       offline: false,
     };

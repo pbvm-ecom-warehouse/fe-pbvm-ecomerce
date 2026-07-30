@@ -36,14 +36,14 @@ describe("multi-stage payment flow", () => {
     ).toBe(true);
   });
 
-  it("allows print orders to pay stage 2 only when awaiting print", () => {
+  it("allows print orders to pay stage 2 only after sample print is ready", () => {
     expect(
       canPayNextOnlineStage({
         paymentStatus: "DEPOSIT_PAID",
         paymentMethod: "ONLINE",
         hasPrintItems: true,
         status: "CONFIRMED",
-        fulfillmentStatus: "AWAITING_PRINT",
+        fulfillmentStatus: "SAMPLE_PRINTED",
       }),
     ).toBe(true);
     expect(
@@ -52,12 +52,12 @@ describe("multi-stage payment flow", () => {
         paymentMethod: "ONLINE",
         hasPrintItems: true,
         status: "CONFIRMED",
-        fulfillmentStatus: "NONE",
+        fulfillmentStatus: "AWAITING_PRINT",
       }),
     ).toBe(false);
   });
 
-  it("allows the final online payment for print orders after stage 2 is paid", () => {
+  it("allows the final online payment for print orders only after official print is ready", () => {
     expect(
       canPayNextOnlineStage({
         paymentStatus: "PROGRESS_PAID",
@@ -75,7 +75,7 @@ describe("multi-stage payment flow", () => {
         status: "CONFIRMED",
         fulfillmentStatus: "AWAITING_PRINT",
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("does not show online final-payment buttons for COD final collection stages", () => {

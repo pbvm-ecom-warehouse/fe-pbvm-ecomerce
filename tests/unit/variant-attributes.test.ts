@@ -7,6 +7,7 @@ import {
   coerceVariantAttributes,
   normalizeVariantAttributes,
 } from "@/features/catalog/utils/variant-attributes";
+import { getVariantDisplayProductName } from "@/features/catalog/utils/variant-display-name";
 
 describe("variant attribute utilities", () => {
   it("reads only explicit normalized attributes from the API payload", () => {
@@ -199,5 +200,20 @@ describe("variant attribute utilities", () => {
       size: "12mm",
       color: "Đen",
     });
+  });
+
+  it("gets display name directly from real product name in database", () => {
+    const product: any = { name: "Ly nhựa PET 500ml trong suốt (in sẵn)", category: "ly", slug: "ly-nhua" };
+    const variant: any = { sku: "CUP-001", attributes: { cupStyle: "straight", capacity: "500ml" } };
+    expect(getVariantDisplayProductName(product, variant)).toBe("Ly nhựa PET 500ml trong suốt (in sẵn)");
+
+    const product2: any = { name: "Trà đen nguyên bản", category: "nguyen-lieu", slug: "tra-den" };
+    expect(getVariantDisplayProductName(product2, null)).toBe("Trà đen nguyên bản");
+  });
+
+  it("returns variant name if variant has custom variantName or title", () => {
+    const product: any = { name: "Ly nhựa in logo theo yêu cầu", category: "ly", slug: "ly-nhua" };
+    const variant: any = { sku: "CUP-002", name: "Ly nhựa 700ml đáy U" };
+    expect(getVariantDisplayProductName(product, variant)).toBe("Ly nhựa 700ml đáy U");
   });
 });

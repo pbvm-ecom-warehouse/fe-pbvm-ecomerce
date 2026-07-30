@@ -146,6 +146,8 @@ export default function AdminOrdersPage() {
         return <Badge variant="outline" className="text-amber-600 border-amber-200 text-[10px] font-bold py-0.5 px-2 rounded-full bg-amber-50">CHỜ ĐÓNG GÓI</Badge>;
       case "AWAITING_PRINT":
         return <Badge variant="outline" className="text-cyan-600 border-cyan-200 text-[10px] font-bold py-0.5 px-2 rounded-full bg-cyan-50">CHỜ IN LY</Badge>;
+      case "SAMPLE_PRINTED":
+        return <Badge variant="outline" className="text-amber-600 border-amber-200 text-[10px] font-bold py-0.5 px-2 rounded-full bg-amber-50">CHỜ DUYỆT MẪU</Badge>;
       case "ISSUED":
         return <Badge variant="outline" className="text-blue-600 border-blue-200 text-[10px] font-bold py-0.5 px-2 rounded-full bg-blue-50">ĐÃ XUẤT KHO</Badge>;
       case "SHIPPED":
@@ -217,67 +219,67 @@ export default function AdminOrdersPage() {
             </div>
           ) : (
             <div className="max-h-[62vh] overflow-y-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="sticky top-0 z-10 border-b border-[#E9E3DD] bg-white hover:bg-white">
-                  <TableHead className="font-bold text-slate-500 text-xs pl-6">Mã đơn</TableHead>
-                  <TableHead className="font-bold text-slate-500 text-xs">Thời gian đặt</TableHead>
-                  <TableHead className="font-bold text-slate-500 text-xs">Tổng tiền</TableHead>
-                  <TableHead className="font-bold text-slate-500 text-xs">Thanh toán</TableHead>
-                  <TableHead className="font-bold text-slate-500 text-xs">Trạng thái đơn</TableHead>
-                  <TableHead className="font-bold text-slate-500 text-xs">Vận chuyển</TableHead>
-                  <TableHead className="text-right font-bold text-slate-500 text-xs pr-6">Chi tiết</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredOrders.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-40 text-center text-xs text-slate-400 font-medium">
-                      Không có đơn hàng trong danh mục này.
-                    </TableCell>
+              <Table>
+                <TableHeader>
+                  <TableRow className="sticky top-0 z-10 border-b border-[#E9E3DD] bg-white hover:bg-white">
+                    <TableHead className="font-bold text-slate-500 text-xs pl-6">Mã đơn</TableHead>
+                    <TableHead className="font-bold text-slate-500 text-xs">Thời gian đặt</TableHead>
+                    <TableHead className="font-bold text-slate-500 text-xs">Tổng tiền</TableHead>
+                    <TableHead className="font-bold text-slate-500 text-xs">Thanh toán</TableHead>
+                    <TableHead className="font-bold text-slate-500 text-xs">Trạng thái đơn</TableHead>
+                    <TableHead className="font-bold text-slate-500 text-xs">Vận chuyển</TableHead>
+                    <TableHead className="text-right font-bold text-slate-500 text-xs pr-6">Chi tiết</TableHead>
                   </TableRow>
-                ) : (
-                  filteredOrders.map((order) => {
-                    const id = order.id || order._id;
-                    return (
-                      <TableRow key={id} className="border-b border-[#E9E3DD]/60 hover:bg-slate-50/30">
-                        <TableCell className="pl-6 py-4 align-middle font-bold text-slate-700 text-xs font-mono">
-                          {order.code}
-                        </TableCell>
-                        <TableCell className="align-middle text-xs text-slate-500">
-                          {order.createdAt ? formatDateTime(order.createdAt) : "-"}
-                        </TableCell>
-                        <TableCell className="align-middle font-extrabold text-slate-800 text-xs">
-                          {formatCurrency(order.total)}
-                        </TableCell>
-                        <TableCell className="align-middle">
-                          <div className="flex flex-col gap-0.5">
-                            {getPaymentStatusBadge(order.paymentStatus, order)}
-                            <span className="text-[9px] font-bold text-slate-400 ml-1">{order.paymentMethod}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-middle">
-                          {getOrderStatusBadge(getOrderStatus(order))}
-                        </TableCell>
-                        <TableCell className="align-middle">
-                          {getFulfillmentStatusBadge(order.fulfillmentStatus)}
-                        </TableCell>
-                        <TableCell className="align-middle text-right pr-6">
-                          <Button
-                            onClick={() => setSelectedOrder(order)}
-                            variant="outline"
-                            className="h-8 rounded-lg border border-[#E9E3DD] text-[10px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-1 cursor-pointer ml-auto"
-                          >
-                            <Eye className="size-3" />
-                            Xem
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredOrders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-40 text-center text-xs text-slate-400 font-medium">
+                        Không có đơn hàng trong danh mục này.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredOrders.map((order) => {
+                      const id = order.id || order._id;
+                      return (
+                        <TableRow key={id} className="border-b border-[#E9E3DD]/60 hover:bg-slate-50/30">
+                          <TableCell className="pl-6 py-4 align-middle font-bold text-slate-700 text-xs font-mono">
+                            {order.code}
+                          </TableCell>
+                          <TableCell className="align-middle text-xs text-slate-500">
+                            {order.createdAt ? formatDateTime(order.createdAt) : "-"}
+                          </TableCell>
+                          <TableCell className="align-middle font-extrabold text-slate-800 text-xs">
+                            {formatCurrency(order.total)}
+                          </TableCell>
+                          <TableCell className="align-middle">
+                            <div className="flex flex-col gap-0.5">
+                              {getPaymentStatusBadge(order.paymentStatus, order)}
+                              <span className="text-[9px] font-bold text-slate-400 ml-1">{order.paymentMethod}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="align-middle">
+                            {getOrderStatusBadge(getOrderStatus(order))}
+                          </TableCell>
+                          <TableCell className="align-middle">
+                            {getFulfillmentStatusBadge(order.fulfillmentStatus)}
+                          </TableCell>
+                          <TableCell className="align-middle text-right pr-6">
+                            <Button
+                              onClick={() => setSelectedOrder(order)}
+                              variant="outline"
+                              className="h-8 rounded-lg border border-[#E9E3DD] text-[10px] font-bold text-slate-600 hover:bg-slate-50 flex items-center gap-1 cursor-pointer ml-auto"
+                            >
+                              <Eye className="size-3" />
+                              Xem
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>

@@ -44,16 +44,17 @@ function normalizeProductList(payload: any): any[] {
 }
 
 export function isApprovedCatalogProduct(product: any): boolean {
-  const status = String(product?.status || "").toUpperCase();
-  if (status && status !== "ACTIVE") return false;
-  if (product?.isActive === false) return false;
-  return status === "ACTIVE" || product?.isActive === true;
+  if (!product) return false;
+  const status = String(product.status || "").toUpperCase();
+  if (status === "DRAFT" || status === "INACTIVE" || status === "HIDDEN") return false;
+  if (product.isActive === false) return false;
+  return true;
 }
 
 export async function adminListProducts() {
   try {
     const rawProducts = await publicApiFetch<any>("/catalog/products");
-    const activeList = normalizeProductList(rawProducts);
+    const activeList = normalizeProductList(rawProducts).filter(isApprovedCatalogProduct);
     return activeList.map((p) => {
       const id = String(p.id || p._id || "");
       const finalImages = cleanImageCandidate(

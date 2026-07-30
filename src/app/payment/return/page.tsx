@@ -28,6 +28,7 @@ function PaymentReturnContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const clearSelectedItems = useCartStore((state) => state.clearSelectedItems);
+  const removeItemsBySkus = useCartStore((state) => state.removeItemsBySkus);
 
   const code = searchParams.get("code");
   const status = searchParams.get("status");
@@ -104,7 +105,7 @@ function PaymentReturnContent() {
           return;
         }
 
-        if (typeof window !== "undefined") {
+        if (!orderCodeParam && typeof window !== "undefined") {
           const savedId = sessionStorage.getItem("lastCreatedOrderId");
           if (isObjectId(savedId)) {
             const order = await getOrder(String(savedId));
@@ -189,7 +190,22 @@ function PaymentReturnContent() {
           currentPaymentRank > startedPaymentRank || order?.paymentStatus === "PAID";
 
         if (isConfirmedPaid) {
-          await clearSelectedItems();
+          let removedFromSnapshot = false;
+          if (typeof window !== "undefined") {
+            try {
+              const pendingSkus = JSON.parse(sessionStorage.getItem("pendingCheckoutSkus") || "[]");
+              if (Array.isArray(pendingSkus) && pendingSkus.length > 0) {
+                await removeItemsBySkus(pendingSkus.map((sku) => String(sku)).filter(Boolean));
+                removedFromSnapshot = true;
+              }
+            } catch {
+              removedFromSnapshot = false;
+            }
+          }
+
+          if (!removedFromSnapshot) {
+            await clearSelectedItems();
+          }
           if (!isMounted) return;
           setHasClearedPaidCartItems(true);
 
@@ -198,6 +214,7 @@ function PaymentReturnContent() {
             sessionStorage.removeItem("lastCreatedOrderCode");
             sessionStorage.removeItem("lastPaymentStartedStatus");
             sessionStorage.removeItem("pendingCartBackup");
+            sessionStorage.removeItem("pendingCheckoutSkus");
           }
           return;
         }
@@ -220,6 +237,7 @@ function PaymentReturnContent() {
     clearSelectedItems,
     hasClearedPaidCartItems,
     isGatewaySuccess,
+    removeItemsBySkus,
     resolvedOrderId,
   ]);
 
