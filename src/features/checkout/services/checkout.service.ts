@@ -330,6 +330,17 @@ export async function createOrder(payload: CreateOrderPayload) {
       addressId,
       paymentMethod,
       ...(directItem ? { directItem } : {}),
+      // Gửi rõ các dòng khách đã chọn để BE không phụ thuộc vào trạng thái
+      // cart Redis khi thanh toán (đặc biệt khi nhiều tab cùng checkout).
+      ...(!directItem && payload.items.length > 0
+        ? {
+            items: payload.items.map((item) => ({
+              sku: item.productRefId || item.productId,
+              designId: item.designId,
+              designFile: normalizeCheckoutDesignFile(item),
+            })),
+          }
+        : {}),
       ...(payload.promotionCode ? { promotionCode: payload.promotionCode } : {}),
     };
 

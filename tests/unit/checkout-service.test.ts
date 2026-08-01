@@ -87,6 +87,7 @@ describe("checkout service", () => {
     expect(apiClientMock.post).toHaveBeenNthCalledWith(2, "/orders/checkout", {
       addressId: "address-1",
       paymentMethod: "COD",
+      items: [{ sku: "CUP-HRT-PET-500-CLR", designId: undefined, designFile: undefined }],
     });
     expect(apiClientMock.get).toHaveBeenCalledWith("/payment/payos/create-url/order-1");
     expect(order.paymentUrl).toBe("https://checkout.payos.vn/pay/order-1");
@@ -134,6 +135,7 @@ describe("checkout service", () => {
     expect(apiClientMock.post).toHaveBeenCalledWith("/orders/checkout", {
       addressId: "address-1",
       paymentMethod: "COD",
+      items: [{ sku: "CUP-HRT-PET-500-CLR", designId: undefined, designFile: undefined }],
     });
     expect(apiClientMock.post).toHaveBeenCalledWith("/cart/items", {
       sku: "UNSELECTED-SKU",
@@ -259,6 +261,7 @@ describe("checkout service", () => {
     expect(apiClientMock.post).toHaveBeenNthCalledWith(2, "/orders/checkout", {
       addressId: "address-1",
       paymentMethod: "ONLINE",
+      items: [{ sku: "CUP-CUSTOM-500", designId: "design-1", designFile: expect.any(String) }],
     });
   });
 
@@ -367,6 +370,7 @@ describe("checkout service", () => {
     expect(apiClientMock.post).toHaveBeenCalledWith("/orders/checkout", {
       addressId: "address-1",
       paymentMethod: "ONLINE",
+      items: [{ sku: "CUP-CUSTOM-500", designId: "design-1", designFile: expect.any(String) }],
     });
   });
 
@@ -459,6 +463,7 @@ describe("checkout service", () => {
     expect(apiClientMock.post).toHaveBeenNthCalledWith(3, "/orders/checkout", {
       addressId: "address-1",
       paymentMethod: "ONLINE",
+      items: [{ sku: "CUP-CUSTOM-500", designId: "local-design-1", designFile: expect.any(String) }],
     });
   });
 });
